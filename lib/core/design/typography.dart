@@ -134,6 +134,15 @@ abstract final class AppTypography {
         letterSpacing: 0.3,
       );
 
+  /// Tab labels / category headers.
+  static TextStyle get labelMedium => TextStyle(
+        fontFamily: _fontFamily,
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+        height: 1.2,
+        letterSpacing: 0.4,
+      );
+
   /// Badge / chip labels.
   static TextStyle get labelSmall => TextStyle(
         fontFamily: _fontFamily,

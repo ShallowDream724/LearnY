@@ -263,16 +263,20 @@ class _NotificationsTab extends ConsumerWidget {
 
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
-              child: GestureDetector(
-                onTap: () => context.push(Routes.notificationDetail(
-                  notificationId: n.id,
-                  courseId: courseId,
-                  courseName: courseName,
-                )),
-                child: Container(
+              child: Material(
+                color: surface,
+                borderRadius: BorderRadius.circular(14),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: () => context.push(Routes.notificationDetail(
+                    notificationId: n.id,
+                    courseId: courseId,
+                    courseName: courseName,
+                  )),
+                  borderRadius: BorderRadius.circular(14),
+                  child: Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: surface,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: border, width: 0.5),
                 ),
@@ -356,6 +360,7 @@ class _NotificationsTab extends ConsumerWidget {
                       ),
                   ],
                 ),
+              ),
               ),
               )
                   .animate(delay: (40 * index).ms)
@@ -600,16 +605,20 @@ class _HomeworksTab extends ConsumerWidget {
 
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
-              child: GestureDetector(
-                onTap: () => context.push(Routes.homeworkDetail(
-                  homeworkId: hw.id,
-                  courseId: courseId,
-                  courseName: courseName,
-                )),
-                child: Container(
+              child: Material(
+                color: surface,
+                borderRadius: BorderRadius.circular(14),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: () => context.push(Routes.homeworkDetail(
+                    homeworkId: hw.id,
+                    courseId: courseId,
+                    courseName: courseName,
+                  )),
+                  borderRadius: BorderRadius.circular(14),
+                  child: Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: surface,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: border, width: 0.5),
                 ),
@@ -666,6 +675,7 @@ class _HomeworksTab extends ConsumerWidget {
                     ),
                   ],
                 ),
+              ),
               ),
               )
                   .animate(delay: (40 * index).ms)
