@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/design/theme.dart';
+import 'core/providers/providers.dart';
 import 'core/router/router.dart';
 
 void main() {
@@ -17,14 +18,15 @@ void main() {
   runApp(const ProviderScope(child: LearnYApp()));
 }
 
-class LearnYApp extends StatelessWidget {
+class LearnYApp extends ConsumerWidget {
   const LearnYApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    // TODO: Replace with Riverpod auth state
-    final isLoggedIn = false;
-    final router = buildRouter(isLoggedIn: isLoggedIn);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authProvider);
+    final themeMode = ref.watch(themeModeProvider);
+
+    final router = buildRouter(isLoggedIn: authState.isLoggedIn);
 
     return MaterialApp.router(
       title: 'LearnY',
@@ -33,7 +35,11 @@ class LearnYApp extends StatelessWidget {
       // Theme
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
-      themeMode: ThemeMode.system,
+      themeMode: switch (themeMode) {
+        'light' => ThemeMode.light,
+        'dark' => ThemeMode.dark,
+        _ => ThemeMode.system,
+      },
 
       // Router
       routerConfig: router,
