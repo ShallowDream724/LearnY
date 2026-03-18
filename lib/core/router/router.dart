@@ -6,7 +6,12 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
+export 'package:go_router/go_router.dart' show GoRouter;
+
+import '../providers/providers.dart';
 
 import '../../features/home/home_screen.dart';
 import '../../features/assignments/assignments_screen.dart';
@@ -57,12 +62,14 @@ final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
 /// Build the app router.
 ///
-/// Pass [isLoggedIn] to control auth redirect.
-GoRouter buildRouter({required bool isLoggedIn}) {
+/// Takes [ref] to reactively read auth state inside redirect.
+/// The router is created ONCE and reacts to auth changes via redirect.
+GoRouter buildRouter({required Ref ref}) {
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: Routes.home,
     redirect: (context, state) {
+      final isLoggedIn = ref.read(authProvider).isLoggedIn;
       final isOnLogin = state.matchedLocation == Routes.login;
       if (!isLoggedIn && !isOnLogin) return Routes.login;
       if (isLoggedIn && isOnLogin) return Routes.home;

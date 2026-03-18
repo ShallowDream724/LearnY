@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/design/colors.dart';
 import '../../core/design/typography.dart';
@@ -167,7 +168,8 @@ class ProfileScreen extends ConsumerWidget {
                       textColor: textColor,
                       subColor: subColor,
                       onTap: () {
-                        // TODO: open GitHub URL
+                        // Open GitHub repo
+                        launchUrl(Uri.parse('https://github.com/ShallowDream724/LearnY'));
                       },
                     ),
                   ],

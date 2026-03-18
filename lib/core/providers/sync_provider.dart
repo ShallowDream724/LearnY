@@ -1,6 +1,7 @@
 /// Data sync providers — fetch data from API and cache in DB.
 ///
 /// These providers handle the bridge between the API and local database.
+/// Partial failures are tracked and reported, not silently swallowed.
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/learn_api.dart';
@@ -20,10 +21,18 @@ class SyncState {
   final String? errorMessage;
   final DateTime? lastSynced;
 
+  /// Per-course warnings (partial failures that didn't block overall sync).
+  final List<String> syncWarnings;
+
+  /// Number of items updated in the last sync.
+  final int updatedCount;
+
   const SyncState({
     this.status = SyncStatus.idle,
     this.errorMessage,
     this.lastSynced,
+    this.syncWarnings = const [],
+    this.updatedCount = 0,
   });
 }
 
@@ -157,6 +166,8 @@ class SyncNotifier extends StateNotifier<SyncState> {
     try {
       final api = _ref.read(apiClientProvider);
       final db = _ref.read(databaseProvider);
+      final warnings = <String>[];
+      int updated = 0;
 
       // 1. Get current semester
       final semester = await api.getCurrentSemester();
@@ -188,11 +199,12 @@ class SyncNotifier extends StateNotifier<SyncState> {
           semesterId: semester.id,
         ));
       }
+      updated += courses.length;
 
       // 3. Fetch notifications, files, and homeworks for each course
       for (final course in courses) {
+        // Notifications
         try {
-          // Notifications
           final notifications =
               await api.getNotificationList(course.id);
           for (final n in notifications) {
@@ -210,10 +222,13 @@ class SyncNotifier extends StateNotifier<SyncState> {
               comment: Value(n.comment),
             ));
           }
-        } catch (_) {}
+          updated += notifications.length;
+        } catch (e) {
+          warnings.add('${course.name}: 通知同步失败 ($e)');
+        }
 
+        // Homeworks
         try {
-          // Homeworks
           final homeworks = await api.getHomeworkList(course.id);
           for (final h in homeworks) {
             await db.upsertHomework(HomeworksCompanion.insert(
@@ -237,10 +252,13 @@ class SyncNotifier extends StateNotifier<SyncState> {
               description: Value(h.description),
             ));
           }
-        } catch (_) {}
+          updated += homeworks.length;
+        } catch (e) {
+          warnings.add('${course.name}: 作业同步失败 ($e)');
+        }
 
+        // Files
         try {
-          // Files
           final files = await api.getFileList(course.id);
           for (final f in files) {
             await db.upsertFile(CourseFilesCompanion.insert(
@@ -261,12 +279,17 @@ class SyncNotifier extends StateNotifier<SyncState> {
               downloadCount: Value(f.downloadCount),
             ));
           }
-        } catch (_) {}
+          updated += files.length;
+        } catch (e) {
+          warnings.add('${course.name}: 文件同步失败 ($e)');
+        }
       }
 
       state = SyncState(
         status: SyncStatus.success,
         lastSynced: DateTime.now(),
+        syncWarnings: warnings,
+        updatedCount: updated,
       );
     } catch (e) {
       state = SyncState(
@@ -344,13 +367,59 @@ final homeDataProvider = FutureProvider<HomeData>((ref) async {
           ))
       .toList();
 
+  // Get new files (isNew == true)
+  final newFileSummaries = <FileSummary>[];
+  for (final course in courses) {
+    final files = await db.getFilesByCourse(course.id);
+    for (final f in files) {
+      if (f.isNew) {
+        newFileSummaries.add(FileSummary(
+          id: f.id,
+          courseId: course.id,
+          courseName: course.name,
+          title: f.title,
+          size: f.size,
+          fileType: f.fileType,
+          uploadTime: f.uploadTime,
+        ));
+      }
+    }
+  }
+  // Sort by upload time descending, take top 5
+  newFileSummaries.sort((a, b) => b.uploadTime.compareTo(a.uploadTime));
+
+  // Get recent grades (graded homeworks)
+  final recentGradeSummaries = <GradeSummary>[];
+  for (final course in courses) {
+    final homeworks = await db.getHomeworksByCourse(course.id);
+    for (final hw in homeworks) {
+      if (hw.graded && hw.grade != null) {
+        recentGradeSummaries.add(GradeSummary(
+          id: hw.id,
+          courseId: course.id,
+          courseName: course.name,
+          title: hw.title,
+          grade: hw.grade,
+          gradeLevel: hw.gradeLevel,
+          gradeContent: hw.gradeContent,
+        ));
+      }
+    }
+  }
+  // Sort by grade time descending if available, take top 5
+  recentGradeSummaries.sort((a, b) {
+    // Fallback: sort by ID descending
+    return b.id.compareTo(a.id);
+  });
+
   return HomeData(
     urgentAssignments: urgentAssignments.take(5).toList(),
     unreadNotifications: unreadNotifications,
-    newFiles: const [], // TODO: needs isNew tracking
-    recentGrades: const [], // TODO: needs graded tracking
+    newFiles: newFileSummaries.take(5).toList(),
+    recentGrades: recentGradeSummaries.take(5).toList(),
     totalCourses: courses.length,
     pendingAssignments: pendingCount,
     unreadCount: unreadNotifications.length,
   );
 });
+

@@ -21,6 +21,7 @@ import '../../core/design/typography.dart';
 import '../../core/providers/providers.dart';
 import '../../core/database/database.dart';
 import '../../core/router/router.dart';
+import '../../core/services/file_download_service.dart';
 
 // ---------------------------------------------------------------------------
 //  Providers scoped to a course
@@ -497,21 +498,12 @@ class _FilesTab extends ConsumerWidget {
                       ),
                     ),
 
-                    // Download button
+                    // Download button — real download with progress
                     const SizedBox(width: 8),
-                    IconButton(
-                      icon: Icon(
-                        f.localDownloadState == 'downloaded'
-                            ? Icons.check_circle_rounded
-                            : Icons.download_rounded,
-                        color: f.localDownloadState == 'downloaded'
-                            ? AppColors.success
-                            : subColor,
-                        size: 22,
-                      ),
-                      onPressed: () {
-                        // TODO: download file
-                      },
+                    _FileDownloadButton(
+                      file: f,
+                      courseId: courseId,
+                      subColor: subColor,
                     ),
                   ],
                 ),
@@ -720,6 +712,91 @@ class _HomeworksTab extends ConsumerWidget {
     if (grade >= 70) return AppColors.gradeAverage;
     if (grade >= 60) return AppColors.gradePoor;
     return AppColors.gradeFail;
+  }
+}
+
+// ---------------------------------------------------------------------------
+//  File download button — shows download/progress/success states
+// ---------------------------------------------------------------------------
+
+class _FileDownloadButton extends ConsumerWidget {
+  final CourseFile file;
+  final String courseId;
+  final Color subColor;
+
+  const _FileDownloadButton({
+    required this.file,
+    required this.courseId,
+    required this.subColor,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final downloadStates = ref.watch(fileDownloadProvider);
+    final fileState = downloadStates[file.id];
+    final status = fileState?.status ?? 
+        (file.localDownloadState == 'downloaded' 
+            ? DownloadStatus.downloaded 
+            : DownloadStatus.none);
+    final progress = fileState?.progress ?? 0.0;
+
+    return SizedBox(
+      width: 40,
+      height: 40,
+      child: switch (status) {
+        DownloadStatus.downloading => Stack(
+            alignment: Alignment.center,
+            children: [
+              CircularProgressIndicator(
+                value: progress > 0 ? progress : null,
+                strokeWidth: 2.5,
+                color: AppColors.primary,
+              ),
+              Text(
+                '${(progress * 100).toInt()}',
+                style: AppTypography.labelSmall.copyWith(
+                  color: AppColors.primary,
+                  fontSize: 9,
+                ),
+              ),
+            ],
+          ),
+        DownloadStatus.downloaded => IconButton(
+            icon: const Icon(Icons.check_circle_rounded,
+                color: AppColors.success, size: 22),
+            tooltip: '打开文件',
+            onPressed: () async {
+              final notifier = ref.read(fileDownloadProvider.notifier);
+              final opened = await notifier.openFile(file.id);
+              if (!opened && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('无法打开文件')),
+                );
+              }
+            },
+          ),
+        DownloadStatus.failed => IconButton(
+            icon: const Icon(Icons.error_outline_rounded,
+                color: AppColors.error, size: 22),
+            tooltip: '下载失败，点击重试',
+            onPressed: () => _startDownload(ref),
+          ),
+        _ => IconButton(
+            icon: Icon(Icons.download_rounded, color: subColor, size: 22),
+            tooltip: '下载',
+            onPressed: () => _startDownload(ref),
+          ),
+      },
+    );
+  }
+
+  void _startDownload(WidgetRef ref) {
+    ref.read(fileDownloadProvider.notifier).downloadFile(
+          fileId: file.id,
+          courseId: courseId,
+          downloadUrl: file.downloadUrl,
+          fileName: file.title,
+        );
   }
 }
 

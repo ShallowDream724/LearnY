@@ -60,6 +60,7 @@ dependencies:
   shimmer: ^3.0.0
   flutter_animate: ^4.5.2
   google_fonts: ^6.2.1
+  open_filex: ^4.7.0
 
 dev_dependencies:
   flutter_test:

@@ -53,9 +53,10 @@ class AuthState {
 
 /// Auth state notifier.
 class AuthNotifier extends StateNotifier<AuthState> {
+  final Ref _ref;
   final AppDatabase _db;
 
-  AuthNotifier(this._db) : super(const AuthState()) {
+  AuthNotifier(this._ref, this._db) : super(const AuthState()) {
     _init();
   }
 
@@ -80,13 +81,31 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> logout() async {
-    await _db.setState('username', '');
+    // 1. Call API logout (best-effort, don't block on failure)
+    try {
+      await _ref.read(apiClientProvider).logout();
+    } catch (_) {
+      // Server logout failure shouldn't block local cleanup
+    }
+
+    // 2. Clear all cached data from the database
+    await _db.clearAllData();
+
+    // 3. Clear cookies from CookieJar
+    try {
+      _ref.read(apiClientProvider).cookieJar.deleteAll();
+    } catch (_) {}
+
+    // 4. Reset semester state
+    _ref.read(currentSemesterIdProvider.notifier).state = null;
+
+    // 5. Update auth state — this triggers router redirect to login
     state = const AuthState(status: AuthStatus.unauthenticated);
   }
 }
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  return AuthNotifier(ref.watch(databaseProvider));
+  return AuthNotifier(ref, ref.watch(databaseProvider));
 });
 
 // ---------------------------------------------------------------------------

@@ -37,6 +37,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Future<void> _onRefresh() async {
     await ref.read(syncStateProvider.notifier).syncAll();
+    if (!mounted) return;
+
+    final syncState = ref.read(syncStateProvider);
+    if (syncState.status == SyncStatus.success) {
+      final msg = syncState.syncWarnings.isNotEmpty
+          ? '同步完成（${syncState.updatedCount} 项），'
+            '${syncState.syncWarnings.length} 个课程部分失败'
+          : '同步完成，更新了 ${syncState.updatedCount} 项';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(msg),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } else if (syncState.status == SyncStatus.error) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('同步失败: ${syncState.errorMessage ?? "未知错误"}'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.error,
+          action: SnackBarAction(
+            label: '重试',
+            textColor: Colors.white,
+            onPressed: _onRefresh,
+          ),
+        ),
+      );
+    }
   }
 
   @override
