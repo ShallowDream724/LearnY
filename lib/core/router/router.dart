@@ -14,6 +14,7 @@ import '../../features/assignments/homework_detail_screen.dart';
 import '../../features/courses/courses_screen.dart';
 import '../../features/courses/course_detail_screen.dart';
 import '../../features/notifications/notification_detail_screen.dart';
+import '../../features/search/search_screen.dart';
 import '../../features/profile/profile_screen.dart';
 import '../../features/auth/login_screen.dart';
 import '../shell/app_shell.dart';
@@ -25,6 +26,7 @@ abstract final class Routes {
   static const String assignments = '/assignments';
   static const String courses = '/courses';
   static const String profile = '/profile';
+  static const String search = '/search';
 
   // Detail routes (full screen, above shell)
   static String courseDetail(String courseId) => '/courses/$courseId';
@@ -99,6 +101,12 @@ GoRouter buildRouter({required bool isLoggedIn}) {
             courseName: Uri.decodeComponent(q['courseName'] ?? ''),
           );
         },
+      ),
+
+      GoRoute(
+        path: Routes.search,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const SearchScreen(),
       ),
 
       // ── Main app shell with 4 tabs ──

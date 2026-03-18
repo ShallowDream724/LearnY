@@ -8,6 +8,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/design/colors.dart';
 import '../../core/design/typography.dart';
@@ -94,7 +95,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 IconButton(
                   icon: const Icon(Icons.search_rounded),
                   onPressed: () {
-                    // TODO: global search
+                    context.push('/search');
                   },
                 ),
               ],
