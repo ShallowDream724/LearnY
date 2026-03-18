@@ -1,4 +1,8 @@
 /// LearnY Router — GoRouter with ShellRoute for 4-tab navigation.
+///
+/// Detail pages (notification, homework) are full-screen routes that push
+/// ABOVE the shell. This gives focused reading experience with proper back
+/// navigation and no bottom nav distraction.
 library;
 
 import 'package:flutter/material.dart';
@@ -6,8 +10,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/home/home_screen.dart';
 import '../../features/assignments/assignments_screen.dart';
+import '../../features/assignments/homework_detail_screen.dart';
 import '../../features/courses/courses_screen.dart';
 import '../../features/courses/course_detail_screen.dart';
+import '../../features/notifications/notification_detail_screen.dart';
 import '../../features/profile/profile_screen.dart';
 import '../../features/auth/login_screen.dart';
 import '../shell/app_shell.dart';
@@ -20,10 +26,27 @@ abstract final class Routes {
   static const String courses = '/courses';
   static const String profile = '/profile';
 
-  // Detail routes
+  // Detail routes (full screen, above shell)
   static String courseDetail(String courseId) => '/courses/$courseId';
-  static const String assignmentDetail = '/assignments/:assignmentId';
-  static const String notificationDetail = '/notifications/:notificationId';
+
+  // These use query params for extra data since GoRouter extras are not
+  // preserved during deep linking. The courseId + courseName travel via query.
+  static const String _notificationDetailPath = '/notification-detail';
+  static const String _homeworkDetailPath = '/homework-detail';
+
+  static String notificationDetail({
+    required String notificationId,
+    required String courseId,
+    required String courseName,
+  }) =>
+      '$_notificationDetailPath?id=$notificationId&courseId=$courseId&courseName=${Uri.encodeComponent(courseName)}';
+
+  static String homeworkDetail({
+    required String homeworkId,
+    required String courseId,
+    required String courseName,
+  }) =>
+      '$_homeworkDetailPath?id=$homeworkId&courseId=$courseId&courseName=${Uri.encodeComponent(courseName)}';
 }
 
 /// Navigation key for the shell.
@@ -44,14 +67,42 @@ GoRouter buildRouter({required bool isLoggedIn}) {
       return null;
     },
     routes: [
-      // Login (full screen, outside shell)
+      // ── Full-screen routes (above shell) ──
+
       GoRoute(
         path: Routes.login,
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const LoginScreen(),
       ),
 
-      // Main app shell with 4 tabs
+      GoRoute(
+        path: Routes._notificationDetailPath,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final q = state.uri.queryParameters;
+          return NotificationDetailScreen(
+            notificationId: q['id'] ?? '',
+            courseId: q['courseId'] ?? '',
+            courseName: Uri.decodeComponent(q['courseName'] ?? ''),
+          );
+        },
+      ),
+
+      GoRoute(
+        path: Routes._homeworkDetailPath,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final q = state.uri.queryParameters;
+          return HomeworkDetailScreen(
+            homeworkId: q['id'] ?? '',
+            courseId: q['courseId'] ?? '',
+            courseName: Uri.decodeComponent(q['courseName'] ?? ''),
+          );
+        },
+      ),
+
+      // ── Main app shell with 4 tabs ──
+
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
         builder: (context, state, child) => AppShell(child: child),
@@ -74,7 +125,6 @@ GoRouter buildRouter({required bool isLoggedIn}) {
               child: CoursesScreen(),
             ),
             routes: [
-              // Course detail — nested under /courses/:courseId
               GoRoute(
                 path: ':courseId',
                 builder: (context, state) => CourseDetailScreen(
@@ -94,3 +144,4 @@ GoRouter buildRouter({required bool isLoggedIn}) {
     ],
   );
 }
+

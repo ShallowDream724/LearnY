@@ -13,12 +13,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/design/colors.dart';
 import '../../core/design/responsive.dart';
 import '../../core/design/typography.dart';
 import '../../core/providers/providers.dart';
 import '../../core/database/database.dart';
+import '../../core/router/router.dart';
 
 // ---------------------------------------------------------------------------
 //  Providers scoped to a course
@@ -196,9 +198,15 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
             body: TabBarView(
               controller: _tabController,
               children: [
-                _NotificationsTab(courseId: widget.courseId),
+                _NotificationsTab(
+                  courseId: widget.courseId,
+                  courseName: course.name,
+                ),
                 _FilesTab(courseId: widget.courseId),
-                _HomeworksTab(courseId: widget.courseId),
+                _HomeworksTab(
+                  courseId: widget.courseId,
+                  courseName: course.name,
+                ),
               ],
             ),
           );
@@ -218,7 +226,8 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
 
 class _NotificationsTab extends ConsumerWidget {
   final String courseId;
-  const _NotificationsTab({required this.courseId});
+  final String courseName;
+  const _NotificationsTab({required this.courseId, required this.courseName});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -253,7 +262,13 @@ class _NotificationsTab extends ConsumerWidget {
 
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
-              child: Container(
+              child: GestureDetector(
+                onTap: () => context.push(Routes.notificationDetail(
+                  notificationId: n.id,
+                  courseId: courseId,
+                  courseName: courseName,
+                )),
+                child: Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: surface,
@@ -338,9 +353,9 @@ class _NotificationsTab extends ConsumerWidget {
                           ),
                         ],
                       ),
-                    ),
                   ],
                 ),
+              ),
               )
                   .animate(delay: (40 * index).ms)
                   .fadeIn(duration: 200.ms),
@@ -556,7 +571,8 @@ class _FilesTab extends ConsumerWidget {
 
 class _HomeworksTab extends ConsumerWidget {
   final String courseId;
-  const _HomeworksTab({required this.courseId});
+  final String courseName;
+  const _HomeworksTab({required this.courseId, required this.courseName});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -592,7 +608,13 @@ class _HomeworksTab extends ConsumerWidget {
 
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
-              child: Container(
+              child: GestureDetector(
+                onTap: () => context.push(Routes.homeworkDetail(
+                  homeworkId: hw.id,
+                  courseId: courseId,
+                  courseName: courseName,
+                )),
+                child: Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: surface,
@@ -652,6 +674,7 @@ class _HomeworksTab extends ConsumerWidget {
                     ),
                   ],
                 ),
+              ),
               )
                   .animate(delay: (40 * index).ms)
                   .fadeIn(duration: 200.ms),
