@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/design/colors.dart';
 import '../../core/design/responsive.dart';
+import '../../core/design/shimmer.dart';
 import '../../core/design/typography.dart';
 import '../../core/database/database.dart' as db;
 import '../../core/providers/providers.dart';
@@ -149,7 +150,7 @@ class _NotificationDetailScreenState
       return Scaffold(
         backgroundColor: bg,
         appBar: AppBar(),
-        body: const Center(child: CircularProgressIndicator()),
+        body: const ListSkeleton(),
       );
     }
 

@@ -123,8 +123,24 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
 
     return Scaffold(
       body: courseAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('加载失败: $e')),
+        loading: () => const Center(child: ListSkeleton()),
+        error: (e, _) => Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.error_outline_rounded,
+                  size: 48, color: subColor),
+              const SizedBox(height: 12),
+              Text('加载失败',
+                  style: AppTypography.titleMedium
+                      .copyWith(color: subColor)),
+              const SizedBox(height: 8),
+              Text('请返回重试',
+                  style: AppTypography.bodySmall.copyWith(
+                      color: subColor.withAlpha(180))),
+            ],
+          ),
+        ),
         data: (course) {
           if (course == null) {
             return Center(
@@ -246,7 +262,22 @@ class _NotificationsTab extends ConsumerWidget {
 
     return notifAsync.when(
       loading: () => const ListSkeleton(),
-      error: (e, _) => Center(child: Text('$e')),
+      error: (e, _) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.error_outline_rounded,
+                  size: 40, color: tertiaryColor),
+              const SizedBox(height: 10),
+              Text('加载失败',
+                  style: AppTypography.bodyMedium
+                      .copyWith(color: textColor)),
+            ],
+          ),
+        ),
+      ),
       data: (notifications) {
         if (notifications.isEmpty) {
           return _EmptyState(
@@ -404,7 +435,22 @@ class _FilesTab extends ConsumerWidget {
 
     return filesAsync.when(
       loading: () => const ListSkeleton(),
-      error: (e, _) => Center(child: Text('$e')),
+      error: (e, _) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.error_outline_rounded,
+                  size: 40, color: tertiaryColor),
+              const SizedBox(height: 10),
+              Text('加载失败',
+                  style: AppTypography.bodyMedium
+                      .copyWith(color: textColor)),
+            ],
+          ),
+        ),
+      ),
       data: (files) {
         if (files.isEmpty) {
           return _EmptyState(
@@ -587,7 +633,22 @@ class _HomeworksTab extends ConsumerWidget {
 
     return hwAsync.when(
       loading: () => const ListSkeleton(),
-      error: (e, _) => Center(child: Text('$e')),
+      error: (e, _) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.error_outline_rounded,
+                  size: 40, color: tertiaryColor),
+              const SizedBox(height: 10),
+              Text('加载失败',
+                  style: AppTypography.bodyMedium
+                      .copyWith(color: textColor)),
+            ],
+          ),
+        ),
+      ),
       data: (homeworks) {
         if (homeworks.isEmpty) {
           return _EmptyState(

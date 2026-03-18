@@ -403,11 +403,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 style:
                     AppTypography.labelMedium.copyWith(color: subColor)),
             const Spacer(),
-            GestureDetector(
+            InkWell(
               onTap: _clearRecent,
-              child: Text('清除',
-                  style: AppTypography.labelSmall
-                      .copyWith(color: AppColors.primary)),
+              borderRadius: BorderRadius.circular(4),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: Text('清除',
+                    style: AppTypography.labelSmall
+                        .copyWith(color: AppColors.primary)),
+              ),
             ),
           ],
         ),
