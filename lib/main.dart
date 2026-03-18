@@ -54,8 +54,8 @@ class _LearnYAppState extends ConsumerState<LearnYApp> {
         // Lock orientation based on device type:
         // - Phones: portrait only (better UX for content-heavy app)
         // - Tablets: allow landscape for wider layouts
-        final deviceType = Breakpoints.deviceType(context);
-        if (deviceType == DeviceType.compact) {
+        final deviceType = layoutTypeOf(context);
+        if (deviceType == LayoutType.compact) {
           SystemChrome.setPreferredOrientations([
             DeviceOrientation.portraitUp,
             DeviceOrientation.portraitDown,

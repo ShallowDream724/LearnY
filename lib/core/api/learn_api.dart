@@ -317,7 +317,7 @@ class Learn2018Helper {
       if (_provider == null) {
         throw const ApiError(reason: FailReason.noCredential);
       }
-      final cred = await _provider!();
+      final cred = await _provider();
       username = cred.username;
       password = cred.password;
       fingerPrint = cred.fingerPrint;
@@ -337,13 +337,11 @@ class Learn2018Helper {
       fingerGenPrint3: fingerGenPrint3 ?? '',
     );
 
-    // Roam to learn
+    // Roam to learn — let the manual redirect interceptor handle 302s
+    // so CookieManager captures session cookies from every hop.
+    // Do NOT set followRedirects:true here (it would bypass the interceptor).
     final loginResp = await _dio.get(
       urls.learnAuthRoam(ticket),
-      options: Options(
-        followRedirects: true,
-        validateStatus: (s) => s != null && s < 400,
-      ),
     );
     if (loginResp.statusCode != 200) {
       throw const ApiError(reason: FailReason.errorRoaming);
@@ -353,15 +351,39 @@ class Learn2018Helper {
     final courseListResp = await _dio.get(urls.learnStudentCourseListPage());
     final pageSource = courseListResp.data.toString();
 
-    final tokenRegex = RegExp(r'&_csrf=(\S*)"', multiLine: true);
-    final tokenMatches = tokenRegex.allMatches(pageSource).toList();
-    if (tokenMatches.isEmpty) {
-      throw const ApiError(
+    // Try multiple regex patterns for robustness
+    String? csrfToken;
+
+    // Pattern 1: &_csrf=TOKEN or ?_csrf=TOKEN (most common, in URL params)
+    final p1 = RegExp(r'[&?]_csrf=([a-zA-Z0-9\-_]+)', multiLine: true);
+    final m1 = p1.firstMatch(pageSource);
+    if (m1 != null) csrfToken = m1.group(1);
+
+    // Pattern 2: name="_csrf" value="TOKEN" (form hidden input)
+    if (csrfToken == null) {
+      final p2 = RegExp(
+          r'''name=['"]_csrf['"]\s+(?:value|content)=['"]([^'"]+)['"]''',
+          multiLine: true);
+      final m2 = p2.firstMatch(pageSource);
+      if (m2 != null) csrfToken = m2.group(1);
+    }
+
+    // Pattern 3: original strict pattern &_csrf=TOKEN"
+    if (csrfToken == null) {
+      final p3 = RegExp(r'&_csrf=(\S*)"', multiLine: true);
+      final m3 = p3.firstMatch(pageSource);
+      if (m3 != null) csrfToken = m3.group(1);
+    }
+
+    if (csrfToken == null || csrfToken.isEmpty) {
+      throw ApiError(
         reason: FailReason.invalidResponse,
-        extra: 'cannot fetch CSRF token from source',
+        extra: 'cannot fetch CSRF token from source '
+            '(page length: ${pageSource.length}, '
+            'status: ${courseListResp.statusCode})',
       );
     }
-    _csrfToken = tokenMatches[0].group(1)!;
+    _csrfToken = csrfToken;
 
     // Extract current language
     final langRegex =

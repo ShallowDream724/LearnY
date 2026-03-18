@@ -2,9 +2,9 @@
 ///
 /// These providers handle the bridge between the API and local database.
 /// Partial failures are tracked and reported, not silently swallowed.
+import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../api/learn_api.dart';
 import '../api/models.dart' as api;
 import '../api/enums.dart';
 import '../database/database.dart';
@@ -361,7 +361,7 @@ final homeDataProvider = FutureProvider<HomeData>((ref) async {
             courseId: n.courseId,
             courseName: courseMap[n.courseId] ?? '',
             title: n.title,
-            publisher: n.publisher ?? '',
+            publisher: n.publisher,
             publishTime: n.publishTime,
             markedImportant: n.markedImportant,
           ))

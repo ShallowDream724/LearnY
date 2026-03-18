@@ -30,7 +30,6 @@ import 'package:go_router/go_router.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/responsive.dart';
 import '../../core/design/typography.dart';
-import '../../core/database/database.dart' as db;
 import '../../core/providers/providers.dart';
 import '../../core/router/router.dart';
 
@@ -135,14 +134,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final courses = await database.getCoursesBySemester(semesterId);
     for (final c in courses) {
       if (c.name.toLowerCase().contains(lowerQuery) ||
-          (c.teacherName?.toLowerCase().contains(lowerQuery) ?? false)) {
+          (c.teacherName.toLowerCase().contains(lowerQuery))) {
         results.add(SearchResult(
           category: SearchCategory.course,
           id: c.id,
           courseId: c.id,
           courseName: c.name,
           title: c.name,
-          subtitle: c.teacherName ?? '',
+          subtitle: c.teacherName,
           icon: Icons.school_rounded,
           accentColor: AppColors.primary,
         ));
@@ -494,60 +493,56 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     onTap: () => _onResultTap(result),
                     borderRadius: BorderRadius.circular(12),
                     child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: border, width: 0.5),
-                    ),
-                    child: Row(
-                      children: [
-                        // Category icon
-                        Container(
-                          width: 34,
-                          height: 34,
-                          decoration: BoxDecoration(
-                            color: result.accentColor.withAlpha(20),
-                            borderRadius: BorderRadius.circular(8),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: border, width: 0.5),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              color: result.accentColor.withAlpha(20),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(result.icon,
+                                size: 17, color: result.accentColor),
                           ),
-                          child: Icon(result.icon,
-                              size: 17, color: result.accentColor),
-                        ),
-                        const SizedBox(width: 12),
-
-                        // Title + subtitle
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                result.title,
-                                style: AppTypography.titleSmall
-                                    .copyWith(color: textColor),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                result.subtitle,
-                                style: AppTypography.bodySmall
-                                    .copyWith(color: tertiaryColor),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  result.title,
+                                  style: AppTypography.titleSmall
+                                      .copyWith(color: textColor),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  result.subtitle,
+                                  style: AppTypography.bodySmall
+                                      .copyWith(color: tertiaryColor),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-
-                        // Chevron
-                        Icon(Icons.chevron_right_rounded,
-                            size: 18, color: tertiaryColor),
-                      ],
+                          Icon(Icons.chevron_right_rounded,
+                              size: 18, color: tertiaryColor),
+                        ],
+                      ),
                     ),
                   ),
-                )
-                    .animate(delay: (30 * index).ms)
-                    .fadeIn(duration: 200.ms),
-              );
+                ),
+              )
+                  .animate(delay: (30 * index).ms)
+                  .fadeIn(duration: 200.ms);
             }),
             const SizedBox(height: 16),
           ],
@@ -624,8 +619,6 @@ class _CategoryHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final subColor =
         isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
-    final tertiaryColor =
-        isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
 
     final (label, icon, color) = switch (category) {
       SearchCategory.course => ('课程', Icons.school_rounded, AppColors.primary),

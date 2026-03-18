@@ -165,16 +165,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       final api = ref.read(apiClientProvider);
 
       // Step 1: Roam to learn.tsinghua.edu.cn with the ticket.
-      // Dio's CookieManager will capture the session cookies.
-      // The server may return a redirect (302), which Dio's interceptor follows.
+      // IMPORTANT: Do NOT set followRedirects:true — the base Dio config
+      // uses followRedirects:false with a manual redirect interceptor.
+      // This ensures CookieManager captures session cookies from every
+      // 302 hop (critical for SSO authentication chains).
       final dioInstance = _getDioFromHelper(api);
 
       final roamResp = await dioInstance.get(
         urls.learnAuthRoam(ticket),
-        options: Options(
-          followRedirects: true,
-          validateStatus: (s) => s != null && s < 400,
-        ),
       );
 
       if (roamResp.statusCode != 200) {
@@ -187,15 +185,42 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       );
       final pageSource = courseListResp.data.toString();
 
-      // Step 3: Extract CSRF token.
-      final tokenRegex = RegExp(r'&_csrf=(\S*)"', multiLine: true);
-      final tokenMatches = tokenRegex.allMatches(pageSource).toList();
+      // Step 3: Extract CSRF token using multiple regex patterns.
+      // The page embeds CSRF tokens in URLs like: href="...&_csrf=TOKEN"
+      String? csrfToken;
 
-      if (tokenMatches.isEmpty) {
+      // Pattern 1: &_csrf=TOKEN" (most common)
+      final p1 = RegExp(r'[&?]_csrf=([a-zA-Z0-9\-_]+)', multiLine: true);
+      final m1 = p1.firstMatch(pageSource);
+      if (m1 != null) csrfToken = m1.group(1);
+
+      // Pattern 2: name="_csrf" value="TOKEN"
+      if (csrfToken == null) {
+        final p2 = RegExp(
+            r'name=["\u0027]_csrf["\u0027]\s+(?:value|content)=["\u0027]([^"\u0027]+)["\u0027]',
+            multiLine: true);
+        final m2 = p2.firstMatch(pageSource);
+        if (m2 != null) csrfToken = m2.group(1);
+      }
+
+      // Pattern 3: original strict pattern
+      if (csrfToken == null) {
+        final p3 = RegExp(r'&_csrf=(\S*)"', multiLine: true);
+        final m3 = p3.firstMatch(pageSource);
+        if (m3 != null) csrfToken = m3.group(1);
+      }
+
+      if (csrfToken == null || csrfToken.isEmpty) {
+        // Log diagnostic info for debugging
+        debugPrint('[LearnY] CSRF extraction failed. '
+            'Page length: ${pageSource.length}, '
+            'Status: ${courseListResp.statusCode}, '
+            'URL: ${courseListResp.realUri}');
+        debugPrint('[LearnY] Page preview: '
+            '${pageSource.substring(0, pageSource.length.clamp(0, 500))}');
         throw Exception('Could not extract CSRF token from page source');
       }
 
-      final csrfToken = tokenMatches[0].group(1)!;
       api.setCSRFToken(csrfToken);
 
       // Step 4: Extract username from the page.
@@ -273,15 +298,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             .replaceAll(r'\/', '/');
       }
 
-      // Extract CSRF token
-      final tokenRegex = RegExp(r'&_csrf=(\S*)"');
-      final tokenMatch = tokenRegex.firstMatch(pageSource);
+      // Extract CSRF token using multiple patterns (same logic as primary path)
+      String? csrfToken;
+      final p1 = RegExp(r'[&?]_csrf=([a-zA-Z0-9\-_]+)', multiLine: true);
+      final m1 = p1.firstMatch(pageSource);
+      if (m1 != null) csrfToken = m1.group(1);
 
-      if (tokenMatch == null) {
+      if (csrfToken == null) {
+        final p2 = RegExp(r'&_csrf=(\S*)"', multiLine: true);
+        final m2 = p2.firstMatch(pageSource);
+        if (m2 != null) csrfToken = m2.group(1);
+      }
+
+      if (csrfToken == null || csrfToken.isEmpty) {
+        debugPrint('[LearnY] Fallback CSRF extraction failed. '
+            'Page length: ${pageSource.length}');
         throw Exception('Fallback: could not find CSRF token in page');
       }
 
-      final csrfToken = tokenMatch.group(1)!;
       final api = ref.read(apiClientProvider);
       api.setCSRFToken(csrfToken);
 

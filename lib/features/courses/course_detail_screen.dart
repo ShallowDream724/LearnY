@@ -20,7 +20,7 @@ import '../../core/design/responsive.dart';
 import '../../core/design/shimmer.dart';
 import '../../core/design/typography.dart';
 import '../../core/providers/providers.dart';
-import '../../core/database/database.dart';
+import '../../core/database/database.dart' as db;
 import '../../core/router/router.dart';
 import '../../core/services/file_download_service.dart';
 
@@ -32,10 +32,10 @@ import '../../core/services/file_download_service.dart';
 final _courseIdProvider = Provider<String>((ref) => throw UnimplementedError());
 
 /// Course data for the detail view.
-final _courseDetailProvider = FutureProvider.family<Course?, String>(
+final _courseDetailProvider = FutureProvider.family<db.Course?, String>(
   (ref, courseId) async {
-    final db = ref.watch(databaseProvider);
-    final courses = await db.getCoursesBySemester(
+    final database = ref.watch(databaseProvider);
+    final courses = await database.getCoursesBySemester(
       ref.watch(currentSemesterIdProvider) ?? '',
     );
     try {
@@ -48,10 +48,10 @@ final _courseDetailProvider = FutureProvider.family<Course?, String>(
 
 /// Notifications for this course.
 final _courseNotificationsProvider =
-    FutureProvider.family<List<Notification>, String>(
+    FutureProvider.family<List<db.Notification>, String>(
   (ref, courseId) async {
-    final db = ref.watch(databaseProvider);
-    final notifications = await db.getNotificationsByCourse(courseId);
+    final database = ref.watch(databaseProvider);
+    final notifications = await database.getNotificationsByCourse(courseId);
     // Sort: unread first, then by publish time descending
     notifications.sort((a, b) {
       if (a.hasRead != b.hasRead) return a.hasRead ? 1 : -1;
@@ -62,10 +62,10 @@ final _courseNotificationsProvider =
 );
 
 /// Files for this course.
-final _courseFilesProvider = FutureProvider.family<List<CourseFile>, String>(
+final _courseFilesProvider = FutureProvider.family<List<db.CourseFile>, String>(
   (ref, courseId) async {
-    final db = ref.watch(databaseProvider);
-    final files = await db.getFilesByCourse(courseId);
+    final database = ref.watch(databaseProvider);
+    final files = await database.getFilesByCourse(courseId);
     // Sort by upload time descending
     files.sort((a, b) => b.uploadTime.compareTo(a.uploadTime));
     return files;
@@ -73,10 +73,10 @@ final _courseFilesProvider = FutureProvider.family<List<CourseFile>, String>(
 );
 
 /// Homeworks for this course.
-final _courseHomeworksProvider = FutureProvider.family<List<Homework>, String>(
+final _courseHomeworksProvider = FutureProvider.family<List<db.Homework>, String>(
   (ref, courseId) async {
-    final db = ref.watch(databaseProvider);
-    final homeworks = await db.getHomeworksByCourse(courseId);
+    final database = ref.watch(databaseProvider);
+    final homeworks = await database.getHomeworksByCourse(courseId);
     // Sort by deadline descending
     homeworks.sort((a, b) => b.deadline.compareTo(a.deadline));
     return homeworks;
@@ -185,10 +185,9 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           const SizedBox(height: 8),
-                          if (course.teacherName != null &&
-                              course.teacherName!.isNotEmpty)
+                          if (course.teacherName.isNotEmpty)
                             Text(
-                              course.teacherName!,
+                              course.teacherName,
                               style: AppTypography.bodySmall
                                   .copyWith(color: subColor),
                             ),
@@ -233,7 +232,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     );
   }
 
-  Widget _buildTab(String label, FutureProvider provider) {
+  Widget _buildTab(String label, dynamic provider) {
     return Tab(text: label);
   }
 }
@@ -307,97 +306,95 @@ class _NotificationsTab extends ConsumerWidget {
                   )),
                   borderRadius: BorderRadius.circular(14),
                   child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: border, width: 0.5),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Read/unread dot
-                    if (!isRead)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4, right: 10),
-                        child: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: n.markedImportant
-                                ? AppColors.warning
-                                : AppColors.info,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      )
-                    else
-                      const SizedBox(width: 18),
-
-                    // Content
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  n.title,
-                                  style: AppTypography.titleMedium.copyWith(
-                                    color: isRead ? subColor : textColor,
-                                    fontWeight:
-                                        isRead ? FontWeight.w400 : FontWeight.w600,
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: border, width: 0.5),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (!isRead)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4, right: 10),
+                            child: Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: n.markedImportant
+                                    ? AppColors.warning
+                                    : AppColors.info,
+                                shape: BoxShape.circle,
                               ),
-                              if (n.markedImportant)
-                                Container(
-                                  margin: const EdgeInsets.only(left: 8),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.warning.withAlpha(20),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    '重要',
-                                    style: AppTypography.labelSmall.copyWith(
-                                      color: AppColors.warning,
-                                      fontSize: 10,
+                            ),
+                          )
+                        else
+                          const SizedBox(width: 18),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      n.title,
+                                      style: AppTypography.titleMedium.copyWith(
+                                        color: isRead ? subColor : textColor,
+                                        fontWeight:
+                                            isRead ? FontWeight.w400 : FontWeight.w600,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Row(
-                            children: [
-                              if (n.publisher != null &&
-                                  n.publisher!.isNotEmpty) ...[
-                                Text(n.publisher!,
+                                  if (n.markedImportant)
+                                    Container(
+                                      margin: const EdgeInsets.only(left: 8),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.warning.withAlpha(20),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        '重要',
+                                        style: AppTypography.labelSmall.copyWith(
+                                          color: AppColors.warning,
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                children: [
+                                  if (n.publisher != null &&
+                                      n.publisher!.isNotEmpty) ...[
+                                    Text(n.publisher!,
+                                        style: AppTypography.bodySmall
+                                            .copyWith(color: tertiaryColor)),
+                                    const SizedBox(width: 12),
+                                  ],
+                                  Text(
+                                    _formatTime(n.publishTime),
                                     style: AppTypography.bodySmall
-                                        .copyWith(color: tertiaryColor)),
-                                const SizedBox(width: 12),
-                              ],
-                              Text(
-                                _formatTime(n.publishTime),
-                                style: AppTypography.bodySmall
-                                    .copyWith(color: tertiaryColor),
+                                        .copyWith(color: tertiaryColor),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
-                        ],
-                      ),
-                  ],
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-              ),
-              )
-                  .animate(delay: (40 * index).ms)
-                  .fadeIn(duration: 200.ms),
-            );
+            )
+                .animate(delay: (40 * index).ms)
+                .fadeIn(duration: 200.ms);
           },
         );
       },
@@ -749,7 +746,7 @@ class _HomeworksTab extends ConsumerWidget {
     );
   }
 
-  Color _statusColor(Homework hw) {
+  Color _statusColor(db.Homework hw) {
     if (hw.graded) return AppColors.success;
     if (hw.submitted) return AppColors.info;
     final ms = int.tryParse(hw.deadline);
@@ -760,7 +757,7 @@ class _HomeworksTab extends ConsumerWidget {
     return AppColors.warning;
   }
 
-  String _statusText(Homework hw) {
+  String _statusText(db.Homework hw) {
     if (hw.graded) return '已批改';
     if (hw.submitted) return '已提交';
     final ms = int.tryParse(hw.deadline);
@@ -792,7 +789,7 @@ class _HomeworksTab extends ConsumerWidget {
 // ---------------------------------------------------------------------------
 
 class _FileDownloadButton extends ConsumerWidget {
-  final CourseFile file;
+  final db.CourseFile file;
   final String courseId;
   final Color subColor;
 

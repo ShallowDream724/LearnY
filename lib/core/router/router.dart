@@ -64,7 +64,7 @@ final _shellNavigatorKey = GlobalKey<NavigatorState>();
 ///
 /// Takes [ref] to reactively read auth state inside redirect.
 /// The router is created ONCE and reacts to auth changes via redirect.
-GoRouter buildRouter({required Ref ref}) {
+GoRouter buildRouter({required WidgetRef ref}) {
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: Routes.home,
