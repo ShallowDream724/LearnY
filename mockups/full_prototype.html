@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>LearnX Flutter — 全页面原型</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#F2F2F7;--surface:#FFF;--text1:#1C1C1E;--text2:#6E6E73;--text3:#AEAEB2;
+  --accent:#6B3FA0;--accent-light:#F3EEFA;--blue:#007AFF;--green:#34C759;--amber:#FF9500;--red:#FF3B30;
+  --sep:rgba(60,60,67,0.06);--card-sh:0 1px 3px rgba(0,0,0,0.04),0 4px 12px rgba(0,0,0,0.03);
+  --nav-bg:rgba(242,242,247,0.72);--tab-bg:#F2F2F7;
+}
+body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text1);max-width:393px;margin:0 auto;min-height:100vh;padding-bottom:90px;overflow-x:hidden}
+body.dark{
+  --bg:#000;--surface:#1C1C1E;--text1:#F5F5F7;--text2:#98989D;--text3:#48484A;
+  --accent:#BFA0D8;--accent-light:rgba(107,63,160,0.2);--sep:rgba(255,255,255,0.06);
+  --card-sh:0 1px 3px rgba(0,0,0,0.3);--nav-bg:rgba(0,0,0,0.72);--tab-bg:#000;
+}
+
+/* Status bar */
+.status-bar{height:54px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:8px;font-size:15px;font-weight:600;background:var(--nav-bg);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);position:sticky;top:0;z-index:200}
+
+/* Nav bar */
+.nav-bar{padding:4px 20px 10px;font-size:34px;font-weight:800;letter-spacing:-0.5px;background:var(--nav-bg);backdrop-filter:blur(20px);position:sticky;top:54px;z-index:199}
+.nav-bar-sub{display:flex;align-items:center;gap:12px;padding:4px 20px 10px;background:var(--nav-bg);backdrop-filter:blur(20px);position:sticky;top:54px;z-index:199}
+.nav-back{font-size:28px;color:var(--accent);cursor:pointer;line-height:1}
+.nav-title-sub{font-size:17px;font-weight:600}
+
+/* Page containers */
+.page{display:none}
+.page.active{display:block}
+
+/* Section */
+.section{padding:0 20px;margin-bottom:20px}
+.section-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.section-title{font-size:20px;font-weight:700;letter-spacing:-0.3px}
+.section-action{font-size:14px;color:var(--accent);font-weight:500;cursor:pointer}
+
+/* Cards */
+.card{background:var(--surface);border-radius:14px;padding:14px 16px;margin-bottom:8px;box-shadow:var(--card-sh);cursor:pointer;transition:transform .12s ease;position:relative;overflow:hidden}
+.card:active{transform:scale(0.98)}
+.card-title{font-size:15px;font-weight:600;line-height:1.4;color:var(--text1)}
+.card-meta{font-size:12px;color:var(--text3);margin-top:2px}
+.card-top-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.card-course{font-size:11px;font-weight:500;color:var(--text2);letter-spacing:.3px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--blue);flex-shrink:0}
+.dot.red{background:var(--red)}
+
+/* Swipe hint */
+.swipe-hint{position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--text3);opacity:0.5}
+
+/* Stat cards */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+.stat{background:var(--bg);border-radius:12px;padding:12px 10px;text-align:center}
+body.dark .stat{background:#2C2C2E}
+.stat-val{font-size:26px;font-weight:700;letter-spacing:-1px;line-height:1}
+.stat-val.g{color:var(--green)}.stat-val.a{color:var(--accent)}.stat-val.b{color:var(--blue)}.stat-val.r{color:var(--red)}.stat-val.am{color:var(--amber)}
+.stat-lbl{font-size:11px;color:var(--text2);font-weight:500;margin-top:3px}
+
+/* Urgent banner */
+.urgent{background:linear-gradient(135deg,#FFF8F0,#FFF3E0);border-radius:14px;padding:14px 16px;margin-bottom:16px;border:1px solid rgba(255,149,0,.1)}
+body.dark .urgent{background:linear-gradient(135deg,#2A2218,#2C2116);border-color:rgba(255,149,0,.15)}
+.urgent-head{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.urgent-dot{width:7px;height:7px;border-radius:50%;background:var(--amber);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+.urgent-label{font-size:12px;font-weight:600;color:#CC7700}
+.urgent-item{display:flex;align-items:center;padding:7px 0;gap:8px}
+.urgent-item+.urgent-item{border-top:1px solid rgba(255,149,0,.08)}
+.urgent-name{flex:1;font-size:14px;font-weight:500}
+.urgent-time{font-size:12px;font-weight:600;font-family:'JetBrains Mono',monospace;white-space:nowrap}
+.urgent-time.red{color:var(--red)}.urgent-time.amber{color:var(--amber)}
+
+/* Today schedule bar */
+.today-bar{background:var(--surface);border-radius:14px;padding:12px 16px;margin-bottom:16px;box-shadow:var(--card-sh);display:flex;align-items:center;gap:10px}
+.today-icon{font-size:20px}
+.today-text{font-size:13px;color:var(--text2);font-weight:500;flex:1}
+.today-text b{color:var(--text1);font-weight:600}
+
+/* Pill filter */
+.filter-bar{display:flex;gap:6px;padding:0 20px;margin-bottom:12px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.filter-bar::-webkit-scrollbar{display:none}
+.pill{padding:7px 14px;border-radius:20px;font-size:13px;font-weight:500;background:var(--surface);color:var(--text2);cursor:pointer;white-space:nowrap;transition:all .2s;border:1px solid transparent;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.pill.active{background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:0 2px 8px rgba(107,63,160,.2)}
+
+/* Deadline bar */
+.dl-row{display:flex;align-items:center;gap:8px;margin-top:8px}
+.dl-bg{flex:1;height:3px;background:#E8E8ED;border-radius:2px;overflow:hidden}
+body.dark .dl-bg{background:#2C2C2E}
+.dl-fill{height:100%;border-radius:2px}
+.dl-text{font-size:12px;font-weight:600;white-space:nowrap}
+
+/* Status pills */
+.st-row{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.st{font-size:11px;font-weight:600;padding:3px 8px;border-radius:6px;display:inline-flex;align-items:center;gap:3px}
+.st.sub{background:rgba(52,199,89,.1);color:#248A3D}
+.st.pend{background:rgba(255,149,0,.1);color:#CC7700}
+.st.grade{background:rgba(107,63,160,.1);color:var(--accent)}
+
+/* File type icons */
+.ficon{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;flex-shrink:0}
+.ficon.pdf{background:linear-gradient(135deg,#FF3B30,#FF6961)}.ficon.doc{background:linear-gradient(135deg,#007AFF,#5AC8FA)}.ficon.ppt{background:linear-gradient(135deg,#FF9500,#FFCC00)}.ficon.zip{background:linear-gradient(135deg,#8E8E93,#AEAEB2)}.ficon.xls{background:linear-gradient(135deg,#34C759,#30D158)}
+.file-row{display:flex;gap:12px;align-items:center}
+.file-info{flex:1;min-width:0}
+.file-size{font-size:12px;color:var(--text3);margin-top:1px}
+
+/* Course grid */
+.course-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.course-card{background:var(--surface);border-radius:16px;padding:16px;box-shadow:var(--card-sh);cursor:pointer;transition:transform .12s;position:relative;overflow:hidden}
+.course-card:active{transform:scale(0.97)}
+.course-color{height:4px;border-radius:2px;margin-bottom:12px}
+.course-card-name{font-size:14px;font-weight:600;line-height:1.3;margin-bottom:4px}
+.course-card-teacher{font-size:12px;color:var(--text3)}
+.course-card-badges{display:flex;gap:8px;margin-top:10px}
+.course-badge-item{font-size:11px;font-weight:600;display:flex;align-items:center;gap:3px}
+
+/* Settings list */
+.setting-group{background:var(--surface);border-radius:14px;margin:0 20px 16px;overflow:hidden;box-shadow:var(--card-sh)}
+.setting-item{padding:14px 16px;display:flex;align-items:center;gap:12px;cursor:pointer}
+.setting-item+.setting-item{border-top:1px solid var(--sep)}
+.setting-icon{width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:15px;color:#fff}
+.setting-text{flex:1;font-size:15px;font-weight:400}
+.setting-arrow{color:var(--text3);font-size:14px}
+.setting-val{font-size:14px;color:var(--text3)}
+
+/* Avatar */
+.avatar-section{display:flex;align-items:center;gap:14px;padding:20px;margin:0 20px 16px;background:var(--surface);border-radius:14px;box-shadow:var(--card-sh)}
+.avatar{width:56px;height:56px;border-radius:28px;background:linear-gradient(135deg,var(--accent),#9B6FCF);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:#fff}
+.avatar-name{font-size:18px;font-weight:600}
+.avatar-dept{font-size:13px;color:var(--text2)}
+
+/* Bottom Tab Bar */
+.tab-bar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:393px;background:var(--nav-bg);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);display:flex;padding:6px 0 22px;border-top:0.5px solid var(--sep);z-index:300}
+.tab-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;padding:4px 0;position:relative}
+.tab-icon{font-size:24px;line-height:1;transition:transform .15s}
+.tab-label{font-size:10px;font-weight:500;color:var(--text3);transition:color .15s}
+.tab-item.active .tab-icon{transform:scale(1.1)}
+.tab-item.active .tab-label{color:var(--accent);font-weight:600}
+.tab-dot{position:absolute;top:2px;right:calc(50% - 18px);width:6px;height:6px;border-radius:3px;background:var(--red)}
+
+/* Section divider */
+.section-gap{height:8px}
+
+/* Graded card */
+.grade-big{font-size:22px;font-weight:700;color:var(--accent);text-align:right;flex-shrink:0}
+
+/* Sub-tabs inside pages */
+.sub-tabs{display:flex;padding:4px 20px;gap:4px;margin-bottom:8px}
+.sub-tab{flex:1;text-align:center;padding:9px 0;font-size:14px;font-weight:500;color:var(--text2);border-radius:10px;cursor:pointer;transition:all .2s}
+.sub-tab.active{background:var(--surface);color:var(--text1);font-weight:600;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+body.dark .sub-tab.active{box-shadow:0 1px 4px rgba(0,0,0,.3)}
+
+/* Dark mode toggle */
+.dm-btn{position:fixed;bottom:90px;right:calc(50% - 393px/2 + 16px);width:40px;height:40px;border-radius:20px;background:var(--surface);box-shadow:0 2px 12px rgba(0,0,0,.1);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;z-index:400;border:none}
+
+/* new badge */
+.new-badge{font-size:10px;font-weight:700;color:var(--blue);margin-left:4px}
+
+/* scrollable row */
+.hscroll{display:flex;gap:8px;overflow-x:auto;padding:0 20px;-webkit-overflow-scrolling:touch}
+.hscroll::-webkit-scrollbar{display:none}
+
+/* course detail overlay */
+.overlay{display:none;position:fixed;top:0;left:50%;transform:translateX(-50%);width:100%;max-width:393px;height:100%;background:var(--bg);z-index:500;overflow-y:auto;padding-bottom:40px}
+.overlay.show{display:block}
+</style>
+</head>
+<body>
+
+<!-- ====== PAGE: 首页 ====== -->
+<div class="page active" id="p-home">
+  <div class="status-bar">9:41</div>
+  <div class="nav-bar">首页</div>
+
+  <!-- Today schedule -->
+  <div class="section">
+    <div class="today-bar">
+      <span class="today-icon">📍</span>
+      <div class="today-text"><b>线性代数</b> · 08:00 · 六教 6C301 → <b>概率论</b> · 10:05 · 六教 6A017</div>
+    </div>
+  </div>
+
+  <!-- Urgent deadlines -->
+  <div class="section">
+    <div class="urgent">
+      <div class="urgent-head">
+        <div class="urgent-dot"></div>
+        <div class="urgent-label">2 个作业即将截止</div>
+      </div>
+      <div class="urgent-item">
+        <div class="urgent-name">矩阵分解与 LU 分解</div>
+        <div class="urgent-time red">05:32:17</div>
+      </div>
+      <div class="urgent-item">
+        <div class="urgent-name">贝叶斯推断应用</div>
+        <div class="urgent-time amber">周五 23:59</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Unread notices -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">📬 未读通知</div>
+      <div class="section-action">全部已读</div>
+    </div>
+    <div class="card" id="notice1">
+      <div class="card-top-row">
+        <span class="card-course">高等数学(1) · 张明远</span>
+        <div class="dot"></div>
+      </div>
+      <div class="card-title">第四章作业提交截止时间延长通知</div>
+      <div class="card-meta">2小时前</div>
+      <div class="swipe-hint">← 滑动标已读</div>
+    </div>
+    <div class="card">
+      <div class="card-top-row">
+        <span class="card-course">概率论 · 李华</span>
+        <div class="dot"></div>
+      </div>
+      <div class="card-title">期中考试范围及复习要点</div>
+      <div class="card-meta">5小时前</div>
+    </div>
+    <div class="card">
+      <div class="card-top-row">
+        <span class="card-course">数据结构 · 王刚</span>
+        <div class="dot red"></div>
+      </div>
+      <div class="card-title">⚠️ 实验课地点临时变更</div>
+      <div class="card-meta">昨天 · 重要</div>
+    </div>
+    <div style="text-align:center;padding:8px">
+      <span style="font-size:13px;color:var(--accent);font-weight:500;cursor:pointer">查看全部通知 (8) →</span>
+    </div>
+  </div>
+
+  <!-- New files -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">📁 新文件</div>
+      <div class="section-action">查看全部</div>
+    </div>
+    <div class="card">
+      <div class="file-row">
+        <div class="ficon pdf">PDF</div>
+        <div class="file-info">
+          <div class="card-title" style="margin:0">第四章 特征值与特征向量</div>
+          <div class="file-size">线性代数 · 2.4 MB · 1小时前</div>
+        </div>
+        <div class="dot" style="width:6px;height:6px"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="file-row">
+        <div class="ficon ppt">PPT</div>
+        <div class="file-info">
+          <div class="card-title" style="margin:0">第八章 大数定律</div>
+          <div class="file-size">概率论 · 8.1 MB · 今天</div>
+        </div>
+        <div class="dot" style="width:6px;height:6px"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="file-row">
+        <div class="ficon doc">DOC</div>
+        <div class="file-info">
+          <div class="card-title" style="margin:0">实验报告模板 v2</div>
+          <div class="file-size">数据结构 · 156 KB · 昨天</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recently graded -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">✏️ 新批改</div>
+    </div>
+    <div class="card">
+      <div class="file-row">
+        <div>
+          <div class="card-course" style="margin-bottom:3px">线性代数</div>
+          <div class="card-title" style="margin:0">向量空间与线性映射</div>
+        </div>
+        <div class="grade-big">A+</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="file-row">
+        <div>
+          <div class="card-course" style="margin-bottom:3px">概率论</div>
+          <div class="card-title" style="margin:0">条件概率与全概率公式</div>
+        </div>
+        <div class="grade-big" style="color:var(--green)">92</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-gap"></div>
+</div>
+
+<!-- ====== PAGE: 作业 ====== -->
+<div class="page" id="p-hw">
+  <div class="status-bar">9:41</div>
+  <div class="nav-bar">作业</div>
+
+  <!-- Assignment panel -->
+  <div class="section">
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-val am">2</div>
+        <div class="stat-lbl">待提交</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val g">15</div>
+        <div class="stat-lbl">已提交</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val r">1</div>
+        <div class="stat-lbl">已过期</div>
+      </div>
+    </div>
+    <div class="today-bar" style="margin-bottom:0">
+      <span class="today-icon">⏰</span>
+      <div class="today-text">最近截止：<b>矩阵分解</b> · 明天 23:59</div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="filter-bar">
+    <div class="pill active">未完成</div>
+    <div class="pill" onclick="this.parentElement.querySelector('.active').classList.remove('active');this.classList.add('active')">全部</div>
+    <div class="pill" onclick="this.parentElement.querySelector('.active').classList.remove('active');this.classList.add('active')">已完成</div>
+    <div class="pill" onclick="this.parentElement.querySelector('.active').classList.remove('active');this.classList.add('active')">收藏</div>
+    <div class="pill" onclick="this.parentElement.querySelector('.active').classList.remove('active');this.classList.add('active')">归档</div>
+  </div>
+
+  <!-- Assignment list -->
+  <div class="section">
+    <div class="card">
+      <div class="card-course">线性代数 · 张明远</div>
+      <div class="card-title">矩阵分解与 LU 分解</div>
+      <div class="dl-row">
+        <div class="dl-bg"><div class="dl-fill" style="width:88%;background:linear-gradient(90deg,#34C759,#FF9500,#FF3B30)"></div></div>
+        <span class="dl-text" style="color:var(--red)">明天截止</span>
+      </div>
+      <div class="st-row"><span class="st pend">⚠ 未提交</span></div>
+    </div>
+    <div class="card">
+      <div class="card-course">概率论 · 李华</div>
+      <div class="card-title">贝叶斯推断应用</div>
+      <div class="dl-row">
+        <div class="dl-bg"><div class="dl-fill" style="width:40%;background:linear-gradient(90deg,#34C759,#FFD60A)"></div></div>
+        <span class="dl-text" style="color:var(--amber)">周五截止</span>
+      </div>
+      <div class="st-row"><span class="st pend">⚠ 未提交</span></div>
+    </div>
+    <div class="card" style="opacity:.65">
+      <div class="card-course">线性代数 · 张明远</div>
+      <div class="card-title">向量空间与线性映射</div>
+      <div class="st-row">
+        <span class="st sub">✓ 已提交</span>
+        <span class="st grade">A+</span>
+      </div>
+    </div>
+    <div class="card" style="opacity:.65">
+      <div class="card-course">概率论 · 李华</div>
+      <div class="card-title">条件概率与全概率公式</div>
+      <div class="st-row">
+        <span class="st sub">✓ 已提交</span>
+        <span class="st grade">92分</span>
+      </div>
+    </div>
+    <div class="card" style="opacity:.65">
+      <div class="card-course">数据结构 · 王刚</div>
+      <div class="card-title">红黑树实现与分析</div>
+      <div class="st-row">
+        <span class="st sub">✓ 已提交</span>
+        <span class="st grade">B+</span>
+      </div>
+    </div>
+    <div class="card" style="opacity:.65">
+      <div class="card-course">线性代数 · 张明远</div>
+      <div class="card-title">矩阵乘法与逆矩阵</div>
+      <div class="st-row">
+        <span class="st sub">✓ 已提交</span>
+        <span class="st grade">A</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== PAGE: 课程 ====== -->
+<div class="page" id="p-course">
+  <div class="status-bar">9:41</div>
+  <div class="nav-bar">课程</div>
+
+  <!-- Course panel -->
+  <div class="section">
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-val b">6</div>
+        <div class="stat-lbl">本学期课程</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val g">83%</div>
+        <div class="stat-lbl">总提交率</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val am">5</div>
+        <div class="stat-lbl">待处理</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Course grid -->
+  <div class="section">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <span style="font-size:13px;color:var(--text2);font-weight:500">2024-2025 秋季学期</span>
+      <span style="font-size:13px;color:var(--accent);font-weight:500;cursor:pointer">切换学期</span>
+    </div>
+    <div class="course-grid">
+      <div class="course-card" onclick="showCourseDetail()">
+        <div class="course-color" style="background:linear-gradient(90deg,#6B3FA0,#9B6FCF)"></div>
+        <div class="course-card-name">线性代数</div>
+        <div class="course-card-teacher">张明远</div>
+        <div class="course-card-badges">
+          <span class="course-badge-item" style="color:var(--blue)">🔔 2</span>
+          <span class="course-badge-item" style="color:var(--amber)">📝 1</span>
+          <span class="course-badge-item" style="color:var(--green)">📁 1</span>
+        </div>
+      </div>
+      <div class="course-card">
+        <div class="course-color" style="background:linear-gradient(90deg,#007AFF,#5AC8FA)"></div>
+        <div class="course-card-name">概率论与数理统计</div>
+        <div class="course-card-teacher">李华</div>
+        <div class="course-card-badges">
+          <span class="course-badge-item" style="color:var(--amber)">📝 1</span>
+          <span class="course-badge-item" style="color:var(--green)">📁 1</span>
+        </div>
+      </div>
+      <div class="course-card">
+        <div class="course-color" style="background:linear-gradient(90deg,#34C759,#30D158)"></div>
+        <div class="course-card-name">数据结构</div>
+        <div class="course-card-teacher">王刚</div>
+        <div class="course-card-badges">
+          <span class="course-badge-item" style="color:var(--blue)">🔔 1</span>
+        </div>
+      </div>
+      <div class="course-card">
+        <div class="course-color" style="background:linear-gradient(90deg,#FF9500,#FFCC00)"></div>
+        <div class="course-card-name">计算机网络</div>
+        <div class="course-card-teacher">赵婷</div>
+        <div class="course-card-badges"></div>
+      </div>
+      <div class="course-card">
+        <div class="course-color" style="background:linear-gradient(90deg,#FF3B30,#FF6961)"></div>
+        <div class="course-card-name">操作系统</div>
+        <div class="course-card-teacher">刘强</div>
+        <div class="course-card-badges"></div>
+      </div>
+      <div class="course-card">
+        <div class="course-color" style="background:linear-gradient(90deg,#AF52DE,#DA8FFF)"></div>
+        <div class="course-card-name">离散数学</div>
+        <div class="course-card-teacher">陈伟</div>
+        <div class="course-card-badges">
+          <span class="course-badge-item" style="color:var(--green)">📁 2</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== PAGE: 我的 ====== -->
+<div class="page" id="p-me">
+  <div class="status-bar">9:41</div>
+  <div class="nav-bar">我的</div>
+
+  <div class="avatar-section">
+    <div class="avatar">李</div>
+    <div>
+      <div class="avatar-name">李同学</div>
+      <div class="avatar-dept">计算机科学与技术系</div>
+    </div>
+  </div>
+
+  <div class="setting-group">
+    <div class="setting-item">
+      <div class="setting-icon" style="background:#FF9500">🔄</div>
+      <div class="setting-text">学期选择</div>
+      <span class="setting-val">2024秋</span>
+      <span class="setting-arrow">›</span>
+    </div>
+    <div class="setting-item">
+      <div class="setting-icon" style="background:#007AFF">📅</div>
+      <div class="setting-text">日历与提醒</div>
+      <span class="setting-arrow">›</span>
+    </div>
+    <div class="setting-item">
+      <div class="setting-icon" style="background:#34C759">📂</div>
+      <div class="setting-text">文件设置</div>
+      <span class="setting-arrow">›</span>
+    </div>
+  </div>
+
+  <div class="setting-group">
+    <div class="setting-item">
+      <div class="setting-icon" style="background:var(--accent)">🎓</div>
+      <div class="setting-text">课程信息分享</div>
+      <span class="setting-arrow">›</span>
+    </div>
+  </div>
+
+  <div class="setting-group">
+    <div class="setting-item">
+      <div class="setting-icon" style="background:#5856D6">📋</div>
+      <div class="setting-text">更新日志</div>
+      <span class="dot red" style="width:6px;height:6px;margin-left:4px"></span>
+      <span class="setting-arrow" style="margin-left:auto">›</span>
+    </div>
+    <div class="setting-item">
+      <div class="setting-icon" style="background:#FF3B30">⬆️</div>
+      <div class="setting-text">发现新版本 v2.1.0</div>
+      <span class="setting-arrow">›</span>
+    </div>
+    <div class="setting-item">
+      <div class="setting-icon" style="background:#8E8E93">❓</div>
+      <div class="setting-text">帮助与反馈</div>
+      <span class="setting-arrow">›</span>
+    </div>
+    <div class="setting-item">
+      <div class="setting-icon" style="background:#1C1C1E">ℹ️</div>
+      <div class="setting-text">关于</div>
+      <span class="setting-arrow">›</span>
+    </div>
+  </div>
+
+  <div class="setting-group">
+    <div class="setting-item" style="justify-content:center">
+      <span style="color:var(--red);font-weight:500">退出登录</span>
+    </div>
+  </div>
+</div>
+
+<!-- ====== OVERLAY: Course Detail ====== -->
+<div class="overlay" id="course-detail">
+  <div class="status-bar">9:41</div>
+  <div class="nav-bar-sub">
+    <span class="nav-back" onclick="closeCourseDetail()">‹</span>
+    <span class="nav-title-sub">线性代数</span>
+  </div>
+
+  <div class="section" style="background:var(--surface);padding:16px 20px 20px;border-radius:0 0 20px 20px;box-shadow:var(--card-sh);margin-bottom:8px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+      <div>
+        <div style="font-size:22px;font-weight:700;letter-spacing:-.3px">线性代数</div>
+        <div style="font-size:13px;color:var(--text2);margin-top:2px">张明远 教授</div>
+      </div>
+      <div style="padding:5px 10px;background:var(--accent-light);color:var(--accent);font-size:11px;font-weight:600;border-radius:16px">2024 秋</div>
+    </div>
+    <div class="stats" style="margin-bottom:14px">
+      <div class="stat"><div class="stat-val">12</div><div class="stat-lbl">作业总数</div></div>
+      <div class="stat"><div class="stat-val g">10</div><div class="stat-lbl">已提交</div></div>
+      <div class="stat"><div class="stat-val a">A-</div><div class="stat-lbl">平均成绩</div></div>
+    </div>
+    <div class="urgent" style="margin:0">
+      <div class="urgent-head"><div class="urgent-dot"></div><div class="urgent-label">2 个作业待提交</div></div>
+      <div class="urgent-item"><div class="urgent-name">矩阵分解</div><div class="urgent-time red">明天 23:59</div></div>
+      <div class="urgent-item"><div class="urgent-name">特征值分析</div><div class="urgent-time amber">周五 23:59</div></div>
+    </div>
+  </div>
+
+  <div class="sub-tabs">
+    <div class="sub-tab active" onclick="switchSubTab(this,'cd-notices')">通知 <span style="font-size:12px;color:var(--text3)">3</span></div>
+    <div class="sub-tab" onclick="switchSubTab(this,'cd-hw')">作业 <span style="font-size:12px;color:var(--text3)">12</span></div>
+    <div class="sub-tab" onclick="switchSubTab(this,'cd-files')">文件 <span style="font-size:12px;color:var(--text3)">28</span></div>
+  </div>
+
+  <div id="cd-notices" class="section">
+    <div class="card"><div class="card-top-row"><span class="card-meta">张明远 · 2小时前</span><div class="dot"></div></div><div class="card-title">第四章作业提交截止时间延长</div></div>
+    <div class="card"><div class="card-top-row"><span class="card-meta">张明远 · 昨天</span><div class="dot"></div></div><div class="card-title">期中考试范围及复习要点</div></div>
+    <div class="card"><div class="card-top-row"><span class="card-meta">助教 · 3天前</span></div><div class="card-title">习题课时间调整通知</div></div>
+  </div>
+  <div id="cd-hw" class="section" style="display:none">
+    <div class="card"><div class="card-title">矩阵分解与 LU 分解</div><div class="dl-row"><div class="dl-bg"><div class="dl-fill" style="width:88%;background:linear-gradient(90deg,#34C759,#FF9500,#FF3B30)"></div></div><span class="dl-text" style="color:var(--red)">明天截止</span></div><div class="st-row"><span class="st pend">⚠ 未提交</span></div></div>
+    <div class="card" style="opacity:.65"><div class="card-title">向量空间与线性映射</div><div class="st-row"><span class="st sub">✓ 已提交</span><span class="st grade">A+</span></div></div>
+    <div class="card" style="opacity:.65"><div class="card-title">矩阵乘法与逆矩阵</div><div class="st-row"><span class="st sub">✓ 已提交</span><span class="st grade">A</span></div></div>
+  </div>
+  <div id="cd-files" class="section" style="display:none">
+    <div class="card"><div class="file-row"><div class="ficon pdf">PDF</div><div class="file-info"><div class="card-title" style="margin:0">第四章 特征值</div><div class="file-size">2.4 MB · 今天</div></div><div class="dot" style="width:6px;height:6px"></div></div></div>
+    <div class="card"><div class="file-row"><div class="ficon ppt">PPT</div><div class="file-info"><div class="card-title" style="margin:0">第三章 行列式</div><div class="file-size">8.1 MB · 3天前</div></div></div></div>
+    <div class="card"><div class="file-row"><div class="ficon pdf">PDF</div><div class="file-info"><div class="card-title" style="margin:0">第二章 矩阵运算</div><div class="file-size">3.7 MB · 2周前</div></div></div></div>
+  </div>
+</div>
+
+<!-- ====== Bottom Tab Bar ====== -->
+<div class="tab-bar">
+  <div class="tab-item active" onclick="switchPage('p-home',this)">
+    <span class="tab-icon">🏠</span>
+    <span class="tab-label">首页</span>
+    <div class="tab-dot"></div>
+  </div>
+  <div class="tab-item" onclick="switchPage('p-hw',this)">
+    <span class="tab-icon">📝</span>
+    <span class="tab-label">作业</span>
+    <div class="tab-dot" style="background:var(--amber)"></div>
+  </div>
+  <div class="tab-item" onclick="switchPage('p-course',this)">
+    <span class="tab-icon">📚</span>
+    <span class="tab-label">课程</span>
+  </div>
+  <div class="tab-item" onclick="switchPage('p-me',this)">
+    <span class="tab-icon">👤</span>
+    <span class="tab-label">我的</span>
+    <div class="tab-dot" style="width:5px;height:5px"></div>
+  </div>
+</div>
+
+<button class="dm-btn" onclick="document.body.classList.toggle('dark');this.textContent=document.body.classList.contains('dark')?'☀️':'🌙'">🌙</button>
+
+<script>
+function switchPage(id,el){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.querySelectorAll('.tab-item').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  closeCourseDetail();
+  window.scrollTo(0,0);
+}
+function showCourseDetail(){document.getElementById('course-detail').classList.add('show')}
+function closeCourseDetail(){document.getElementById('course-detail').classList.remove('show')}
+function switchSubTab(el,id){
+  el.parentElement.querySelectorAll('.sub-tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  ['cd-notices','cd-hw','cd-files'].forEach(s=>{document.getElementById(s).style.display=s===id?'block':'none'});
+}
+// Swipe to dismiss demo on first notice
+let startX=0;const n1=document.getElementById('notice1');
+if(n1){
+  n1.addEventListener('touchstart',e=>{startX=e.touches[0].clientX});
+  n1.addEventListener('touchmove',e=>{
+    const dx=e.touches[0].clientX-startX;
+    if(dx<0)n1.style.transform=`translateX(${Math.max(dx,-120)}px)`;
+  });
+  n1.addEventListener('touchend',e=>{
+    const dx=parseInt(n1.style.transform.replace(/[^-\d]/g,''))||0;
+    if(dx<-60){n1.style.transition='.3s';n1.style.transform='translateX(-400px)';n1.style.opacity='0';n1.style.height='0';n1.style.padding='0';n1.style.margin='0';n1.style.overflow='hidden'}
+    else{n1.style.transition='.2s';n1.style.transform=''}
+  });
+}
+</script>
+
+</body>
+</html>

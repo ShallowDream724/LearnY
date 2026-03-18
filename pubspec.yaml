@@ -1,0 +1,98 @@
+name: learn_y
+description: "LearnY - A premium client for Tsinghua University Web Learning"
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.11.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Icons
+  cupertino_icons: ^1.0.8
+  material_symbols_icons: ^4.2801.0
+
+  # Networking
+  dio: ^5.7.0
+  cookie_jar: ^4.0.8
+  dio_cookie_manager: ^3.1.1
+
+  # HTML parsing (for learn API)
+  html: ^0.15.5
+
+  # State management
+  flutter_riverpod: ^2.6.1
+  riverpod_annotation: ^2.6.1
+
+  # Code generation models
+  freezed_annotation: ^2.4.4
+  json_annotation: ^4.9.0
+
+  # Local database
+  drift: ^2.22.1
+  sqlite3_flutter_libs: ^0.5.28
+
+  # Routing
+  go_router: ^14.8.1
+
+  # Secure storage (credentials)
+  flutter_secure_storage: ^9.2.4
+
+  # File / path utilities
+  path_provider: ^2.1.5
+  path: ^1.9.1
+  open_file: ^3.5.10
+  share_plus: ^10.1.4
+
+  # Date & time
+  intl: ^0.20.2
+
+  # WebView (SSO login)
+  webview_flutter: ^4.10.0
+
+  # Misc
+  url_launcher: ^6.3.1
+  connectivity_plus: ^6.1.2
+  package_info_plus: ^8.1.3
+  cached_network_image: ^3.4.1
+  shimmer: ^3.0.0
+  flutter_animate: ^4.5.2
+  google_fonts: ^6.2.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+  # Code generation
+  build_runner: ^2.4.14
+  freezed: ^2.5.7
+  json_serializable: ^6.9.4
+  riverpod_generator: ^2.6.3
+  drift_dev: ^2.22.1
+
+  # Testing
+  mockito: ^5.4.4
+  build_runner_core: ^8.0.0
+
+flutter:
+  uses-material-design: true
+
+  # Assets directory (will be populated later)
+  # assets:
+  #   - assets/icons/
+  #   - assets/images/
+
+  # Custom fonts will be configured when design system is built
+  # fonts:
+  #   - family: Inter
+  #     fonts:
+  #       - asset: assets/fonts/Inter-Regular.ttf
+  #       - asset: assets/fonts/Inter-Medium.ttf
+  #         weight: 500
+  #       - asset: assets/fonts/Inter-SemiBold.ttf
+  #         weight: 600
+  #       - asset: assets/fonts/Inter-Bold.ttf
+  #         weight: 700
