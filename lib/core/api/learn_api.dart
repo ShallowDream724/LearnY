@@ -76,6 +76,14 @@ class Learn2018Helper {
   String _csrfToken = '';
   Language _lang = Language.zh;
 
+  /// Expose Dio instance for the login screen's cookie bridge.
+  /// The login intercepts the SSO ticket and needs Dio to consume it
+  /// so that session cookies are captured by Dio's CookieManager.
+  Dio get dio => _dio;
+
+  /// Expose CookieJar for manual cookie injection (fallback path).
+  CookieJar get cookieJar => _cookieJar;
+
   // -------------------------------------------------------------------
   // Constructor
   // -------------------------------------------------------------------

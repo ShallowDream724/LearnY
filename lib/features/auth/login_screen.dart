@@ -1,13 +1,41 @@
-/// WebView-based SSO login screen.
+/// WebView-based SSO login screen — with proper Dio session handoff.
 ///
-/// Flow:
-/// 1. Show branded splash with login button
-/// 2. User taps → opens WebView to id.tsinghua.edu.cn
-/// 3. WebView follows redirects until learn.tsinghua.edu.cn is reached
-/// 4. Extract cookies + CSRF token from the loaded page
-/// 5. Pass credentials to API client and navigate to home
+/// ## How it works
 ///
-/// This bypasses the SM2 encryption entirely — the WebView handles it natively.
+/// The original JS library does:
+/// 1. POST login form with SM2-encrypted password to id.tsinghua.edu.cn
+/// 2. Extract a `ticket` (like `ST-XXXXX`) from the response page
+/// 3. Use the ticket to call `learn.tsinghua.edu.cn/b/j_spring_security_thauth_roaming_entry?ticket=XXX`
+/// 4. This sets session cookies and authenticates the user
+/// 5. Then fetch the course list page to extract the CSRF token
+///
+/// In our WebView approach:
+/// 1. Load the id.tsinghua.edu.cn login page in a WebView
+/// 2. The WebView handles SM2 encryption natively (the page's own JS does it)
+/// 3. After successful login, the page produces a redirect containing the ticket
+/// 4. We monitor WebView navigation for URLs matching the ticket pattern
+/// 5. When we detect the ticket redirect, we:
+///    a. Block the WebView from consuming it
+///    b. Extract the ticket string
+///    c. Use Dio to call learnAuthRoam(ticket) — Dio gets the session cookies
+///    d. Use Dio to fetch the course list page for the CSRF token
+/// 6. Now Dio is fully authenticated and the API client works
+///
+/// ## Why not just extract cookies from the WebView?
+///
+/// Session cookies are typically HttpOnly, so `document.cookie` in JS
+/// won't return them. Platform-specific cookie extraction is fragile.
+/// The ticket interception approach is clean and reliable.
+///
+/// ## Fallback
+///
+/// If ticket interception fails (URL pattern changed), we fall back to
+/// extracting cookies via the WebView's cookie manager and injecting
+/// them into Dio's CookieJar.
+import 'dart:io';
+
+import 'package:cookie_jar/cookie_jar.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,6 +45,7 @@ import '../../core/design/colors.dart';
 import '../../core/design/typography.dart';
 import '../../core/providers/providers.dart';
 import '../../core/api/urls.dart' as urls;
+import '../../core/api/learn_api.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -25,16 +54,20 @@ class LoginScreen extends ConsumerStatefulWidget {
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends ConsumerState<LoginScreen>
-    with SingleTickerProviderStateMixin {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _showWebView = false;
   bool _isLoading = false;
+  bool _isProcessingTicket = false;
   String? _errorMessage;
-  late final WebViewController _webViewController;
+  late WebViewController _webViewController;
 
   @override
   void initState() {
     super.initState();
+    _initWebView();
+  }
+
+  void _initWebView() {
     _webViewController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(NavigationDelegate(
@@ -44,93 +77,310 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       ));
   }
 
+  // ─────────────────────────────────────────────
+  //  Core login flow
+  // ─────────────────────────────────────────────
+
   void _startLogin() {
     setState(() {
       _showWebView = true;
       _isLoading = true;
+      _isProcessingTicket = false;
       _errorMessage = null;
     });
+    // Load the id.tsinghua login page.
+    // The form's `action` handles SM2 encryption via its own JS.
     _webViewController.loadRequest(Uri.parse(urls.idLogin()));
   }
 
   void _onPageStarted(String url) {
-    if (mounted) setState(() => _isLoading = true);
-  }
-
-  Future<void> _onPageFinished(String url) async {
-    if (!mounted) return;
-    setState(() => _isLoading = false);
-
-    // Check if we've been redirected to the learn platform
-    if (url.startsWith(urls.learnPrefix)) {
-      await _extractCredentials();
+    if (mounted && !_isProcessingTicket) {
+      setState(() => _isLoading = true);
     }
   }
 
+  Future<void> _onPageFinished(String url) async {
+    if (!mounted || _isProcessingTicket) return;
+    setState(() => _isLoading = false);
+
+    // Fallback detection: if the WebView somehow ends up at learn.tsinghua
+    // (meaning the ticket was consumed by the WebView before we could
+    // intercept it), try the cookie-extraction fallback.
+    if (url.startsWith(urls.learnPrefix) &&
+        !url.contains('j_spring_security_thauth_roaming_entry') &&
+        !_isProcessingTicket) {
+      await _fallbackCookieExtraction();
+    }
+  }
+
+  /// This is the critical method: we watch every WebView navigation.
+  /// When we see the ticket URL (learn auth roaming), we intercept it.
   NavigationDecision _onNavigationRequest(NavigationRequest request) {
-    // Allow all navigation during the SSO flow
+    final targetUrl = request.url;
+
+    // Pattern: learn.tsinghua.edu.cn/b/j_spring_security_thauth_roaming_entry?ticket=XXX
+    if (targetUrl.contains('j_spring_security_thauth_roaming_entry') &&
+        targetUrl.contains('ticket=')) {
+      // Extract ticket from URL
+      final uri = Uri.parse(targetUrl);
+      final ticket = uri.queryParameters['ticket'];
+
+      if (ticket != null && ticket.isNotEmpty) {
+        // Block the WebView — we'll use Dio to consume this ticket
+        _consumeTicketWithDio(ticket);
+        return NavigationDecision.prevent;
+      }
+    }
+
+    // Also check: sometimes the redirect goes through id.tsinghua first
+    // with a URL like id.tsinghua.edu.cn/.../callback?ticket=ST-XXXX
+    // and then redirects to learn. Catch this pattern too.
+    if (targetUrl.contains('id.tsinghua.edu.cn') &&
+        targetUrl.contains('ticket=') &&
+        !targetUrl.contains('login/form')) {
+      // This might be the intermediate redirect.
+      // Let the WebView follow it — it will eventually redirect to learn,
+      // which we'll catch above.
+    }
+
+    // Allow all other navigation during the SSO flow
     return NavigationDecision.navigate;
   }
 
-  Future<void> _extractCredentials() async {
+  // ─────────────────────────────────────────────
+  //  Primary path: ticket interception
+  // ─────────────────────────────────────────────
+
+  /// We have the ticket. Now use Dio to:
+  /// 1. Call learnAuthRoam(ticket) → Dio gets session cookies
+  /// 2. Fetch the course list page → extract CSRF token
+  /// 3. Extract username from the page
+  Future<void> _consumeTicketWithDio(String ticket) async {
+    if (_isProcessingTicket) return;
+    _isProcessingTicket = true;
+
+    setState(() => _isLoading = true);
+
     try {
-      setState(() => _isLoading = true);
+      final api = ref.read(apiClientProvider);
 
-      // Navigate to the student course list to get CSRF token
-      await _webViewController
-          .loadRequest(Uri.parse(urls.learnStudentCourseListPage()));
+      // Step 1: Roam to learn.tsinghua.edu.cn with the ticket.
+      // Dio's CookieManager will capture the session cookies.
+      // The server may return a redirect (302), which Dio's interceptor follows.
+      final dioInstance = _getDioFromHelper(api);
 
-      // Wait briefly for the page to load
-      await Future.delayed(const Duration(seconds: 2));
+      final roamResp = await dioInstance.get(
+        urls.learnAuthRoam(ticket),
+        options: Options(
+          followRedirects: true,
+          validateStatus: (s) => s != null && s < 400,
+        ),
+      );
 
-      // Extract page source to get CSRF token
-      final pageSource = await _webViewController
-          .runJavaScriptReturningResult('document.documentElement.outerHTML')
-          as String;
-
-      // Extract CSRF token
-      final tokenRegex = RegExp(r'&_csrf=(\S*)"');
-      final tokenMatch = tokenRegex.firstMatch(pageSource);
-
-      if (tokenMatch == null) {
-        setState(() {
-          _errorMessage = '无法获取认证令牌，请重试';
-          _showWebView = false;
-          _isLoading = false;
-        });
-        return;
+      if (roamResp.statusCode != 200) {
+        throw Exception('Roaming failed with status ${roamResp.statusCode}');
       }
 
-      final csrfToken = tokenMatch.group(1)!;
+      // Step 2: Fetch the student course list page to get CSRF token.
+      final courseListResp = await dioInstance.get(
+        urls.learnStudentCourseListPage(),
+      );
+      final pageSource = courseListResp.data.toString();
 
-      // Extract username from the page
-      final nameRegex = RegExp(r'class="user-log"[^>]*>([^<]+)<');
+      // Step 3: Extract CSRF token.
+      final tokenRegex = RegExp(r'&_csrf=(\S*)"', multiLine: true);
+      final tokenMatches = tokenRegex.allMatches(pageSource).toList();
+
+      if (tokenMatches.isEmpty) {
+        throw Exception('Could not extract CSRF token from page source');
+      }
+
+      final csrfToken = tokenMatches[0].group(1)!;
+      api.setCSRFToken(csrfToken);
+
+      // Step 4: Extract username from the page.
+      final nameRegex =
+          RegExp(r'class="user-log"[^>]*>([^<]+)<', multiLine: true);
       final nameMatch = nameRegex.firstMatch(pageSource);
       final username = nameMatch?.group(1)?.trim() ?? '';
 
-      // Set CSRF token on the API client
-      final api = ref.read(apiClientProvider);
-      api.setCSRFToken(csrfToken);
+      // Step 5: Extract language preference.
+      final langRegex = RegExp(
+          r'<script src="/f/wlxt/common/languagejs\?lang=(zh|en)"></script>');
+      final langMatch = langRegex.firstMatch(pageSource);
+      if (langMatch != null) {
+        // Store language preference for later use
+        final db = ref.read(databaseProvider);
+        await db.setState('language', langMatch.group(1)!);
+      }
 
-      // Mark as logged in
+      // Step 6: Mark login as successful.
       await ref.read(authProvider.notifier).onLoginSuccess(username);
 
       if (mounted) {
         setState(() {
           _showWebView = false;
           _isLoading = false;
+          _isProcessingTicket = false;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = '登录过程出错: ${e.toString().substring(0, 50)}';
+          _errorMessage = '登录认证失败: ${_truncateError(e.toString())}';
           _showWebView = false;
           _isLoading = false;
+          _isProcessingTicket = false;
         });
       }
     }
   }
+
+  // ─────────────────────────────────────────────
+  //  Fallback: cookie extraction from WebView
+  // ─────────────────────────────────────────────
+
+  /// If the ticket interception didn't work (WebView consumed the ticket
+  /// before we could intercept it), try extracting what we need from the
+  /// WebView itself. This is less reliable but serves as a safety net.
+  Future<void> _fallbackCookieExtraction() async {
+    if (_isProcessingTicket) return;
+    _isProcessingTicket = true;
+    setState(() => _isLoading = true);
+
+    try {
+      // Wait for the page to fully render
+      await Future.delayed(const Duration(seconds: 2));
+
+      // Try to navigate to the course list page in the WebView
+      await _webViewController
+          .loadRequest(Uri.parse(urls.learnStudentCourseListPage()));
+      await Future.delayed(const Duration(seconds: 3));
+
+      // Extract CSRF token via JavaScript
+      final rawHtml = await _webViewController
+          .runJavaScriptReturningResult('document.documentElement.outerHTML');
+
+      // The returned value might be JSON-encoded string (with surrounding quotes)
+      String pageSource = rawHtml.toString();
+      if (pageSource.startsWith('"') && pageSource.endsWith('"')) {
+        pageSource = pageSource.substring(1, pageSource.length - 1);
+        // Unescape JSON string escapes
+        pageSource = pageSource
+            .replaceAll(r'\n', '\n')
+            .replaceAll(r'\"', '"')
+            .replaceAll(r'\\', r'\')
+            .replaceAll(r'\/', '/');
+      }
+
+      // Extract CSRF token
+      final tokenRegex = RegExp(r'&_csrf=(\S*)"');
+      final tokenMatch = tokenRegex.firstMatch(pageSource);
+
+      if (tokenMatch == null) {
+        throw Exception('Fallback: could not find CSRF token in page');
+      }
+
+      final csrfToken = tokenMatch.group(1)!;
+      final api = ref.read(apiClientProvider);
+      api.setCSRFToken(csrfToken);
+
+      // Extract username
+      final nameRegex = RegExp(r'class="user-log"[^>]*>([^<]+)<');
+      final nameMatch = nameRegex.firstMatch(pageSource);
+      final username = nameMatch?.group(1)?.trim() ?? '';
+
+      // Now: the WebView has the session, but Dio doesn't.
+      // Extract cookies from the WebView and inject into Dio's CookieJar.
+      await _transferWebViewCookiesToDio(api);
+
+      await ref.read(authProvider.notifier).onLoginSuccess(username);
+
+      if (mounted) {
+        setState(() {
+          _showWebView = false;
+          _isLoading = false;
+          _isProcessingTicket = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = '认证回退失败: ${_truncateError(e.toString())}';
+          _showWebView = false;
+          _isLoading = false;
+          _isProcessingTicket = false;
+        });
+      }
+    }
+  }
+
+  /// Extract all cookies from WebView via JS and inject into Dio's CookieJar.
+  /// Note: HttpOnly cookies won't be accessible via `document.cookie`.
+  /// This is a best-effort fallback.
+  Future<void> _transferWebViewCookiesToDio(Learn2018Helper api) async {
+    try {
+      // Get JavaScript-accessible cookies (non-HttpOnly only)
+      final cookieStr = await _webViewController
+          .runJavaScriptReturningResult('document.cookie');
+
+      String cookieString = cookieStr.toString();
+      if (cookieString.startsWith('"') && cookieString.endsWith('"')) {
+        cookieString = cookieString.substring(1, cookieString.length - 1);
+      }
+
+      if (cookieString.isEmpty) return;
+
+      // Parse cookie string: "key1=val1; key2=val2; ..."
+      final cookies = cookieString.split(';').map((pair) {
+        final parts = pair.trim().split('=');
+        if (parts.length >= 2) {
+          return Cookie(parts[0].trim(), parts.sublist(1).join('=').trim());
+        }
+        return null;
+      }).whereType<Cookie>();
+
+      // Inject into Dio's CookieJar
+      final cookieJar = _getCookieJarFromHelper(api);
+      if (cookieJar != null) {
+        final learnUri = Uri.parse(urls.learnPrefix);
+        final idUri = Uri.parse(urls.idPrefix);
+
+        for (final cookie in cookies) {
+          await cookieJar.saveFromResponse(learnUri, [cookie]);
+          await cookieJar.saveFromResponse(idUri, [cookie]);
+        }
+      }
+    } catch (_) {
+      // Best-effort: if this fails, the CSRF token approach might still work
+      // for some endpoints, or the user will need to re-login.
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  //  Helpers: access private Dio instance
+  // ─────────────────────────────────────────────
+
+  /// Access the Dio instance from Learn2018Helper.
+  /// This is needed because the helper's Dio has cookie management set up.
+  ///
+  /// NOTE: We expose Dio via a getter on Learn2018Helper (added below).
+  Dio _getDioFromHelper(Learn2018Helper helper) {
+    return helper.dio;
+  }
+
+  CookieJar? _getCookieJarFromHelper(Learn2018Helper helper) {
+    return helper.cookieJar;
+  }
+
+  String _truncateError(String error) {
+    if (error.length > 80) return '${error.substring(0, 77)}...';
+    return error;
+  }
+
+  // ─────────────────────────────────────────────
+  //  Build
+  // ─────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -190,9 +440,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                   color: subtitleColor,
                   letterSpacing: 2,
                 ),
-              )
-                  .animate(delay: 400.ms)
-                  .fadeIn(duration: 500.ms),
+              ).animate(delay: 400.ms).fadeIn(duration: 500.ms),
 
               const Spacer(flex: 2),
 
@@ -284,13 +532,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       width: 88,
       height: 88,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
+        gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            AppColors.primary,
-            AppColors.primaryDark,
-          ],
+          colors: [AppColors.primary, AppColors.primaryDark],
         ),
         borderRadius: BorderRadius.circular(22),
         boxShadow: [
@@ -302,11 +547,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         ],
       ),
       child: const Center(
-        child: Icon(
-          Icons.school_rounded,
-          size: 42,
-          color: Colors.white,
-        ),
+        child: Icon(Icons.school_rounded, size: 42, color: Colors.white),
       ),
     );
   }
@@ -324,10 +565,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             setState(() {
               _showWebView = false;
               _isLoading = false;
+              _isProcessingTicket = false;
             });
           },
         ),
-        title: const Text('清华大学统一身份认证'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('统一身份认证'),
+            if (_isProcessingTicket)
+              Text(
+                '正在验证登录信息...',
+                style: AppTypography.bodySmall.copyWith(
+                  color: AppColors.primary,
+                ),
+              ),
+          ],
+        ),
         bottom: _isLoading
             ? const PreferredSize(
                 preferredSize: Size.fromHeight(2),
@@ -338,7 +592,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               )
             : null,
       ),
-      body: WebViewWidget(controller: _webViewController),
+      body: _isProcessingTicket
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(color: AppColors.primary),
+                  const SizedBox(height: 20),
+                  Text(
+                    '正在建立安全会话...',
+                    style: AppTypography.bodyMedium.copyWith(
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? AppColors.darkTextSecondary
+                          : AppColors.lightTextSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : WebViewWidget(controller: _webViewController),
     );
   }
 }

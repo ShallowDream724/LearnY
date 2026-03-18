@@ -5,12 +5,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/design/colors.dart';
 import '../../core/design/typography.dart';
 import '../../core/design/responsive.dart';
 import '../../core/providers/providers.dart';
 import '../../core/database/database.dart';
+import '../../core/router/router.dart';
 
 // ---------------------------------------------------------------------------
 //  Course stats
@@ -199,7 +201,7 @@ class _CourseCard extends StatelessWidget {
 
     return GestureDetector(
       onTap: () {
-        // TODO: navigate to course detail
+        context.go(Routes.courseDetail(stats.course.id));
       },
       child: Container(
         padding: const EdgeInsets.all(14),

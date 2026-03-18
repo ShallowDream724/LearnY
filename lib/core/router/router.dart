@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/home/home_screen.dart';
 import '../../features/assignments/assignments_screen.dart';
 import '../../features/courses/courses_screen.dart';
+import '../../features/courses/course_detail_screen.dart';
 import '../../features/profile/profile_screen.dart';
 import '../../features/auth/login_screen.dart';
 import '../shell/app_shell.dart';
@@ -20,7 +21,7 @@ abstract final class Routes {
   static const String profile = '/profile';
 
   // Detail routes
-  static const String courseDetail = '/courses/:courseId';
+  static String courseDetail(String courseId) => '/courses/$courseId';
   static const String assignmentDetail = '/assignments/:assignmentId';
   static const String notificationDetail = '/notifications/:notificationId';
 }
@@ -72,6 +73,15 @@ GoRouter buildRouter({required bool isLoggedIn}) {
             pageBuilder: (context, state) => const NoTransitionPage(
               child: CoursesScreen(),
             ),
+            routes: [
+              // Course detail — nested under /courses/:courseId
+              GoRoute(
+                path: ':courseId',
+                builder: (context, state) => CourseDetailScreen(
+                  courseId: state.pathParameters['courseId']!,
+                ),
+              ),
+            ],
           ),
           GoRoute(
             path: Routes.profile,
