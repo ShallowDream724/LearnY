@@ -5,14 +5,16 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../design/colors.dart';
 import '../design/typography.dart';
 import '../design/responsive.dart';
+import '../providers/connectivity_provider.dart';
 import '../router/router.dart';
 
-class AppShell extends StatelessWidget {
+class AppShell extends ConsumerWidget {
   final Widget child;
 
   const AppShell({super.key, required this.child});
@@ -39,21 +41,39 @@ class AppShell extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final index = _currentIndex(context);
     final useRail = shouldShowRail(context);
+    final connectivity = ref.watch(connectivityProvider);
+    final isOffline = connectivity.status == NetworkStatus.offline;
+
+    // Wrap child with offline banner
+    final content = Column(
+      children: [
+        // Offline banner
+        AnimatedSize(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+          child: isOffline
+              ? _OfflineBanner()
+              : const SizedBox.shrink(),
+        ),
+        // Content
+        Expanded(child: child),
+      ],
+    );
 
     if (useRail) {
-      return _buildRailLayout(context, index);
+      return _buildRailLayout(context, index, content);
     }
-    return _buildBottomNavLayout(context, index);
+    return _buildBottomNavLayout(context, index, content);
   }
 
   // ─────────────────────────────────────────────
   //  Tablet: NavigationRail
   // ─────────────────────────────────────────────
 
-  Widget _buildRailLayout(BuildContext context, int index) {
+  Widget _buildRailLayout(BuildContext context, int index, Widget content) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
     final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
@@ -153,7 +173,7 @@ class AppShell extends StatelessWidget {
           ),
 
           // Content area
-          Expanded(child: child),
+          Expanded(child: content),
         ],
       ),
     );
@@ -163,12 +183,12 @@ class AppShell extends StatelessWidget {
   //  Phone: bottom NavigationBar
   // ─────────────────────────────────────────────
 
-  Widget _buildBottomNavLayout(BuildContext context, int index) {
+  Widget _buildBottomNavLayout(BuildContext context, int index, Widget content) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final borderColor = isDark ? AppColors.darkBorder : AppColors.lightBorder;
 
     return Scaffold(
-      body: child,
+      body: content,
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           border: Border(
@@ -200,6 +220,38 @@ class AppShell extends StatelessWidget {
               icon: Icon(Icons.person_outlined),
               selectedIcon: Icon(Icons.person_rounded),
               label: '我的',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Subtle offline indicator banner.
+class _OfflineBanner extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      color: AppColors.warning.withAlpha(isDark ? 40 : 25),
+      child: SafeArea(
+        bottom: false,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.wifi_off_rounded,
+                size: 14, color: AppColors.warning),
+            const SizedBox(width: 6),
+            Text(
+              '网络不可用，显示的是缓存数据',
+              style: AppTypography.bodySmall.copyWith(
+                color: AppColors.warning,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ],
         ),

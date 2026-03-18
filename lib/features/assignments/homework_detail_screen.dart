@@ -490,6 +490,12 @@ class _DeadlineCard extends StatelessWidget {
 // ─────────────────────────────────────────────
 
 /// Grade display with circular progress ring and feedback.
+///
+/// Scoring logic:
+/// - Tsinghua's `cj` (成绩) field is typically 百分制 (0-100).
+/// - When `grade` is 0-100, we show a circular ring with percentage fill.
+/// - When `grade` > 100 (rare: custom scales), we show the number without ring.
+/// - When only `gradeLevel` exists (no numeric grade), we show the level text.
 class _GradeSection extends StatelessWidget {
   final db.Homework homework;
   final bool isDark;
@@ -533,52 +539,54 @@ class _GradeSection extends StatelessWidget {
 
           const SizedBox(height: 16),
 
-          // Grade ring + info
+          // Grade display + info
           Row(
             children: [
-              // Circular grade indicator
+              // Score circle — shows the number or level, NO ring/progress
+              // because we don't know the max score (could be 5, 10, 100, etc.)
               if (grade != null)
-                SizedBox(
-                  width: 72,
-                  height: 72,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      SizedBox(
-                        width: 72,
-                        height: 72,
-                        child: CircularProgressIndicator(
-                          value: (grade / 100).clamp(0.0, 1.0),
-                          strokeWidth: 5,
-                          backgroundColor: gradeColor.withAlpha(20),
-                          color: gradeColor,
-                          strokeCap: StrokeCap.round,
-                        ),
-                      ),
-                      Text(
-                        grade.toStringAsFixed(
-                            grade == grade.roundToDouble() ? 0 : 1),
-                        style: AppTypography.statMedium.copyWith(
-                          color: gradeColor,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              else
                 Container(
                   width: 72,
                   height: 72,
                   decoration: BoxDecoration(
-                    color: gradeColor.withAlpha(12),
+                    color: gradeColor.withAlpha(15),
                     shape: BoxShape.circle,
+                    border: Border.all(
+                      color: gradeColor.withAlpha(50),
+                      width: 2,
+                    ),
                   ),
                   child: Center(
                     child: Text(
-                      homework.gradeLevel ?? '—',
+                      grade.toStringAsFixed(
+                          grade == grade.roundToDouble() ? 0 : 1),
+                      style: AppTypography.statMedium.copyWith(
+                        color: gradeColor,
+                        fontWeight: FontWeight.w800,
+                        fontSize: grade >= 100 ? 18 : 22,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                // Level-only grading (no numeric score)
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: gradeColor.withAlpha(15),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: gradeColor.withAlpha(50),
+                      width: 2,
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(
+                      _gradeLevelDisplay(homework.gradeLevel),
                       style: AppTypography.titleMedium
                           .copyWith(color: gradeColor),
+                      textAlign: TextAlign.center,
                     ),
                   ),
                 ),
@@ -604,12 +612,22 @@ class _GradeSection extends StatelessWidget {
                         style: AppTypography.bodySmall
                             .copyWith(color: tertiaryColor),
                       ),
-                    if (homework.gradeLevel != null && grade != null) ...[
+                    if (homework.gradeLevel != null) ...[
                       const SizedBox(height: 4),
-                      Text(
-                        '等级: ${homework.gradeLevel}',
-                        style: AppTypography.bodySmall
-                            .copyWith(color: tertiaryColor),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: gradeColor.withAlpha(15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          _gradeLevelDisplay(homework.gradeLevel),
+                          style: AppTypography.labelSmall.copyWith(
+                            color: gradeColor,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                     ],
                   ],
@@ -640,6 +658,21 @@ class _GradeSection extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// Convert grade level enum string to user-friendly Chinese display.
+  String _gradeLevelDisplay(String? level) {
+    if (level == null) return '—';
+    return switch (level) {
+      'checked' => '已阅',
+      'distinction' => '优秀',
+      'pass' => '通过',
+      'failure' => '不及格',
+      'exempted course' => '免课',
+      'exemption' => '免修',
+      'incomplete' => '缓考',
+      _ => level.toUpperCase(), // A+, B, C- etc.
+    };
   }
 
   Color _gradeColor(double? grade) {

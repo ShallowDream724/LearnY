@@ -17,6 +17,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/design/colors.dart';
 import '../../core/design/responsive.dart';
+import '../../core/design/shimmer.dart';
 import '../../core/design/typography.dart';
 import '../../core/providers/providers.dart';
 import '../../core/database/database.dart';
@@ -244,7 +245,7 @@ class _NotificationsTab extends ConsumerWidget {
     final notifAsync = ref.watch(_courseNotificationsProvider(courseId));
 
     return notifAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const ListSkeleton(),
       error: (e, _) => Center(child: Text('$e')),
       data: (notifications) {
         if (notifications.isEmpty) {
@@ -402,7 +403,7 @@ class _FilesTab extends ConsumerWidget {
     final filesAsync = ref.watch(_courseFilesProvider(courseId));
 
     return filesAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const ListSkeleton(),
       error: (e, _) => Center(child: Text('$e')),
       data: (files) {
         if (files.isEmpty) {
@@ -585,7 +586,7 @@ class _HomeworksTab extends ConsumerWidget {
     final hwAsync = ref.watch(_courseHomeworksProvider(courseId));
 
     return hwAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const ListSkeleton(),
       error: (e, _) => Center(child: Text('$e')),
       data: (homeworks) {
         if (homeworks.isEmpty) {
