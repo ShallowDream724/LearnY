@@ -135,7 +135,7 @@ class ProfileScreen extends ConsumerWidget {
                           'light' => 'dark',
                           _ => 'system',
                         };
-                        ref.read(themeModeProvider.notifier).state = next;
+                        ref.read(themeModeProvider.notifier).setTheme(next);
                       },
                     ),
                   ],

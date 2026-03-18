@@ -7,6 +7,8 @@
 /// - Attachment card with file type icon, size, and download button
 /// - Bottom action bar: favorite, share
 /// - Responsive: constrained width on tablets for readability
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -96,6 +98,38 @@ class _NotificationDetailScreenState
         );
       }
     }
+  }
+
+  /// Parse attachment JSON to extract the filename for display.
+  String _attachmentName(String? json) {
+    if (json == null || json.isEmpty) return '查看附件';
+    try {
+      final data = jsonDecode(json);
+      if (data is Map) {
+        return (data['name'] ?? data['fileName'] ?? '查看附件').toString();
+      }
+    } catch (_) {}
+    return '查看附件';
+  }
+
+  /// Handle attachment tap.
+  void _onAttachmentTap(db.Notification n) {
+    if (n.attachmentJson == null || n.attachmentJson!.isEmpty) return;
+
+    String? name;
+    try {
+      final data = jsonDecode(n.attachmentJson!);
+      if (data is Map) {
+        name = (data['name'] ?? data['fileName'])?.toString();
+      }
+    } catch (_) {}
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(name != null ? '附件: $name' : '附件下载功能开发中'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
@@ -291,10 +325,15 @@ class _NotificationDetailScreenState
                             style: AppTypography.labelMedium
                                 .copyWith(color: subColor)),
                         const SizedBox(height: 8),
-                        Container(
+                        Material(
+                          color: surface,
+                          borderRadius: BorderRadius.circular(12),
+                          child: InkWell(
+                            onTap: () => _onAttachmentTap(n),
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: surface,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(color: border, width: 0.5),
                           ),
@@ -315,15 +354,18 @@ class _NotificationDetailScreenState
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  '查看附件',
+                                  _attachmentName(n.attachmentJson),
                                   style: AppTypography.titleSmall
                                       .copyWith(color: textColor),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                               Icon(Icons.download_rounded,
                                   size: 20, color: subColor),
                             ],
                           ),
+                        )),
                         )
                             .animate(delay: 300.ms)
                             .fadeIn(duration: 250.ms),

@@ -6,11 +6,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/design/colors.dart';
+import '../../core/design/shimmer.dart';
 import '../../core/design/typography.dart';
 import '../../core/providers/providers.dart';
 import '../../core/database/database.dart';
+import '../../core/router/router.dart';
 
 // ---------------------------------------------------------------------------
 //  Filter enum
@@ -88,10 +91,31 @@ class AssignmentsScreen extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
             sliver: homeworkAsync.when(
               loading: () => const SliverFillRemaining(
-                child: Center(child: CircularProgressIndicator()),
+                child: ListSkeleton(),
               ),
               error: (e, _) => SliverFillRemaining(
-                child: Center(child: Text('加载失败: $e')),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.error_outline_rounded,
+                          size: 48,
+                          color: isDark
+                              ? AppColors.darkTextSecondary
+                              : AppColors.lightTextSecondary),
+                      const SizedBox(height: 12),
+                      Text('加载失败',
+                          style: AppTypography.titleMedium.copyWith(
+                              color: textColor)),
+                      const SizedBox(height: 8),
+                      Text('请下拉刷新重试',
+                          style: AppTypography.bodySmall.copyWith(
+                              color: isDark
+                                  ? AppColors.darkTextTertiary
+                                  : AppColors.lightTextTertiary)),
+                    ],
+                  ),
+                ),
               ),
               data: (allHomeworks) {
                 final courseNames =
@@ -167,6 +191,13 @@ class AssignmentsScreen extends ConsumerWidget {
                             hw: hw,
                             courseName: courseName,
                             isDark: isDark,
+                            onTap: () => context.push(
+                              Routes.homeworkDetail(
+                                homeworkId: hw.id,
+                                courseId: hw.courseId,
+                                courseName: courseName,
+                              ),
+                            ),
                           )
                               .animate(delay: (50 * e.key).ms)
                               .fadeIn(duration: 250.ms)
@@ -364,11 +395,13 @@ class _HomeworkCard extends StatelessWidget {
   final Homework hw;
   final String courseName;
   final bool isDark;
+  final VoidCallback? onTap;
 
   const _HomeworkCard({
     required this.hw,
     required this.courseName,
     required this.isDark,
+    this.onTap,
   });
 
   @override
@@ -385,10 +418,15 @@ class _HomeworkCard extends StatelessWidget {
     final statusColor = _statusColor();
     final statusText = _statusText();
 
-    return Container(
+    return Material(
+      color: surface,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: border, width: 0.5),
       ),
@@ -474,6 +512,7 @@ class _HomeworkCard extends StatelessWidget {
           ),
         ],
       ),
+    )),
     );
   }
 
@@ -508,11 +547,9 @@ class _HomeworkCard extends StatelessWidget {
   }
 
   Color _gradeColor() {
+    // We DON'T know the max score, so we can't assume 百分制.
+    // Use a neutral positive color for any numeric grade.
     if (hw.grade == null) return AppColors.success;
-    if (hw.grade! >= 90) return AppColors.gradeExcellent;
-    if (hw.grade! >= 80) return AppColors.gradeGood;
-    if (hw.grade! >= 70) return AppColors.gradeAverage;
-    if (hw.grade! >= 60) return AppColors.gradePoor;
-    return AppColors.gradeFail;
+    return AppColors.primary;
   }
 }

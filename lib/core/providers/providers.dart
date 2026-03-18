@@ -140,8 +140,32 @@ final apiClientProvider = Provider<Learn2018Helper>((ref) {
 final currentSemesterIdProvider = StateProvider<String?>((ref) => null);
 
 // ---------------------------------------------------------------------------
-// Theme Mode
+// Theme Mode (persisted)
 // ---------------------------------------------------------------------------
 
 /// User's theme preference: system, light, or dark.
-final themeModeProvider = StateProvider<String>((ref) => 'system');
+/// Persisted in DB so it survives app restarts.
+class ThemeModeNotifier extends StateNotifier<String> {
+  final AppDatabase _db;
+
+  ThemeModeNotifier(this._db) : super('system') {
+    _load();
+  }
+
+  Future<void> _load() async {
+    final saved = await _db.getState('theme_mode');
+    if (saved != null && (saved == 'light' || saved == 'dark' || saved == 'system')) {
+      state = saved;
+    }
+  }
+
+  Future<void> setTheme(String mode) async {
+    state = mode;
+    await _db.setState('theme_mode', mode);
+  }
+}
+
+final themeModeProvider =
+    StateNotifierProvider<ThemeModeNotifier, String>((ref) {
+  return ThemeModeNotifier(ref.watch(databaseProvider));
+});

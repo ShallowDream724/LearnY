@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/design/colors.dart';
+import '../../core/design/shimmer.dart';
 import '../../core/design/typography.dart';
 import '../../core/design/responsive.dart';
 import '../../core/providers/providers.dart';
@@ -95,10 +96,31 @@ class CoursesScreen extends ConsumerWidget {
           // ── Content ──
           statsAsync.when(
             loading: () => const SliverFillRemaining(
-              child: Center(child: CircularProgressIndicator()),
+              child: ListSkeleton(),
             ),
             error: (e, _) => SliverFillRemaining(
-              child: Center(child: Text('加载失败: $e')),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.error_outline_rounded,
+                        size: 48,
+                        color: isDark
+                            ? AppColors.darkTextSecondary
+                            : AppColors.lightTextSecondary),
+                    const SizedBox(height: 12),
+                    Text('加载失败',
+                        style: AppTypography.titleMedium
+                            .copyWith(color: textColor)),
+                    const SizedBox(height: 8),
+                    Text('请下拉刷新重试',
+                        style: AppTypography.bodySmall.copyWith(
+                            color: isDark
+                                ? AppColors.darkTextTertiary
+                                : AppColors.lightTextTertiary)),
+                  ],
+                ),
+              ),
             ),
             data: (stats) {
               if (stats.isEmpty) {
@@ -199,14 +221,17 @@ class _CourseCard extends StatelessWidget {
     final course = stats.course;
     final hasBadge = stats.unreadNotifications > 0 || stats.pendingHomeworks > 0;
 
-    return GestureDetector(
-      onTap: () {
-        context.go(Routes.courseDetail(stats.course.id));
-      },
-      child: Container(
+    return Material(
+      color: surface,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: () {
+          context.go(Routes.courseDetail(stats.course.id));
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: surface,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: border, width: 0.5),
         ),
@@ -306,6 +331,7 @@ class _CourseCard extends StatelessWidget {
           ],
         ),
       ),
+    ),
     );
   }
 

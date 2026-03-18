@@ -7,8 +7,9 @@ import '../../../core/providers/sync_provider.dart';
 
 class DeadlineCard extends StatelessWidget {
   final HomeworkSummary hw;
+  final VoidCallback? onTap;
 
-  const DeadlineCard({super.key, required this.hw});
+  const DeadlineCard({super.key, required this.hw, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -22,10 +23,15 @@ class DeadlineCard extends StatelessWidget {
 
     final urgencyColor = _urgencyColor(hw.timeRemaining, hw.isOverdue);
 
-    return Container(
+    return Material(
+      color: surface,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: border, width: 0.5),
       ),
@@ -89,6 +95,7 @@ class DeadlineCard extends StatelessWidget {
           ),
         ],
       ),
+    )),
     );
   }
 

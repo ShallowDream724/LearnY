@@ -324,9 +324,21 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       Color tertiaryColor, Color surface, Color border) {
     // Loading
     if (_isSearching) {
-      return const Center(
-        child: CircularProgressIndicator(
-          color: AppColors.primary,
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 32,
+              height: 32,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                color: AppColors.primary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text('搜索中...', style: AppTypography.bodySmall.copyWith(color: tertiaryColor)),
+          ],
         ),
       );
     }
@@ -404,19 +416,23 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           spacing: 8,
           runSpacing: 8,
           children: _recentSearches.map((q) {
-            return GestureDetector(
-              onTap: () => _onRecentTap(q),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: surface,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: border, width: 0.5),
+            return Material(
+              color: surface,
+              borderRadius: BorderRadius.circular(20),
+              child: InkWell(
+                onTap: () => _onRecentTap(q),
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: border, width: 0.5),
+                  ),
+                  child: Text(q,
+                      style: AppTypography.bodySmall
+                          .copyWith(color: textColor)),
                 ),
-                child: Text(q,
-                    style: AppTypography.bodySmall
-                        .copyWith(color: textColor)),
               ),
             );
           }).toList(),
@@ -467,12 +483,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               final result = entry.value;
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8),
-                child: GestureDetector(
-                  onTap: () => _onResultTap(result),
-                  child: Container(
+                child: Material(
+                  color: surface,
+                  borderRadius: BorderRadius.circular(12),
+                  child: InkWell(
+                    onTap: () => _onResultTap(result),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: surface,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: border, width: 0.5),
                     ),

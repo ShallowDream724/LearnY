@@ -7,8 +7,9 @@ import '../../../core/providers/sync_provider.dart';
 
 class NotificationCard extends StatelessWidget {
   final NotificationSummary notification;
+  final VoidCallback? onTap;
 
-  const NotificationCard({super.key, required this.notification});
+  const NotificationCard({super.key, required this.notification, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -22,10 +23,15 @@ class NotificationCard extends StatelessWidget {
     final tertiaryColor =
         isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
 
-    return Container(
+    return Material(
+      color: surface,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: border, width: 0.5),
       ),
@@ -117,6 +123,7 @@ class NotificationCard extends StatelessWidget {
           ],
         ],
       ),
+    )),
     );
   }
 

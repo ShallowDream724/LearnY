@@ -11,9 +11,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/design/colors.dart';
+import '../../core/design/shimmer.dart';
 import '../../core/design/typography.dart';
 import '../../core/providers/providers.dart';
 import '../../core/providers/sync_provider.dart';
+import '../../core/router/router.dart';
 import 'widgets/stat_card.dart';
 import 'widgets/deadline_card.dart';
 import 'widgets/notification_card.dart';
@@ -133,7 +135,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             // ── Content ──
             homeAsync.when(
               loading: () => const SliverFillRemaining(
-                child: Center(child: CircularProgressIndicator()),
+                child: ListSkeleton(),
               ),
               error: (error, _) => SliverFillRemaining(
                 child: Center(
@@ -175,7 +177,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ...data.urgentAssignments.asMap().entries.map(
                             (e) => Padding(
                               padding: const EdgeInsets.only(bottom: 10),
-                              child: DeadlineCard(hw: e.value)
+                              child: DeadlineCard(
+                                hw: e.value,
+                                onTap: () => context.push(
+                                  Routes.homeworkDetail(
+                                    homeworkId: e.value.id,
+                                    courseId: e.value.courseId,
+                                    courseName: e.value.courseName,
+                                  ),
+                                ),
+                              )
                                   .animate(delay: (100 * e.key).ms)
                                   .fadeIn(duration: 300.ms)
                                   .slideX(begin: 0.05, end: 0),
@@ -196,7 +207,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ...data.unreadNotifications.asMap().entries.map(
                             (e) => Padding(
                               padding: const EdgeInsets.only(bottom: 10),
-                              child: NotificationCard(notification: e.value)
+                              child: NotificationCard(
+                                notification: e.value,
+                                onTap: () => context.push(
+                                  Routes.notificationDetail(
+                                    notificationId: e.value.id,
+                                    courseId: e.value.courseId,
+                                    courseName: e.value.courseName,
+                                  ),
+                                ),
+                              )
                                   .animate(delay: (100 * e.key).ms)
                                   .fadeIn(duration: 300.ms)
                                   .slideX(begin: 0.05, end: 0),
