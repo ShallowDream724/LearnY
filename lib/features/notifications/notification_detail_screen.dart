@@ -16,6 +16,7 @@ import '../../core/design/responsive.dart';
 import '../../core/design/typography.dart';
 import '../../core/database/database.dart' as db;
 import '../../core/providers/providers.dart';
+import '../../core/api/enums.dart';
 
 class NotificationDetailScreen extends ConsumerStatefulWidget {
   final String notificationId;
@@ -38,6 +39,7 @@ class _NotificationDetailScreenState
     extends ConsumerState<NotificationDetailScreen> {
   db.Notification? _notification;
   bool _loading = true;
+  bool _isFavorite = false; // Local optimistic state
 
   @override
   void initState() {
@@ -63,8 +65,36 @@ class _NotificationDetailScreenState
     if (mounted) {
       setState(() {
         _notification = notif;
+        _isFavorite = notif?.isFavorite ?? false;
         _loading = false;
       });
+    }
+  }
+
+  /// Toggle favorite with optimistic UI: update icon immediately,
+  /// call API in background, revert on failure.
+  Future<void> _toggleFavorite(db.Notification n) async {
+    final wasFavorite = _isFavorite;
+    setState(() => _isFavorite = !wasFavorite);
+
+    try {
+      final api = ref.read(apiClientProvider);
+      if (!wasFavorite) {
+        await api.addToFavorites(ContentType.notification, n.id);
+      } else {
+        await api.removeFromFavorites(n.id);
+      }
+    } catch (e) {
+      // Revert on failure
+      if (mounted) {
+        setState(() => _isFavorite = wasFavorite);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(wasFavorite ? '取消收藏失败' : '收藏失败'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
@@ -116,14 +146,12 @@ class _NotificationDetailScreenState
               // Favorite toggle
               IconButton(
                 icon: Icon(
-                  n.isFavorite
+                  _isFavorite
                       ? Icons.bookmark_rounded
                       : Icons.bookmark_border_rounded,
-                  color: n.isFavorite ? AppColors.warning : subColor,
+                  color: _isFavorite ? AppColors.warning : subColor,
                 ),
-                onPressed: () {
-                  // TODO: toggle favorite via API
-                },
+                onPressed: () => _toggleFavorite(n),
               ),
             ],
           ),
