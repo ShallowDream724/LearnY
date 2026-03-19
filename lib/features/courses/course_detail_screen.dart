@@ -18,6 +18,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/responsive.dart';
 import '../../core/design/shimmer.dart';
+import '../../core/design/swipe_to_read.dart';
 import '../../core/design/typography.dart';
 import '../../core/providers/providers.dart';
 import '../../core/providers/sync_provider.dart';
@@ -421,19 +422,51 @@ class _NotificationsTab extends ConsumerWidget {
 //  Files Tab
 // ---------------------------------------------------------------------------
 
-class _FilesTab extends ConsumerWidget {
+class _FilesTab extends ConsumerStatefulWidget {
   final String courseId;
   final String courseName;
   const _FilesTab({required this.courseId, required this.courseName});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_FilesTab> createState() => _FilesTabState();
+}
+
+enum _FileFilter { all, unread, favorite, downloaded }
+
+class _FilesTabState extends ConsumerState<_FilesTab> {
+  _FileFilter _filter = _FileFilter.all;
+
+  List<db.CourseFile> _applyFilter(List<db.CourseFile> files) {
+    switch (_filter) {
+      case _FileFilter.all:
+        return files;
+      case _FileFilter.unread:
+        return files.where((f) => f.isNew).toList();
+      case _FileFilter.favorite:
+        return files.where((f) => f.isFavorite == true).toList();
+      case _FileFilter.downloaded:
+        return files.where((f) => f.localDownloadState == 'downloaded').toList();
+    }
+  }
+
+  Future<void> _onRefresh() async {
+    await ref.read(syncStateProvider.notifier).syncAll();
+  }
+
+  void _markAsRead(db.CourseFile file) {
+    if (file.isNew) {
+      ref.read(databaseProvider).markFileRead(file.id);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor =
         isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
     final tertiaryColor =
         isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
-    final filesAsync = ref.watch(_courseFilesProvider(courseId));
+    final filesAsync = ref.watch(_courseFilesProvider(widget.courseId));
 
     return filesAsync.when(
       loading: () => const ListSkeleton(),
@@ -453,37 +486,178 @@ class _FilesTab extends ConsumerWidget {
           ),
         ),
       ),
-      data: (files) {
-        if (files.isEmpty) {
-          return _EmptyState(
-              icon: Icons.folder_open_rounded,
-              label: '暂无文件',
-              isDark: isDark);
-        }
+      data: (allFiles) {
+        final files = _applyFilter(allFiles);
 
-        return ListView.builder(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-          itemCount: files.length,
-          itemBuilder: (context, index) {
-            final f = files[index];
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: FileCard(
-                file: f,
-                courseName: courseName,
-                hideCourseName: true,
-                onTap: () {
-                  context.push(Routes.fileDetail(
-                    fileId: f.id,
-                    courseId: courseId,
-                    courseName: courseName,
-                  ));
-                },
-              ).animate(delay: (40 * index).ms).fadeIn(duration: 200.ms),
-            );
-          },
+        return RefreshIndicator(
+          onRefresh: _onRefresh,
+          color: AppColors.primary,
+          child: Column(
+            children: [
+              // ── Filter pills ──
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: Row(
+                  children: _FileFilter.values.map((filter) {
+                    final isActive = _filter == filter;
+                    final label = switch (filter) {
+                      _FileFilter.all => '全部',
+                      _FileFilter.unread => '未读',
+                      _FileFilter.favorite => '收藏',
+                      _FileFilter.downloaded => '已下载',
+                    };
+                    // Count for badge
+                    final count = switch (filter) {
+                      _FileFilter.all => allFiles.length,
+                      _FileFilter.unread =>
+                        allFiles.where((f) => f.isNew).length,
+                      _FileFilter.favorite =>
+                        allFiles.where((f) => f.isFavorite == true).length,
+                      _FileFilter.downloaded =>
+                        allFiles
+                            .where(
+                                (f) => f.localDownloadState == 'downloaded')
+                            .length,
+                    };
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: _FilterPill(
+                        label: label,
+                        count: count,
+                        isActive: isActive,
+                        isDark: isDark,
+                        onTap: () => setState(() => _filter = filter),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+
+              // ── File list ──
+              Expanded(
+                child: files.isEmpty
+                    ? ListView(
+                        // Needed for RefreshIndicator to work on empty
+                        children: [
+                          SizedBox(height: 120),
+                          _EmptyState(
+                            icon: _filter == _FileFilter.all
+                                ? Icons.folder_open_rounded
+                                : Icons.filter_list_off_rounded,
+                            label: _filter == _FileFilter.all
+                                ? '暂无文件'
+                                : '暂无${switch (_filter) {
+                                    _FileFilter.unread => '未读',
+                                    _FileFilter.favorite => '收藏',
+                                    _FileFilter.downloaded => '已下载',
+                                    _ => '',
+                                  }}文件',
+                            isDark: isDark,
+                          ),
+                        ],
+                      )
+                    : ListView.builder(
+                        padding:
+                            const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                        itemCount: files.length,
+                        itemBuilder: (context, index) {
+                          final f = files[index];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: SwipeToRead(
+                              isRead: !f.isNew,
+                              onRead: () => _markAsRead(f),
+                              child: FileCard(
+                                file: f,
+                                courseName: widget.courseName,
+                                hideCourseName: true,
+                                onTap: () {
+                                  _markAsRead(f);
+                                  context.push(Routes.fileDetail(
+                                    fileId: f.id,
+                                    courseId: widget.courseId,
+                                    courseName: widget.courseName,
+                                  ));
+                                },
+                              ),
+                            ),
+                          )
+                              .animate(delay: (40 * index).ms)
+                              .fadeIn(duration: 200.ms);
+                        },
+                      ),
+              ),
+            ],
+          ),
         );
       },
+    );
+  }
+}
+
+/// Filter pill chip for the files tab.
+class _FilterPill extends StatelessWidget {
+  final String label;
+  final int count;
+  final bool isActive;
+  final bool isDark;
+  final VoidCallback onTap;
+
+  const _FilterPill({
+    required this.label,
+    required this.count,
+    required this.isActive,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final activeColor = AppColors.primary;
+    final inactiveText =
+        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+    final inactiveBg =
+        isDark ? AppColors.darkSurfaceHigh : AppColors.lightSurfaceHigh;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isActive ? activeColor.withAlpha(isDark ? 40 : 25) : inactiveBg,
+          borderRadius: BorderRadius.circular(20),
+          border: isActive
+              ? Border.all(color: activeColor.withAlpha(80), width: 1)
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+                color: isActive ? activeColor : inactiveText,
+              ),
+            ),
+            if (count > 0) ...[
+              const SizedBox(width: 4),
+              Text(
+                '$count',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: isActive
+                      ? activeColor
+                      : inactiveText.withAlpha(128),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

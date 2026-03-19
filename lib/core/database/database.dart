@@ -295,4 +295,23 @@ class AppDatabase extends _$AppDatabase {
   Future<void> toggleFileFavorite(String id, bool value) =>
       (update(courseFiles)..where((t) => t.id.equals(id)))
           .write(CourseFilesCompanion(isFavorite: Value(value)));
+
+  /// Mark a file as read (sets isNew to false).
+  Future<void> markFileRead(String id) =>
+      (update(courseFiles)..where((t) => t.id.equals(id)))
+          .write(const CourseFilesCompanion(isNew: Value(false)));
+
+  /// Watch unread (new) files across all courses.
+  Stream<List<CourseFile>> watchUnreadFiles() =>
+      (select(courseFiles)
+            ..where((t) => t.isNew.equals(true))
+            ..orderBy([(t) => OrderingTerm.desc(t.uploadTime)]))
+          .watch();
+
+  /// Get unread (new) files across all courses.
+  Future<List<CourseFile>> getUnreadFiles() =>
+      (select(courseFiles)
+            ..where((t) => t.isNew.equals(true))
+            ..orderBy([(t) => OrderingTerm.desc(t.uploadTime)]))
+          .get();
 }

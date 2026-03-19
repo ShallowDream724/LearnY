@@ -12,12 +12,12 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/design/colors.dart';
 import '../../core/design/shimmer.dart';
+import '../../core/design/swipe_to_read.dart';
 import '../../core/design/typography.dart';
 import '../../core/providers/providers.dart';
 import '../../core/providers/sync_provider.dart';
 import '../../core/router/router.dart';
 import 'widgets/stat_card.dart';
-import 'widgets/deadline_card.dart';
 import 'widgets/urgent_deadline_banner.dart';
 import 'widgets/notification_card.dart';
 
@@ -216,14 +216,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ...data.unreadNotifications.asMap().entries.map(
                             (e) => Padding(
                               padding: const EdgeInsets.only(bottom: 10),
-                              child: NotificationCard(
-                                notification: e.value,
-                                onTap: () => context.push(
-                                  Routes.notificationDetail(
-                                    notificationId: e.value.id,
-                                    courseId: e.value.courseId,
-                                    courseName: e.value.courseName,
-                                  ),
+                              child: SwipeToRead(
+                                onRead: () {
+                                  ref.read(databaseProvider)
+                                      .markNotificationReadLocal(e.value.id);
+                                },
+                                child: NotificationCard(
+                                  notification: e.value,
+                                  onTap: () {
+                                    ref.read(databaseProvider)
+                                        .markNotificationReadLocal(e.value.id);
+                                    context.push(
+                                      Routes.notificationDetail(
+                                        notificationId: e.value.id,
+                                        courseId: e.value.courseId,
+                                        courseName: e.value.courseName,
+                                      ),
+                                    );
+                                  },
                                 ),
                               )
                                   .animate(delay: (100 * e.key).ms)
@@ -248,7 +258,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     // ── New Files ──
                     if (data.newFiles.isNotEmpty) ...[
                       _SectionTitle(
-                        title: '新文件',
+                        title: '未读文件',
                         count: data.newFiles.length,
                         color: const Color(0xFF7B1FA2),
                         isDark: isDark,
@@ -257,15 +267,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ...data.newFiles.asMap().entries.map(
                             (e) => Padding(
                               padding: const EdgeInsets.only(bottom: 8),
-                              child: _NewFileCard(
-                                file: e.value,
-                                isDark: isDark,
-                                onTap: () => context.push(
-                                  Routes.fileDetail(
-                                    fileId: e.value.id,
-                                    courseId: e.value.courseId,
-                                    courseName: e.value.courseName,
-                                  ),
+                              child: SwipeToRead(
+                                onRead: () {
+                                  ref.read(databaseProvider)
+                                      .markFileRead(e.value.id);
+                                },
+                                child: _NewFileCard(
+                                  file: e.value,
+                                  isDark: isDark,
+                                  onTap: () {
+                                    ref.read(databaseProvider)
+                                        .markFileRead(e.value.id);
+                                    context.push(
+                                      Routes.fileDetail(
+                                        fileId: e.value.id,
+                                        courseId: e.value.courseId,
+                                        courseName: e.value.courseName,
+                                      ),
+                                    );
+                                  },
                                 ),
                               )
                                   .animate(delay: (80 * e.key).ms)
