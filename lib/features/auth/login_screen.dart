@@ -177,13 +177,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       final username = userInfo.name;
 
       // Mark login as successful.
+      // Router will automatically redirect to home via auth state listener.
       await ref.read(authProvider.notifier).onLoginSuccess(username);
-
-      if (mounted) {
-        // Navigate to home — GoRouter redirect guard won't
-        // re-fire on its own since there's no refreshListenable.
-        context.go(Routes.home);
-      }
     } catch (e, stackTrace) {
       debugPrint('[LearnX] Login failed: $e');
       debugPrint('[LearnX] Stack trace: $stackTrace');

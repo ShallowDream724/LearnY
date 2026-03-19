@@ -79,10 +79,15 @@ GoRouter buildRouter({required WidgetRef ref}) {
     navigatorKey: _rootNavigatorKey,
     initialLocation: Routes.home,
     redirect: (context, state) {
-      final isLoggedIn = ref.read(authProvider).isLoggedIn;
+      final auth = ref.read(authProvider);
       final isOnLogin = state.matchedLocation == Routes.login;
-      if (!isLoggedIn && !isOnLogin) return Routes.login;
-      if (isLoggedIn && isOnLogin) return Routes.home;
+
+      // Still loading auth state from DB — don't redirect yet.
+      // initialLocation is home, so user sees home screen while loading.
+      if (auth.status == AuthStatus.unknown) return null;
+
+      if (!auth.isLoggedIn && !isOnLogin) return Routes.login;
+      if (auth.isLoggedIn && isOnLogin) return Routes.home;
       return null;
     },
     routes: [

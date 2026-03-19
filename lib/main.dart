@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'core/design/responsive.dart';
 import 'core/design/theme.dart';
 import 'core/providers/providers.dart';
+import 'core/providers/sync_provider.dart';
 import 'core/router/router.dart';
 
 void main() async {
@@ -50,6 +51,25 @@ class _LearnYAppState extends ConsumerState<LearnYApp> {
   Widget build(BuildContext context) {
     final themeMode = ref.watch(themeModeProvider);
 
+    // Listen to auth state changes — refresh router when auth resolves.
+    // This makes auto-login seamless: app starts at home, auth resolves,
+    // if already authenticated → stays on home (no login flash).
+    // if not authenticated → router redirects to login.
+    ref.listen(authProvider, (prev, next) {
+      if (prev?.status != next.status) {
+        _router.refresh();
+
+        // Trigger sync whenever we become authenticated
+        // (both startup auto-login and fresh SSO login).
+        if (next.isLoggedIn) {
+          // Small delay so the router navigates to home first.
+          Future.delayed(const Duration(milliseconds: 300), () {
+            ref.read(syncStateProvider.notifier).syncAll();
+          });
+        }
+      }
+    });
+
     return MaterialApp.router(
       title: 'LearnY',
       debugShowCheckedModeBanner: false,
@@ -62,9 +82,6 @@ class _LearnYAppState extends ConsumerState<LearnYApp> {
       },
       routerConfig: _router,
       builder: (context, child) {
-        // Lock orientation based on device type:
-        // - Phones: portrait only (better UX for content-heavy app)
-        // - Tablets: allow landscape for wider layouts
         final deviceType = layoutTypeOf(context);
         if (deviceType == LayoutType.compact) {
           SystemChrome.setPreferredOrientations([

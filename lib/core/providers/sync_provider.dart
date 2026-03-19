@@ -3,10 +3,12 @@
 /// These providers handle the bridge between the API and local database.
 /// Partial failures are tracked and reported, not silently swallowed.
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/models.dart' as api;
 import '../api/enums.dart';
+import '../api/learn_api.dart';
 import '../database/database.dart';
 import 'providers.dart';
 
@@ -14,7 +16,7 @@ import 'providers.dart';
 // Sync state
 // ---------------------------------------------------------------------------
 
-enum SyncStatus { idle, syncing, success, error }
+enum SyncStatus { idle, syncing, success, error, sessionExpired }
 
 class SyncState {
   final SyncStatus status;
@@ -201,88 +203,14 @@ class SyncNotifier extends StateNotifier<SyncState> {
       }
       updated += courses.length;
 
-      // 3. Fetch notifications, files, and homeworks for each course
-      for (final course in courses) {
-        // Notifications
-        try {
-          final notifications =
-              await api.getNotificationList(course.id);
-          for (final n in notifications) {
-            await db.upsertNotification(NotificationsCompanion.insert(
-              id: n.id,
-              courseId: course.id,
-              title: n.title,
-              content: Value(n.content),
-              publisher: Value(n.publisher),
-              publishTime: n.publishTime,
-              expireTime: Value(n.expireTime),
-              hasRead: Value(n.hasRead),
-              markedImportant: Value(n.markedImportant),
-              isFavorite: Value(n.isFavorite),
-              comment: Value(n.comment),
-            ));
-          }
-          updated += notifications.length;
-        } catch (e) {
-          warnings.add('${course.name}: 通知同步失败 ($e)');
-        }
-
-        // Homeworks
-        try {
-          final homeworks = await api.getHomeworkList(course.id);
-          for (final h in homeworks) {
-            await db.upsertHomework(HomeworksCompanion.insert(
-              id: h.id,
-              courseId: course.id,
-              baseId: h.baseId,
-              title: h.title,
-              deadline: h.deadline,
-              lateSubmissionDeadline: Value(h.lateSubmissionDeadline),
-              submitted: Value(h.submitted),
-              graded: Value(h.graded),
-              grade: Value(h.grade),
-              gradeLevel: Value(h.gradeLevel?.value),
-              graderName: Value(h.graderName),
-              gradeContent: Value(h.gradeContent),
-              gradeTime: Value(h.gradeTime),
-              submitTime: Value(h.submitTime),
-              isLateSubmission: Value(h.isLateSubmission),
-              isFavorite: Value(h.isFavorite),
-              comment: Value(h.comment),
-              description: Value(h.description),
-            ));
-          }
-          updated += homeworks.length;
-        } catch (e) {
-          warnings.add('${course.name}: 作业同步失败 ($e)');
-        }
-
-        // Files
-        try {
-          final files = await api.getFileList(course.id);
-          for (final f in files) {
-            await db.upsertFile(CourseFilesCompanion.insert(
-              id: f.id,
-              courseId: course.id,
-              fileId: f.fileId,
-              title: f.title,
-              description: Value(f.description),
-              rawSize: Value(f.rawSize),
-              size: Value(f.size),
-              uploadTime: f.uploadTime,
-              fileType: Value(f.fileType),
-              downloadUrl: f.downloadUrl,
-              previewUrl: f.previewUrl,
-              isNew: Value(f.isNew),
-              markedImportant: Value(f.markedImportant),
-              visitCount: Value(f.visitCount),
-              downloadCount: Value(f.downloadCount),
-            ));
-          }
-          updated += files.length;
-        } catch (e) {
-          warnings.add('${course.name}: 文件同步失败 ($e)');
-        }
+      // 3. Fetch notifications, files, and homeworks — 4 courses concurrently
+      const batchSize = 4;
+      for (var i = 0; i < courses.length; i += batchSize) {
+        final batch = courses.skip(i).take(batchSize);
+        await Future.wait(batch.map((course) => _syncCourseData(
+          api, db, _SyncCourseRef(course.id, course.name), warnings,
+        )));
+        updated += batch.length; // rough count
       }
 
       state = SyncState(
@@ -291,10 +219,25 @@ class SyncNotifier extends StateNotifier<SyncState> {
         syncWarnings: warnings,
         updatedCount: updated,
       );
+
+      // Force home screen to re-read data from DB.
+      _ref.invalidate(homeDataProvider);
+    } on api.ApiError catch (e) {
+      if (e.reason == FailReason.notLoggedIn || e.reason == FailReason.noCredential) {
+        state = const SyncState(
+          status: SyncStatus.sessionExpired,
+          errorMessage: '会话过期，请重新登录',
+        );
+      } else {
+        state = SyncState(
+          status: SyncStatus.error,
+          errorMessage: '同步失败: $e',
+        );
+      }
     } catch (e) {
       state = SyncState(
         status: SyncStatus.error,
-        errorMessage: e.toString(),
+        errorMessage: '同步失败: $e',
       );
     }
   }
@@ -304,14 +247,27 @@ class SyncNotifier extends StateNotifier<SyncState> {
   Future<void> syncCourse(String courseId) async {
     final api = _ref.read(apiClientProvider);
     final db = _ref.read(databaseProvider);
+    final warnings = <String>[];
+    await _syncCourseData(api, db,
+        _SyncCourseRef(courseId, ''), warnings);
+  }
 
-    // Fetch all three types in parallel for speed
-    final results = await Future.wait([
-      api.getNotificationList(courseId).then((notifications) async {
+  /// Internal helper: sync notifications, homeworks, and files for one course
+  /// with parallel API fetches. Errors are collected into [warnings] instead
+  /// of thrown.
+  Future<void> _syncCourseData(
+    Learn2018Helper api,
+    AppDatabase db,
+    _SyncCourseRef course,
+    List<String> warnings,
+  ) async {
+    await Future.wait([
+      // Notifications
+      api.getNotificationList(course.id).then((notifications) async {
         for (final n in notifications) {
           await db.upsertNotification(NotificationsCompanion.insert(
             id: n.id,
-            courseId: courseId,
+            courseId: course.id,
             title: n.title,
             content: Value(n.content),
             publisher: Value(n.publisher),
@@ -323,12 +279,16 @@ class SyncNotifier extends StateNotifier<SyncState> {
             comment: Value(n.comment),
           ));
         }
+      }).catchError((e) {
+        warnings.add('${course.name}: 通知同步失败 ($e)');
       }),
-      api.getHomeworkList(courseId).then((homeworks) async {
+
+      // Homeworks
+      api.getHomeworkList(course.id).then((homeworks) async {
         for (final h in homeworks) {
           await db.upsertHomework(HomeworksCompanion.insert(
             id: h.id,
-            courseId: courseId,
+            courseId: course.id,
             baseId: h.baseId,
             title: h.title,
             deadline: h.deadline,
@@ -347,12 +307,16 @@ class SyncNotifier extends StateNotifier<SyncState> {
             description: Value(h.description),
           ));
         }
+      }).catchError((e) {
+        warnings.add('${course.name}: 作业同步失败 ($e)');
       }),
-      api.getFileList(courseId).then((files) async {
+
+      // Files
+      api.getFileList(course.id).then((files) async {
         for (final f in files) {
           await db.upsertFile(CourseFilesCompanion.insert(
             id: f.id,
-            courseId: courseId,
+            courseId: course.id,
             fileId: f.fileId,
             title: f.title,
             description: Value(f.description),
@@ -368,9 +332,19 @@ class SyncNotifier extends StateNotifier<SyncState> {
             downloadCount: Value(f.downloadCount),
           ));
         }
+      }).catchError((e) {
+        debugPrint('[Sync] File sync failed for ${course.name}: $e');
+        warnings.add('${course.name}: 文件同步失败 ($e)');
       }),
-    ].map((e) => e.catchError((_) {})));
+    ]);
   }
+}
+
+/// Lightweight ref for _syncCourseData to avoid passing full Course objects.
+class _SyncCourseRef {
+  final String id;
+  final String name;
+  const _SyncCourseRef(this.id, this.name);
 }
 
 // ---------------------------------------------------------------------------
@@ -380,6 +354,7 @@ class SyncNotifier extends StateNotifier<SyncState> {
 final homeDataProvider = FutureProvider<HomeData>((ref) async {
   final db = ref.watch(databaseProvider);
   final semesterId = ref.watch(currentSemesterIdProvider);
+  final thresholdHours = ref.watch(deadlineThresholdHoursProvider);
 
   if (semesterId == null) return const HomeData();
 
@@ -407,8 +382,8 @@ final homeDataProvider = FutureProvider<HomeData>((ref) async {
 
     pendingCount++;
 
-    // Only show urgent ones (next 7 days or overdue)
-    if (remaining.inDays <= 7 || isOverdue) {
+    // Only show assignments within threshold or overdue
+    if (remaining.inHours <= thresholdHours || isOverdue) {
       urgentAssignments.add(HomeworkSummary(
         id: hw.id,
         courseId: hw.courseId,

@@ -18,6 +18,7 @@ import '../../core/providers/sync_provider.dart';
 import '../../core/router/router.dart';
 import 'widgets/stat_card.dart';
 import 'widgets/deadline_card.dart';
+import 'widgets/urgent_deadline_banner.dart';
 import 'widgets/notification_card.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -31,10 +32,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    // Trigger initial sync
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(syncStateProvider.notifier).syncAll();
-    });
+    // Sync is triggered by main.dart on auth state change.
+    // No need to duplicate here.
   }
 
   Future<void> _onRefresh() async {
@@ -52,6 +51,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           content: Text(msg),
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 3),
+        ),
+      );
+    } else if (syncState.status == SyncStatus.sessionExpired) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('会话过期，请重新登录'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.warning,
+          action: SnackBarAction(
+            label: '登录',
+            textColor: Colors.white,
+            onPressed: () {
+              // Must logout first to clear stale auth state,
+              // otherwise router redirect blocks navigation to login.
+              ref.read(authProvider.notifier).logout();
+            },
+          ),
         ),
       );
     } else if (syncState.status == SyncStatus.error) {
@@ -80,6 +96,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final authState = ref.watch(authProvider);
     final syncState = ref.watch(syncStateProvider);
     final homeAsync = ref.watch(homeDataProvider);
+
+    // Auto-handle session expiry from ANY sync trigger (auto or manual).
+    // When session expires, clear stale state and redirect to login.
+    ref.listen(syncStateProvider, (prev, next) {
+      if (next.status == SyncStatus.sessionExpired) {
+        ref.read(authProvider.notifier).logout();
+      }
+    });
 
     return Scaffold(
       body: RefreshIndicator(
@@ -167,43 +191,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                     // ── Urgent Assignments ──
                     if (data.urgentAssignments.isNotEmpty) ...[
-                      _SectionTitle(
-                        title: '紧急作业',
-                        count: data.pendingAssignments,
-                        color: AppColors.deadlineUrgent,
-                        isDark: isDark,
-                      ),
-                      const SizedBox(height: 12),
-                      ...data.urgentAssignments.asMap().entries.map(
-                            (e) => Padding(
-                              padding: const EdgeInsets.only(bottom: 10),
-                              child: DeadlineCard(
-                                hw: e.value,
-                                onTap: () => context.push(
-                                  Routes.homeworkDetail(
-                                    homeworkId: e.value.id,
-                                    courseId: e.value.courseId,
-                                    courseName: e.value.courseName,
-                                  ),
-                                ),
-                              )
-                                  .animate(delay: (100 * e.key).ms)
-                                  .fadeIn(duration: 300.ms)
-                                  .slideX(begin: 0.05, end: 0),
-                            ),
+                      UrgentDeadlineBanner(
+                        assignments: data.urgentAssignments,
+                        onTap: (hw) => context.push(
+                          Routes.homeworkDetail(
+                            homeworkId: hw.id,
+                            courseId: hw.courseId,
+                            courseName: hw.courseName,
                           ),
+                        ),
+                      ),
                       const SizedBox(height: 16),
                     ],
 
                     // ── Unread Notifications ──
-                    if (data.unreadNotifications.isNotEmpty) ...[
-                      _SectionTitle(
-                        title: '未读通知',
-                        count: data.unreadCount,
-                        color: AppColors.info,
-                        isDark: isDark,
-                      ),
-                      const SizedBox(height: 12),
+                    _SectionTitle(
+                      title: '未读通知',
+                      count: data.unreadCount,
+                      color: AppColors.info,
+                      isDark: isDark,
+                    ),
+                    const SizedBox(height: 12),
+                    if (data.unreadNotifications.isNotEmpty)
                       ...data.unreadNotifications.asMap().entries.map(
                             (e) => Padding(
                               padding: const EdgeInsets.only(bottom: 10),
@@ -221,9 +230,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                   .fadeIn(duration: 300.ms)
                                   .slideX(begin: 0.05, end: 0),
                             ),
+                          )
+                    else
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          '暂无未读通知',
+                          style: AppTypography.bodyMedium.copyWith(
+                            color: isDark
+                                ? AppColors.darkTextTertiary
+                                : AppColors.lightTextTertiary,
                           ),
-                      const SizedBox(height: 16),
-                    ],
+                        ),
+                      ),
+                    const SizedBox(height: 16),
 
                     // ── Empty state ──
                     if (data.urgentAssignments.isEmpty &&

@@ -20,6 +20,7 @@ import '../../core/design/responsive.dart';
 import '../../core/design/shimmer.dart';
 import '../../core/design/typography.dart';
 import '../../core/providers/providers.dart';
+import '../../core/providers/sync_provider.dart';
 import '../../core/database/database.dart' as db;
 import '../../core/router/router.dart';
 import '../../core/services/file_download_service.dart';
@@ -150,7 +151,12 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
             );
           }
 
-          return NestedScrollView(
+          return RefreshIndicator(
+            onRefresh: () async {
+              await ref.read(syncStateProvider.notifier).syncCourse(widget.courseId);
+            },
+            color: AppColors.primary,
+            child: NestedScrollView(
             headerSliverBuilder: (context, innerBoxIsScrolled) => [
               SliverAppBar(
                 pinned: true,
@@ -225,6 +231,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                   courseName: course.name,
                 ),
               ],
+            ),
             ),
           );
         },

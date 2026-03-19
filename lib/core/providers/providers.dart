@@ -183,3 +183,35 @@ final themeModeProvider =
     StateNotifierProvider<ThemeModeNotifier, String>((ref) {
   return ThemeModeNotifier(ref.watch(databaseProvider));
 });
+
+// ---------------------------------------------------------------------------
+// Deadline Threshold (persisted)
+// ---------------------------------------------------------------------------
+
+/// How many hours ahead to show in "即将截止" banner. Default 72h.
+class DeadlineThresholdNotifier extends StateNotifier<int> {
+  final AppDatabase _db;
+
+  DeadlineThresholdNotifier(this._db) : super(168) {
+    _load();
+  }
+
+  Future<void> _load() async {
+    final saved = await _db.getState('deadline_threshold_hours');
+    if (saved != null) {
+      final v = int.tryParse(saved);
+      if (v != null && v > 0) state = v;
+    }
+  }
+
+  Future<void> setHours(int hours) async {
+    if (hours <= 0) return;
+    state = hours;
+    await _db.setState('deadline_threshold_hours', hours.toString());
+  }
+}
+
+final deadlineThresholdHoursProvider =
+    StateNotifierProvider<DeadlineThresholdNotifier, int>((ref) {
+  return DeadlineThresholdNotifier(ref.watch(databaseProvider));
+});

@@ -142,23 +142,9 @@ class Learn2018Helper {
 
     final resp = await doFetch();
     if (_isLoginTimeout(resp)) {
-      if (_provider != null) {
-        await login();
-        final retryResp = await doFetch();
-        if (_isLoginTimeout(retryResp)) {
-          throw const ApiError(reason: FailReason.notLoggedIn);
-        }
-        if (retryResp.statusCode != 200) {
-          throw ApiError(
-            reason: FailReason.unexpectedStatus,
-            extra: {
-              'code': retryResp.statusCode,
-              'text': retryResp.statusMessage,
-            },
-          );
-        }
-        return retryResp;
-      }
+      // Session expired. SSO-based auth cannot auto-re-login
+      // (we don't store passwords). Throw so the sync layer
+      // can show a "session expired" banner.
       throw const ApiError(reason: FailReason.notLoggedIn);
     }
     return resp;
@@ -173,7 +159,7 @@ class Learn2018Helper {
     ResponseType? responseType,
   }) async {
     if (_csrfToken.isEmpty) {
-      await login();
+      await _ensureCSRFToken();
     }
     return _myFetch(
       urls.addCSRFTokenToUrl(url, _csrfToken),
@@ -401,6 +387,22 @@ class Learn2018Helper {
     }
     bareDio.close();
     return resp;
+  }
+
+  // -------------------------------------------------------------------
+  // _ensureCSRFToken
+  // -------------------------------------------------------------------
+
+  /// Obtain CSRF token without needing credentials.
+  /// Relies on PersistCookieJar's session cookies. If cookies are
+  /// expired the page redirects to login → no token found → throws.
+  Future<void> _ensureCSRFToken() async {
+    try {
+      await _extractCSRFToken();
+    } catch (e) {
+      debugPrint('[LearnX] _ensureCSRFToken failed: $e');
+      throw const ApiError(reason: FailReason.notLoggedIn);
+    }
   }
 
   // -------------------------------------------------------------------
@@ -761,6 +763,43 @@ class Learn2018Helper {
     } catch (_) {}
 
     return result.map((f) {
+      // API can return either Map (object) or List (array) format.
+      // Handle both formats.
+      if (f is List) {
+        // Array format — indices based on _getFileListByCategoryStudent
+        final fileId = f[7]?.toString() ?? '';
+        final title = decodeHTML(f[1]?.toString());
+        final rawSize = _toInt(f[9]);
+        final size = formatFileSize(rawSize);
+        final downloadUrl = urls.learnFileDownload(fileId, courseType);
+        final previewUrl = urls.learnFilePreview(
+          ContentType.file, fileId, courseType, firstPageOnly: previewFirstPage,
+        );
+
+        return CourseFile(
+          id: f[0]?.toString() ?? '',
+          fileId: fileId,
+          title: title,
+          description: decodeHTML(f[5]?.toString()),
+          rawSize: rawSize,
+          size: size,
+          uploadTime: f[6]?.toString() ?? '',
+          publishTime: f[10]?.toString() ?? '',
+          downloadUrl: downloadUrl,
+          previewUrl: previewUrl,
+          isNew: f[8] == 1,
+          markedImportant: f[2] == 1,
+          visitCount: 0,
+          downloadCount: 0,
+          fileType: (f.length > 13) ? (f[13]?.toString() ?? '') : '',
+          remoteFile: RemoteFile(
+            id: fileId, name: title,
+            downloadUrl: downloadUrl, previewUrl: previewUrl, size: size,
+          ),
+        );
+      }
+
+      // Map (object) format — original logic
       final title = decodeHTML(f['bt']?.toString());
       final fileId = f['wjid']?.toString() ?? '';
       final uploadTime = f['scsj']?.toString() ?? '';

@@ -12,6 +12,7 @@ import '../../core/design/shimmer.dart';
 import '../../core/design/typography.dart';
 import '../../core/design/responsive.dart';
 import '../../core/providers/providers.dart';
+import '../../core/providers/sync_provider.dart';
 import '../../core/database/database.dart';
 import '../../core/router/router.dart';
 
@@ -82,8 +83,15 @@ class CoursesScreen extends ConsumerWidget {
     final statsAsync = ref.watch(_courseStatsProvider);
 
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await ref.read(syncStateProvider.notifier).syncAll();
+          ref.invalidate(_courseStatsProvider);
+        },
+        color: AppColors.primary,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
           SliverAppBar(
             floating: true,
             snap: true,
@@ -149,31 +157,55 @@ class CoursesScreen extends ConsumerWidget {
 
               return SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                sliver: SliverGrid(
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: courseGridColumns(context),
-                    mainAxisSpacing: 12,
-                    crossAxisSpacing: 12,
-                    childAspectRatio: 0.85,
-                  ),
+                sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      return _CourseCard(
-                        stats: stats[index],
-                        isDark: isDark,
-                        colorIndex: index,
-                      )
-                          .animate(delay: (60 * index).ms)
-                          .fadeIn(duration: 300.ms)
-                          .scale(begin: const Offset(0.95, 0.95), end: const Offset(1, 1));
+                    (context, rowIndex) {
+                      final cols = courseGridColumns(context);
+                      final i1 = rowIndex * cols;
+                      final i2 = i1 + 1;
+                      final hasSecond = cols > 1 && i2 < stats.length;
+
+                      Widget card(int index) {
+                        return Expanded(
+                          child: _CourseCard(
+                            stats: stats[index],
+                            isDark: isDark,
+                            colorIndex: index,
+                          )
+                              .animate(delay: (60 * index).ms)
+                              .fadeIn(duration: 300.ms)
+                              .scale(
+                                  begin: const Offset(0.95, 0.95),
+                                  end: const Offset(1, 1)),
+                        );
+                      }
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              card(i1),
+                              if (hasSecond) ...[
+                                const SizedBox(width: 10),
+                                card(i2),
+                              ] else if (cols > 1)
+                                const Expanded(child: SizedBox()),
+                            ],
+                          ),
+                        ),
+                      );
                     },
-                    childCount: stats.length,
+                    childCount: (stats.length + courseGridColumns(context) - 1) ~/
+                        courseGridColumns(context),
                   ),
                 ),
               );
             },
           ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -283,7 +315,7 @@ class _CourseCard extends StatelessWidget {
               ],
             ),
 
-            const Spacer(),
+            const SizedBox(height: 12),
 
             // Course name
             Text(
