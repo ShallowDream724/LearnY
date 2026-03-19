@@ -94,29 +94,14 @@ class Learn2018Helper {
         previewFirstPage =
             config?.generatePreviewUrlForFirstPage ?? true,
         _dio = Dio(BaseOptions(
-          followRedirects: false,
+          followRedirects: true,
+          maxRedirects: 5,
           validateStatus: (status) => status != null && status < 400,
           responseType: ResponseType.plain,
           connectTimeout: const Duration(seconds: 15),
           receiveTimeout: const Duration(seconds: 30),
         )) {
     _dio.interceptors.add(CookieManager(_cookieJar));
-    // Redirect interceptor: follow redirects manually so cookies are tracked.
-    _dio.interceptors.add(InterceptorsWrapper(
-      onResponse: (response, handler) async {
-        if (response.statusCode != null &&
-            response.statusCode! >= 300 &&
-            response.statusCode! < 400) {
-          final location = response.headers.value('location');
-          if (location != null) {
-            final redirected = await _dio.get(location);
-            handler.resolve(redirected);
-            return;
-          }
-        }
-        handler.next(response);
-      },
-    ));
   }
 
   // -------------------------------------------------------------------
@@ -335,23 +320,92 @@ class Learn2018Helper {
       fingerPrint,
       fingerGenPrint: fingerGenPrint ?? '',
       fingerGenPrint3: fingerGenPrint3 ?? '',
-    );
-
-    // Roam to learn — let the manual redirect interceptor handle 302s
-    // so CookieManager captures session cookies from every hop.
-    // Do NOT set followRedirects:true here (it would bypass the interceptor).
-    final loginResp = await _dio.get(
+    );    // Roam to learn — use manual redirect tracking to capture
+    // session cookies from every 302 hop (see _followRedirectsManually).
+    final loginResp = await _followRedirectsManually(
       urls.learnAuthRoam(ticket),
     );
     if (loginResp.statusCode != 200) {
       throw const ApiError(reason: FailReason.errorRoaming);
     }
 
-    // Extract CSRF token from student course list page
-    final courseListResp = await _dio.get(urls.learnStudentCourseListPage());
+    // Extract CSRF token and language from course list page.
+    await _extractCSRFToken();
+  }
+
+  /// Login using an SSO ticket obtained from WebView.
+  ///
+  /// This is used by the WebView login flow: the WebView handles SSO
+  /// authentication, we intercept the roaming ticket, then use Dio to
+  /// establish the API session.
+  Future<void> loginWithTicket(String ticket) async {
+    final roamResp = await _followRedirectsManually(
+      urls.learnAuthRoam(ticket),
+    );
+    if (roamResp.statusCode != 200) {
+      throw const ApiError(reason: FailReason.errorRoaming);
+    }
+    await _extractCSRFToken();
+  }
+
+  // -------------------------------------------------------------------
+  // _followRedirectsManually
+  // -------------------------------------------------------------------
+
+  /// Manually follow a 302 redirect chain, capturing cookies at each hop.
+  ///
+  /// Uses a separate bare Dio with only CookieManager (no other
+  /// interceptors). This mimics the behavior of `fetch-cookie` from
+  /// the original thu-learn-lib: every 302 response's Set-Cookie is
+  /// saved to the shared CookieJar before following the redirect.
+  ///
+  /// Why not use the main Dio?
+  /// - `followRedirects: true` → HttpClient handles 302 internally,
+  ///   CookieManager never sees intermediate Set-Cookie headers.
+  /// - `followRedirects: false` + redirect interceptor → calling
+  ///   `_dio.get()` inside an interceptor deadlocks the queue.
+  Future<Response> _followRedirectsManually(String url) async {
+    final bareDio = Dio(BaseOptions(
+      followRedirects: false,
+      validateStatus: (_) => true, // accept all status codes
+      responseType: ResponseType.plain,
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 30),
+    ));
+    bareDio.interceptors.add(CookieManager(_cookieJar));
+
+    var currentUrl = url;
+    late Response resp;
+    for (int i = 0; i < 10; i++) {
+      resp = await bareDio.get(currentUrl);
+      if (resp.statusCode != null &&
+          resp.statusCode! >= 300 &&
+          resp.statusCode! < 400) {
+        final location = resp.headers.value('location');
+        if (location == null) break;
+        // Resolve relative URLs against the current URL.
+        currentUrl =
+            Uri.parse(currentUrl).resolve(location).toString();
+        continue;
+      }
+      break; // non-redirect response
+    }
+    bareDio.close();
+    return resp;
+  }
+
+  // -------------------------------------------------------------------
+  // _extractCSRFToken
+  // -------------------------------------------------------------------
+
+  /// Fetch the student course list page and extract the CSRF token.
+  /// Also detects the current language setting.
+  Future<void> _extractCSRFToken() async {
+    final courseListResp =
+        await _dio.get(urls.learnStudentCourseListPage());
     final pageSource = courseListResp.data.toString();
 
-    // Try multiple regex patterns for robustness
+    // Try multiple regex patterns for robustness.
     String? csrfToken;
 
     // Pattern 1: &_csrf=TOKEN or ?_csrf=TOKEN (most common, in URL params)
@@ -385,9 +439,9 @@ class Learn2018Helper {
     }
     _csrfToken = csrfToken;
 
-    // Extract current language
-    final langRegex =
-        RegExp(r'<script src="/f/wlxt/common/languagejs\?lang=(zh|en)"></script>');
+    // Extract current language.
+    final langRegex = RegExp(
+        r'<script src="/f/wlxt/common/languagejs\?lang=(zh|en)"></script>');
     final langMatches = langRegex.allMatches(pageSource).toList();
     if (langMatches.isNotEmpty) {
       _lang = langMatches[0].group(1) == 'en' ? Language.en : Language.zh;

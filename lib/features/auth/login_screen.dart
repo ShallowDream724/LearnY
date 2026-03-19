@@ -164,82 +164,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     try {
       final api = ref.read(apiClientProvider);
 
-      // Step 1: Roam to learn.tsinghua.edu.cn with the ticket.
-      // IMPORTANT: Do NOT set followRedirects:true — the base Dio config
-      // uses followRedirects:false with a manual redirect interceptor.
-      // This ensures CookieManager captures session cookies from every
-      // 302 hop (critical for SSO authentication chains).
-      final dioInstance = _getDioFromHelper(api);
+      // Authenticate Dio's session using the SSO ticket.
+      // This internally: (1) follows the 302 redirect chain with cookie
+      // tracking, (2) fetches the course list page, (3) extracts the CSRF
+      // token and language preference.
+      await api.loginWithTicket(ticket);
 
-      final roamResp = await dioInstance.get(
-        urls.learnAuthRoam(ticket),
-      );
+      // Fetch username from the authenticated session.
+      final userInfo = await api.getUserInfo();
+      final username = userInfo.name;
 
-      if (roamResp.statusCode != 200) {
-        throw Exception('Roaming failed with status ${roamResp.statusCode}');
-      }
-
-      // Step 2: Fetch the student course list page to get CSRF token.
-      final courseListResp = await dioInstance.get(
-        urls.learnStudentCourseListPage(),
-      );
-      final pageSource = courseListResp.data.toString();
-
-      // Step 3: Extract CSRF token using multiple regex patterns.
-      // The page embeds CSRF tokens in URLs like: href="...&_csrf=TOKEN"
-      String? csrfToken;
-
-      // Pattern 1: &_csrf=TOKEN" (most common)
-      final p1 = RegExp(r'[&?]_csrf=([a-zA-Z0-9\-_]+)', multiLine: true);
-      final m1 = p1.firstMatch(pageSource);
-      if (m1 != null) csrfToken = m1.group(1);
-
-      // Pattern 2: name="_csrf" value="TOKEN"
-      if (csrfToken == null) {
-        final p2 = RegExp(
-            r'name=["\u0027]_csrf["\u0027]\s+(?:value|content)=["\u0027]([^"\u0027]+)["\u0027]',
-            multiLine: true);
-        final m2 = p2.firstMatch(pageSource);
-        if (m2 != null) csrfToken = m2.group(1);
-      }
-
-      // Pattern 3: original strict pattern
-      if (csrfToken == null) {
-        final p3 = RegExp(r'&_csrf=(\S*)"', multiLine: true);
-        final m3 = p3.firstMatch(pageSource);
-        if (m3 != null) csrfToken = m3.group(1);
-      }
-
-      if (csrfToken == null || csrfToken.isEmpty) {
-        // Log diagnostic info for debugging
-        debugPrint('[LearnY] CSRF extraction failed. '
-            'Page length: ${pageSource.length}, '
-            'Status: ${courseListResp.statusCode}, '
-            'URL: ${courseListResp.realUri}');
-        debugPrint('[LearnY] Page preview: '
-            '${pageSource.substring(0, pageSource.length.clamp(0, 500))}');
-        throw Exception('Could not extract CSRF token from page source');
-      }
-
-      api.setCSRFToken(csrfToken);
-
-      // Step 4: Extract username from the page.
-      final nameRegex =
-          RegExp(r'class="user-log"[^>]*>([^<]+)<', multiLine: true);
-      final nameMatch = nameRegex.firstMatch(pageSource);
-      final username = nameMatch?.group(1)?.trim() ?? '';
-
-      // Step 5: Extract language preference.
-      final langRegex = RegExp(
-          r'<script src="/f/wlxt/common/languagejs\?lang=(zh|en)"></script>');
-      final langMatch = langRegex.firstMatch(pageSource);
-      if (langMatch != null) {
-        // Store language preference for later use
-        final db = ref.read(databaseProvider);
-        await db.setState('language', langMatch.group(1)!);
-      }
-
-      // Step 6: Mark login as successful.
+      // Mark login as successful.
       await ref.read(authProvider.notifier).onLoginSuccess(username);
 
       if (mounted) {
@@ -397,12 +332,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   /// Access the Dio instance from Learn2018Helper.
   /// This is needed because the helper's Dio has cookie management set up.
-  ///
-  /// NOTE: We expose Dio via a getter on Learn2018Helper (added below).
-  Dio _getDioFromHelper(Learn2018Helper helper) {
-    return helper.dio;
-  }
-
   CookieJar? _getCookieJarFromHelper(Learn2018Helper helper) {
     return helper.cookieJar;
   }
