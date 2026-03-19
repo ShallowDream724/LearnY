@@ -2,11 +2,23 @@
 ///
 /// These are the foundational providers that other feature providers
 /// depend on: database, API client, auth state.
+import 'package:cookie_jar/cookie_jar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/learn_api.dart';
 import '../database/connection.dart';
 import '../database/database.dart';
+
+// ---------------------------------------------------------------------------
+// Cookie Jar (persistent)
+// ---------------------------------------------------------------------------
+
+/// PersistCookieJar — initialized in main.dart, overridden via ProviderScope.
+/// Cookies survive app restarts (Layer 1 of session defense).
+final cookieJarProvider = Provider<CookieJar>((ref) {
+  // This is a fallback; the real PersistCookieJar is injected via override.
+  return CookieJar();
+});
 
 // ---------------------------------------------------------------------------
 // Database
@@ -112,12 +124,14 @@ final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
 // API Client
 // ---------------------------------------------------------------------------
 
-/// API client — created with credential provider linked to stored creds.
+/// API client — created with PersistCookieJar and credential provider.
 final apiClientProvider = Provider<Learn2018Helper>((ref) {
   final db = ref.watch(databaseProvider);
+  final jar = ref.watch(cookieJarProvider);
 
   return Learn2018Helper(
     config: HelperConfig(
+      cookieJar: jar,
       provider: () async {
         final username = await db.getState('username');
         final password = await db.getState('password');

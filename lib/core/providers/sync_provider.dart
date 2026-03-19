@@ -298,6 +298,79 @@ class SyncNotifier extends StateNotifier<SyncState> {
       );
     }
   }
+
+  /// Sync a single course's data (notifications + homeworks + files in parallel).
+  /// Used by pull-to-refresh in course detail.
+  Future<void> syncCourse(String courseId) async {
+    final api = _ref.read(apiClientProvider);
+    final db = _ref.read(databaseProvider);
+
+    // Fetch all three types in parallel for speed
+    final results = await Future.wait([
+      api.getNotificationList(courseId).then((notifications) async {
+        for (final n in notifications) {
+          await db.upsertNotification(NotificationsCompanion.insert(
+            id: n.id,
+            courseId: courseId,
+            title: n.title,
+            content: Value(n.content),
+            publisher: Value(n.publisher),
+            publishTime: n.publishTime,
+            expireTime: Value(n.expireTime),
+            hasRead: Value(n.hasRead),
+            markedImportant: Value(n.markedImportant),
+            isFavorite: Value(n.isFavorite),
+            comment: Value(n.comment),
+          ));
+        }
+      }),
+      api.getHomeworkList(courseId).then((homeworks) async {
+        for (final h in homeworks) {
+          await db.upsertHomework(HomeworksCompanion.insert(
+            id: h.id,
+            courseId: courseId,
+            baseId: h.baseId,
+            title: h.title,
+            deadline: h.deadline,
+            lateSubmissionDeadline: Value(h.lateSubmissionDeadline),
+            submitted: Value(h.submitted),
+            graded: Value(h.graded),
+            grade: Value(h.grade),
+            gradeLevel: Value(h.gradeLevel?.value),
+            graderName: Value(h.graderName),
+            gradeContent: Value(h.gradeContent),
+            gradeTime: Value(h.gradeTime),
+            submitTime: Value(h.submitTime),
+            isLateSubmission: Value(h.isLateSubmission),
+            isFavorite: Value(h.isFavorite),
+            comment: Value(h.comment),
+            description: Value(h.description),
+          ));
+        }
+      }),
+      api.getFileList(courseId).then((files) async {
+        for (final f in files) {
+          await db.upsertFile(CourseFilesCompanion.insert(
+            id: f.id,
+            courseId: courseId,
+            fileId: f.fileId,
+            title: f.title,
+            description: Value(f.description),
+            rawSize: Value(f.rawSize),
+            size: Value(f.size),
+            uploadTime: f.uploadTime,
+            fileType: Value(f.fileType),
+            downloadUrl: f.downloadUrl,
+            previewUrl: f.previewUrl,
+            isNew: Value(f.isNew),
+            markedImportant: Value(f.markedImportant),
+            visitCount: Value(f.visitCount),
+            downloadCount: Value(f.downloadCount),
+          ));
+        }
+      }),
+    ].map((e) => e.catchError((_) {})));
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -251,4 +251,29 @@ class AppDatabase extends _$AppDatabase {
     await delete(homeworks).go();
     await delete(appState).go();
   }
+
+  // ─── Reactive watch queries (Drift Streams) ───
+  // These emit new data automatically when the underlying table changes.
+  // Used with StreamProvider for real-time UI updates.
+
+  Stream<List<Notification>> watchNotificationsByCourse(String courseId) =>
+      (select(notifications)..where((t) => t.courseId.equals(courseId))).watch();
+
+  Stream<List<Notification>> watchUnreadNotifications() =>
+      (select(notifications)..where((t) => t.hasRead.equals(false) & t.hasReadLocal.equals(false))).watch();
+
+  Stream<List<CourseFile>> watchFilesByCourse(String courseId) =>
+      (select(courseFiles)..where((t) => t.courseId.equals(courseId))).watch();
+
+  Stream<List<Homework>> watchHomeworksByCourse(String courseId) =>
+      (select(homeworks)..where((t) => t.courseId.equals(courseId))).watch();
+
+  Stream<List<Course>> watchCoursesBySemester(String semesterId) =>
+      (select(courses)..where((t) => t.semesterId.equals(semesterId))).watch();
+
+  Stream<List<Homework>> watchUpcomingHomeworks() =>
+      (select(homeworks)
+            ..where((t) => t.submitted.equals(false))
+            ..orderBy([(t) => OrderingTerm.asc(t.deadline)]))
+          .watch();
 }

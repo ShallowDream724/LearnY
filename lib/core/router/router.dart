@@ -56,6 +56,16 @@ abstract final class Routes {
       '$_homeworkDetailPath?id=$homeworkId&courseId=$courseId&courseName=${Uri.encodeComponent(courseName)}';
 }
 
+/// Safely decode a URI component — falls back to raw value if decoding fails
+/// (e.g. when courseName contains malformed percent encoding like a literal %).
+String _safeDecode(String value) {
+  try {
+    return Uri.decodeComponent(value);
+  } catch (_) {
+    return value;
+  }
+}
+
 /// Navigation key for the shell.
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -92,7 +102,7 @@ GoRouter buildRouter({required WidgetRef ref}) {
           return NotificationDetailScreen(
             notificationId: q['id'] ?? '',
             courseId: q['courseId'] ?? '',
-            courseName: Uri.decodeComponent(q['courseName'] ?? ''),
+            courseName: _safeDecode(q['courseName'] ?? ''),
           );
         },
       ),
@@ -105,7 +115,7 @@ GoRouter buildRouter({required WidgetRef ref}) {
           return HomeworkDetailScreen(
             homeworkId: q['id'] ?? '',
             courseId: q['courseId'] ?? '',
-            courseName: Uri.decodeComponent(q['courseName'] ?? ''),
+            courseName: _safeDecode(q['courseName'] ?? ''),
           );
         },
       ),

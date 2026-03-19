@@ -1,15 +1,26 @@
+import 'package:cookie_jar/cookie_jar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'core/design/responsive.dart';
 import 'core/design/theme.dart';
 import 'core/providers/providers.dart';
 import 'core/router/router.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const ProviderScope(child: LearnYApp()));
+
+  // Initialize PersistCookieJar — cookies survive app restarts.
+  // This is Layer 1 of our three-layer session defense.
+  final appDir = await getApplicationSupportDirectory();
+  final cookieJar = PersistCookieJar(storage: FileStorage('${appDir.path}/cookies/'));
+
+  runApp(ProviderScope(
+    overrides: [cookieJarProvider.overrideWithValue(cookieJar)],
+    child: const LearnYApp(),
+  ));
 }
 
 class LearnYApp extends ConsumerStatefulWidget {

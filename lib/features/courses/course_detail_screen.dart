@@ -25,7 +25,7 @@ import '../../core/router/router.dart';
 import '../../core/services/file_download_service.dart';
 
 // ---------------------------------------------------------------------------
-//  Providers scoped to a course
+//  Providers scoped to a course (reactive — auto-update on DB writes)
 // ---------------------------------------------------------------------------
 
 /// Provides the course ID to child widgets.
@@ -46,40 +46,41 @@ final _courseDetailProvider = FutureProvider.family<db.Course?, String>(
   },
 );
 
-/// Notifications for this course.
+/// Notifications for this course — reactive, auto-updates on DB writes.
 final _courseNotificationsProvider =
-    FutureProvider.family<List<db.Notification>, String>(
-  (ref, courseId) async {
+    StreamProvider.family<List<db.Notification>, String>(
+  (ref, courseId) {
     final database = ref.watch(databaseProvider);
-    final notifications = await database.getNotificationsByCourse(courseId);
-    // Sort: unread first, then by publish time descending
-    notifications.sort((a, b) {
-      if (a.hasRead != b.hasRead) return a.hasRead ? 1 : -1;
-      return b.publishTime.compareTo(a.publishTime);
+    return database.watchNotificationsByCourse(courseId).map((notifications) {
+      // Sort: unread first, then by publish time descending
+      notifications.sort((a, b) {
+        if (a.hasRead != b.hasRead) return a.hasRead ? 1 : -1;
+        return b.publishTime.compareTo(a.publishTime);
+      });
+      return notifications;
     });
-    return notifications;
   },
 );
 
-/// Files for this course.
-final _courseFilesProvider = FutureProvider.family<List<db.CourseFile>, String>(
-  (ref, courseId) async {
+/// Files for this course — reactive.
+final _courseFilesProvider = StreamProvider.family<List<db.CourseFile>, String>(
+  (ref, courseId) {
     final database = ref.watch(databaseProvider);
-    final files = await database.getFilesByCourse(courseId);
-    // Sort by upload time descending
-    files.sort((a, b) => b.uploadTime.compareTo(a.uploadTime));
-    return files;
+    return database.watchFilesByCourse(courseId).map((files) {
+      files.sort((a, b) => b.uploadTime.compareTo(a.uploadTime));
+      return files;
+    });
   },
 );
 
-/// Homeworks for this course.
-final _courseHomeworksProvider = FutureProvider.family<List<db.Homework>, String>(
-  (ref, courseId) async {
+/// Homeworks for this course — reactive.
+final _courseHomeworksProvider = StreamProvider.family<List<db.Homework>, String>(
+  (ref, courseId) {
     final database = ref.watch(databaseProvider);
-    final homeworks = await database.getHomeworksByCourse(courseId);
-    // Sort by deadline descending
-    homeworks.sort((a, b) => b.deadline.compareTo(a.deadline));
-    return homeworks;
+    return database.watchHomeworksByCourse(courseId).map((homeworks) {
+      homeworks.sort((a, b) => b.deadline.compareTo(a.deadline));
+      return homeworks;
+    });
   },
 );
 
@@ -157,14 +158,30 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                 flexibleSpace: FlexibleSpaceBar(
                   titlePadding:
                       const EdgeInsets.only(left: 56, bottom: 50, right: 16),
-                  title: Text(
-                    course.name,
-                    style: AppTypography.titleMedium.copyWith(
-                      color: textColor,
-                      fontSize: 14,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  title: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        course.name,
+                        style: AppTypography.titleMedium.copyWith(
+                          color: textColor,
+                          fontSize: 14,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (course.teacherName.isNotEmpty)
+                        Text(
+                          course.teacherName,
+                          style: AppTypography.bodySmall.copyWith(
+                            color: subColor,
+                            fontSize: 10,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
                   ),
                   background: Container(
                     decoration: BoxDecoration(
@@ -174,23 +191,6 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                         colors: [
                           AppColors.primary.withAlpha(isDark ? 40 : 30),
                           Colors.transparent,
-                        ],
-                      ),
-                    ),
-                    padding:
-                        const EdgeInsets.only(left: 56, top: 40, right: 16),
-                    child: SafeArea(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const SizedBox(height: 8),
-                          if (course.teacherName.isNotEmpty)
-                            Text(
-                              course.teacherName,
-                              style: AppTypography.bodySmall
-                                  .copyWith(color: subColor),
-                            ),
                         ],
                       ),
                     ),
