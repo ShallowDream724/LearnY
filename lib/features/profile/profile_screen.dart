@@ -145,6 +145,29 @@ class ProfileScreen extends ConsumerWidget {
 
                 const SizedBox(height: 24),
 
+                // ── Data Management Section ──
+                _SectionLabel(label: '数据管理', textColor: subColor),
+                const SizedBox(height: 8),
+
+                _SettingsCard(
+                  surface: surface,
+                  border: border,
+                  children: [
+                    _SettingsTile(
+                      icon: Icons.folder_rounded,
+                      title: '文件管理',
+                      subtitle: '管理已下载的文件',
+                      textColor: textColor,
+                      subColor: subColor,
+                      onTap: () => context.push(Routes.fileManager),
+                    ),
+                  ],
+                )
+                    .animate(delay: 150.ms)
+                    .fadeIn(duration: 300.ms),
+
+                const SizedBox(height: 24),
+
                 // ── About Section ──
                 _SectionLabel(label: '关于', textColor: subColor),
                 const SizedBox(height: 8),

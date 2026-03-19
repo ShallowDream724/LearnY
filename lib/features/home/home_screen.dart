@@ -245,9 +245,41 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                     const SizedBox(height: 16),
 
+                    // ── New Files ──
+                    if (data.newFiles.isNotEmpty) ...[
+                      _SectionTitle(
+                        title: '新文件',
+                        count: data.newFiles.length,
+                        color: const Color(0xFF7B1FA2),
+                        isDark: isDark,
+                      ),
+                      const SizedBox(height: 12),
+                      ...data.newFiles.asMap().entries.map(
+                            (e) => Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: _NewFileCard(
+                                file: e.value,
+                                isDark: isDark,
+                                onTap: () => context.push(
+                                  Routes.fileDetail(
+                                    fileId: e.value.id,
+                                    courseId: e.value.courseId,
+                                    courseName: e.value.courseName,
+                                  ),
+                                ),
+                              )
+                                  .animate(delay: (80 * e.key).ms)
+                                  .fadeIn(duration: 300.ms)
+                                  .slideX(begin: 0.05, end: 0),
+                            ),
+                          ),
+                      const SizedBox(height: 16),
+                    ],
+
                     // ── Empty state ──
                     if (data.urgentAssignments.isEmpty &&
-                        data.unreadNotifications.isEmpty)
+                        data.unreadNotifications.isEmpty &&
+                        data.newFiles.isEmpty)
                       _buildEmptyState(isDark),
                   ]),
                 ),
@@ -386,5 +418,124 @@ class _SectionTitle extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+// ─────────────────────────────────────────────
+//  New File Card (home screen)
+// ─────────────────────────────────────────────
+
+class _NewFileCard extends StatelessWidget {
+  final FileSummary file;
+  final bool isDark;
+  final VoidCallback? onTap;
+
+  const _NewFileCard({
+    required this.file,
+    required this.isDark,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final textColor =
+        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
+    final sub =
+        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+    final tertiary =
+        isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
+    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
+
+    final ext = file.fileType.toLowerCase();
+    final color = _fileTypeColor(ext);
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: border, width: 0.5),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: color.withAlpha(20),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(_fileTypeIcon(ext), color: color, size: 19),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    file.title,
+                    style: AppTypography.titleMedium.copyWith(color: textColor),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    file.courseName,
+                    style: AppTypography.bodySmall.copyWith(
+                      color: tertiary,
+                      fontSize: 11,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  ext.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                ),
+                Text(
+                  file.size.isNotEmpty ? file.size : '',
+                  style: TextStyle(fontSize: 10, color: sub),
+                ),
+              ],
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.chevron_right_rounded, size: 16, color: tertiary),
+          ],
+        ),
+      ),
+    );
+  }
+
+  IconData _fileTypeIcon(String ext) {
+    switch (ext) {
+      case 'pdf': return Icons.picture_as_pdf_rounded;
+      case 'doc': case 'docx': return Icons.description_rounded;
+      case 'ppt': case 'pptx': return Icons.slideshow_rounded;
+      case 'xls': case 'xlsx': return Icons.table_chart_rounded;
+      default: return Icons.insert_drive_file_rounded;
+    }
+  }
+
+  Color _fileTypeColor(String ext) {
+    switch (ext) {
+      case 'pdf': return const Color(0xFFE53935);
+      case 'doc': case 'docx': return const Color(0xFF1976D2);
+      case 'ppt': case 'pptx': return const Color(0xFFE65100);
+      case 'xls': case 'xlsx': return const Color(0xFF2E7D32);
+      default: return const Color(0xFF546E7A);
+    }
   }
 }

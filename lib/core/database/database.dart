@@ -276,4 +276,23 @@ class AppDatabase extends _$AppDatabase {
             ..where((t) => t.submitted.equals(false))
             ..orderBy([(t) => OrderingTerm.asc(t.deadline)]))
           .watch();
+
+  // ─── Global File Queries ───
+
+  Stream<List<CourseFile>> watchAllFiles() =>
+      (select(courseFiles)
+            ..orderBy([(t) => OrderingTerm.desc(t.uploadTime)]))
+          .watch();
+
+  Future<List<CourseFile>> getAllFiles() =>
+      (select(courseFiles)
+            ..orderBy([(t) => OrderingTerm.desc(t.uploadTime)]))
+          .get();
+
+  Future<CourseFile?> getFileById(String id) =>
+      (select(courseFiles)..where((t) => t.id.equals(id))).getSingleOrNull();
+
+  Future<void> toggleFileFavorite(String id, bool value) =>
+      (update(courseFiles)..where((t) => t.id.equals(id)))
+          .write(CourseFilesCompanion(isFavorite: Value(value)));
 }

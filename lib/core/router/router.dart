@@ -18,6 +18,9 @@ import '../../features/assignments/assignments_screen.dart';
 import '../../features/assignments/homework_detail_screen.dart';
 import '../../features/courses/courses_screen.dart';
 import '../../features/courses/course_detail_screen.dart';
+import '../../features/files/files_screen.dart';
+import '../../features/files/file_detail_screen.dart';
+import '../../features/files/file_manager_screen.dart';
 import '../../features/notifications/notification_detail_screen.dart';
 import '../../features/search/search_screen.dart';
 import '../../features/profile/profile_screen.dart';
@@ -29,6 +32,7 @@ abstract final class Routes {
   static const String login = '/login';
   static const String home = '/';
   static const String assignments = '/assignments';
+  static const String files = '/files';
   static const String courses = '/courses';
   static const String profile = '/profile';
   static const String search = '/search';
@@ -36,10 +40,10 @@ abstract final class Routes {
   // Detail routes (full screen, above shell)
   static String courseDetail(String courseId) => '/courses/$courseId';
 
-  // These use query params for extra data since GoRouter extras are not
-  // preserved during deep linking. The courseId + courseName travel via query.
   static const String _notificationDetailPath = '/notification-detail';
   static const String _homeworkDetailPath = '/homework-detail';
+  static const String _fileDetailPath = '/file-detail';
+  static const String _fileManagerPath = '/file-manager';
 
   static String notificationDetail({
     required String notificationId,
@@ -54,6 +58,15 @@ abstract final class Routes {
     required String courseName,
   }) =>
       '$_homeworkDetailPath?id=$homeworkId&courseId=$courseId&courseName=${Uri.encodeComponent(courseName)}';
+
+  static String fileDetail({
+    required String fileId,
+    required String courseId,
+    required String courseName,
+  }) =>
+      '$_fileDetailPath?id=$fileId&courseId=$courseId&courseName=${Uri.encodeComponent(courseName)}';
+
+  static const String fileManager = _fileManagerPath;
 }
 
 /// Safely decode a URI component — falls back to raw value if decoding fails
@@ -131,6 +144,25 @@ GoRouter buildRouter({required WidgetRef ref}) {
         builder: (context, state) => const SearchScreen(),
       ),
 
+      GoRoute(
+        path: Routes._fileDetailPath,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final q = state.uri.queryParameters;
+          return FileDetailScreen(
+            fileId: q['id'] ?? '',
+            courseId: q['courseId'] ?? '',
+            courseName: _safeDecode(q['courseName'] ?? ''),
+          );
+        },
+      ),
+
+      GoRoute(
+        path: Routes._fileManagerPath,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const FileManagerScreen(),
+      ),
+
       // ── Main app shell with 4 tabs ──
 
       ShellRoute(
@@ -147,6 +179,12 @@ GoRouter buildRouter({required WidgetRef ref}) {
             path: Routes.assignments,
             pageBuilder: (context, state) => const NoTransitionPage(
               child: AssignmentsScreen(),
+            ),
+          ),
+          GoRoute(
+            path: Routes.files,
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: FilesScreen(),
             ),
           ),
           GoRoute(

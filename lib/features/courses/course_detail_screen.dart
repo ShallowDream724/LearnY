@@ -24,6 +24,7 @@ import '../../core/providers/sync_provider.dart';
 import '../../core/database/database.dart' as db;
 import '../../core/router/router.dart';
 import '../../core/services/file_download_service.dart';
+import '../files/widgets/file_card.dart';
 
 // ---------------------------------------------------------------------------
 //  Providers scoped to a course (reactive — auto-update on DB writes)
@@ -225,7 +226,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                   courseId: widget.courseId,
                   courseName: course.name,
                 ),
-                _FilesTab(courseId: widget.courseId),
+                _FilesTab(courseId: widget.courseId, courseName: course.name),
                 _HomeworksTab(
                   courseId: widget.courseId,
                   courseName: course.name,
@@ -422,19 +423,16 @@ class _NotificationsTab extends ConsumerWidget {
 
 class _FilesTab extends ConsumerWidget {
   final String courseId;
-  const _FilesTab({required this.courseId});
+  final String courseName;
+  const _FilesTab({required this.courseId, required this.courseName});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor =
         isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final subColor =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
     final tertiaryColor =
         isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
-    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
     final filesAsync = ref.watch(_courseFilesProvider(courseId));
 
     return filesAsync.when(
@@ -469,147 +467,24 @@ class _FilesTab extends ConsumerWidget {
           itemBuilder: (context, index) {
             final f = files[index];
             return Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: surface,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: border, width: 0.5),
-                ),
-                child: Row(
-                  children: [
-                    // File type icon
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: _fileColor(f.fileType).withAlpha(20),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(
-                        _fileIcon(f.fileType),
-                        color: _fileColor(f.fileType),
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-
-                    // File info
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  f.title,
-                                  style: AppTypography.titleMedium
-                                      .copyWith(color: textColor),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              if (f.isNew)
-                                Container(
-                                  margin: const EdgeInsets.only(left: 6),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 5, vertical: 1),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.info.withAlpha(20),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text('NEW',
-                                      style: AppTypography.labelSmall.copyWith(
-                                        color: AppColors.info,
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w700,
-                                      )),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Text(
-                                f.size.isNotEmpty ? f.size : '${f.rawSize} B',
-                                style: AppTypography.bodySmall
-                                    .copyWith(color: tertiaryColor),
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                _formatTime(f.uploadTime),
-                                style: AppTypography.bodySmall
-                                    .copyWith(color: tertiaryColor),
-                              ),
-                              if (f.markedImportant) ...[
-                                const Spacer(),
-                                Icon(Icons.star_rounded,
-                                    size: 14, color: AppColors.warning),
-                              ],
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // Download button — real download with progress
-                    const SizedBox(width: 8),
-                    _FileDownloadButton(
-                      file: f,
-                      courseId: courseId,
-                      subColor: subColor,
-                    ),
-                  ],
-                ),
-              )
-                  .animate(delay: (40 * index).ms)
-                  .fadeIn(duration: 200.ms),
+              padding: const EdgeInsets.only(bottom: 8),
+              child: FileCard(
+                file: f,
+                courseName: courseName,
+                hideCourseName: true,
+                onTap: () {
+                  context.push(Routes.fileDetail(
+                    fileId: f.id,
+                    courseId: courseId,
+                    courseName: courseName,
+                  ));
+                },
+              ).animate(delay: (40 * index).ms).fadeIn(duration: 200.ms),
             );
           },
         );
       },
     );
-  }
-
-  IconData _fileIcon(String type) {
-    final lower = type.toLowerCase();
-    if (lower.contains('pdf')) return Icons.picture_as_pdf_rounded;
-    if (lower.contains('doc') || lower.contains('word'))
-      return Icons.description_rounded;
-    if (lower.contains('xls') || lower.contains('excel'))
-      return Icons.table_chart_rounded;
-    if (lower.contains('ppt') || lower.contains('power'))
-      return Icons.slideshow_rounded;
-    if (lower.contains('zip') || lower.contains('rar'))
-      return Icons.folder_zip_rounded;
-    if (lower.contains('mp4') || lower.contains('video') || lower.contains('avi'))
-      return Icons.video_file_rounded;
-    if (lower.contains('jpg') || lower.contains('png') || lower.contains('img'))
-      return Icons.image_rounded;
-    return Icons.insert_drive_file_rounded;
-  }
-
-  Color _fileColor(String type) {
-    final lower = type.toLowerCase();
-    if (lower.contains('pdf')) return const Color(0xFFEF4444);
-    if (lower.contains('doc') || lower.contains('word'))
-      return const Color(0xFF3B82F6);
-    if (lower.contains('xls') || lower.contains('excel'))
-      return const Color(0xFF22C55E);
-    if (lower.contains('ppt') || lower.contains('power'))
-      return const Color(0xFFF97316);
-    if (lower.contains('zip') || lower.contains('rar'))
-      return const Color(0xFF8B5CF6);
-    return const Color(0xFF6B7280);
-  }
-
-  String _formatTime(String time) {
-    final ms = int.tryParse(time);
-    if (ms == null) return time;
-    final d = DateTime.fromMillisecondsSinceEpoch(ms);
-    return '${d.month}/${d.day}';
   }
 }
 

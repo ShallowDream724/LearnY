@@ -221,8 +221,14 @@ class FileDownloadNotifier extends StateNotifier<Map<String, FileDownloadState>>
     state = newState;
   }
 
+  /// Clear all in-memory download states (used after cache wipe).
+  void clearAll() {
+    _activeDownloads.clear();
+    state = {};
+  }
+
   void _updateState(String fileId, FileDownloadState fileState) {
-    state = {...state, fileId: fileState};
+    state = Map.from(state)..[fileId] = fileState;
   }
 }
 
