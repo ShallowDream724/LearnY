@@ -18,7 +18,7 @@ import '../../features/assignments/assignments_screen.dart';
 import '../../features/assignments/homework_detail_screen.dart';
 import '../../features/courses/courses_screen.dart';
 import '../../features/courses/course_detail_screen.dart';
-import '../../features/files/files_screen.dart';
+
 import '../../features/files/file_detail_screen.dart';
 import '../../features/files/file_manager_screen.dart';
 import '../../features/notifications/notification_detail_screen.dart';
@@ -32,7 +32,7 @@ abstract final class Routes {
   static const String login = '/login';
   static const String home = '/';
   static const String assignments = '/assignments';
-  static const String files = '/files';
+
   static const String courses = '/courses';
   static const String profile = '/profile';
   static const String search = '/search';
@@ -181,12 +181,7 @@ GoRouter buildRouter({required WidgetRef ref}) {
               child: AssignmentsScreen(),
             ),
           ),
-          GoRoute(
-            path: Routes.files,
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: FilesScreen(),
-            ),
-          ),
+
           GoRoute(
             path: Routes.courses,
             pageBuilder: (context, state) => const NoTransitionPage(

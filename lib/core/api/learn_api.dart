@@ -745,10 +745,10 @@ class Learn2018Helper {
     }
 
     List result;
-    if (json['object']?['resultsList'] is List) {
-      result = json['object']['resultsList'];
-    } else if (json['object'] is List) {
+    if (json['object'] is List) {
       result = json['object'];
+    } else if (json['object'] is Map && json['object']['resultsList'] is List) {
+      result = json['object']['resultsList'];
     } else {
       result = [];
     }
@@ -762,82 +762,86 @@ class Learn2018Helper {
       }
     } catch (_) {}
 
-    return result.map((f) {
-      // API can return either Map (object) or List (array) format.
-      // Handle both formats.
-      if (f is List) {
-        // Array format — indices based on _getFileListByCategoryStudent
-        final fileId = f[7]?.toString() ?? '';
-        final title = decodeHTML(f[1]?.toString());
-        final rawSize = _toInt(f[9]);
-        final size = formatFileSize(rawSize);
-        final downloadUrl = urls.learnFileDownload(fileId, courseType);
-        final previewUrl = urls.learnFilePreview(
-          ContentType.file, fileId, courseType, firstPageOnly: previewFirstPage,
-        );
+    final parsed = <CourseFile>[];
+    for (final f in result) {
+      try {
+        if (f is List) {
+          // Array format
+          final fileId = f[7]?.toString() ?? '';
+          final title = decodeHTML(f[1]?.toString());
+          final rawSize = _toInt(f[9]);
+          final size = formatFileSize(rawSize);
+          final downloadUrl = urls.learnFileDownload(fileId, courseType);
+          final previewUrl = urls.learnFilePreview(
+            ContentType.file, fileId, courseType, firstPageOnly: previewFirstPage,
+          );
 
-        return CourseFile(
-          id: f[0]?.toString() ?? '',
-          fileId: fileId,
-          title: title,
-          description: decodeHTML(f[5]?.toString()),
-          rawSize: rawSize,
-          size: size,
-          uploadTime: f[6]?.toString() ?? '',
-          publishTime: f[10]?.toString() ?? '',
-          downloadUrl: downloadUrl,
-          previewUrl: previewUrl,
-          isNew: f[8] == 1,
-          markedImportant: f[2] == 1,
-          visitCount: 0,
-          downloadCount: 0,
-          fileType: (f.length > 13) ? (f[13]?.toString() ?? '') : '',
-          remoteFile: RemoteFile(
-            id: fileId, name: title,
-            downloadUrl: downloadUrl, previewUrl: previewUrl, size: size,
-          ),
-        );
+          parsed.add(CourseFile(
+            id: f[0]?.toString() ?? '',
+            fileId: fileId,
+            title: title,
+            description: decodeHTML(f[5]?.toString()),
+            rawSize: rawSize,
+            size: size,
+            uploadTime: f[6]?.toString() ?? '',
+            publishTime: f[10]?.toString() ?? '',
+            downloadUrl: downloadUrl,
+            previewUrl: previewUrl,
+            isNew: _toInt(f[8]) == 1,
+            markedImportant: _toInt(f[2]) == 1,
+            visitCount: 0,
+            downloadCount: 0,
+            fileType: (f.length > 13) ? (f[13]?.toString() ?? '') : '',
+            remoteFile: RemoteFile(
+              id: fileId, name: title,
+              downloadUrl: downloadUrl, previewUrl: previewUrl, size: size,
+            ),
+          ));
+        } else if (f is Map) {
+          // Map (object) format
+          final title = decodeHTML(f['bt']?.toString());
+          final fileId = f['wjid']?.toString() ?? '';
+          final uploadTime = f['scsj']?.toString() ?? '';
+          final downloadUrl = urls.learnFileDownload(fileId, courseType);
+          final previewUrl = urls.learnFilePreview(
+            ContentType.file,
+            fileId,
+            courseType,
+            firstPageOnly: previewFirstPage,
+          );
+          final size = f['fileSize']?.toString() ?? '';
+
+          parsed.add(CourseFile(
+            id: f['kjxxid']?.toString() ?? '',
+            fileId: fileId,
+            category: categories[f['kjflid']?.toString()],
+            title: title,
+            description: decodeHTML(f['ms']?.toString()),
+            rawSize: _toInt(f['wjdx']),
+            size: size,
+            uploadTime: uploadTime,
+            publishTime: uploadTime,
+            downloadUrl: downloadUrl,
+            previewUrl: previewUrl,
+            isNew: f['isNew'] == true || _toInt(f['isNew']) == 1,
+            markedImportant: _toInt(f['sfqd']) == 1,
+            visitCount: _toInt(f['xsllcs'] ?? f['llcs']),
+            downloadCount: _toInt(f['xzcs']),
+            fileType: f['wjlx']?.toString() ?? '',
+            remoteFile: RemoteFile(
+              id: fileId,
+              name: title,
+              downloadUrl: downloadUrl,
+              previewUrl: previewUrl,
+              size: size,
+            ),
+          ));
+        }
+      } catch (e, st) {
+        debugPrint('[API] Failed to parse file: $e\n$st');
       }
-
-      // Map (object) format — original logic
-      final title = decodeHTML(f['bt']?.toString());
-      final fileId = f['wjid']?.toString() ?? '';
-      final uploadTime = f['scsj']?.toString() ?? '';
-      final downloadUrl = urls.learnFileDownload(fileId, courseType);
-      final previewUrl = urls.learnFilePreview(
-        ContentType.file,
-        fileId,
-        courseType,
-        firstPageOnly: previewFirstPage,
-      );
-      final size = f['fileSize']?.toString() ?? '';
-
-      return CourseFile(
-        id: f['kjxxid']?.toString() ?? '',
-        fileId: fileId,
-        category: categories[f['kjflid']?.toString()],
-        title: title,
-        description: decodeHTML(f['ms']?.toString()),
-        rawSize: _toInt(f['wjdx']),
-        size: size,
-        uploadTime: uploadTime,
-        publishTime: uploadTime,
-        downloadUrl: downloadUrl,
-        previewUrl: previewUrl,
-        isNew: f['isNew'] == true,
-        markedImportant: f['sfqd'] == 1,
-        visitCount: _toInt(f['xsllcs'] ?? f['llcs']),
-        downloadCount: _toInt(f['xzcs']),
-        fileType: f['wjlx']?.toString() ?? '',
-        remoteFile: RemoteFile(
-          id: fileId,
-          name: title,
-          downloadUrl: downloadUrl,
-          previewUrl: previewUrl,
-          size: size,
-        ),
-      );
-    }).toList();
+    }
+    return parsed;
   }
 
   // -------------------------------------------------------------------

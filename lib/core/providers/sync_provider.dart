@@ -332,8 +332,9 @@ class SyncNotifier extends StateNotifier<SyncState> {
             downloadCount: Value(f.downloadCount),
           ));
         }
-      }).catchError((e) {
+      }).catchError((e, stackTrace) {
         debugPrint('[Sync] File sync failed for ${course.name}: $e');
+        debugPrint('[Sync] Stack trace:\n$stackTrace');
         warnings.add('${course.name}: 文件同步失败 ($e)');
       }),
     ]);

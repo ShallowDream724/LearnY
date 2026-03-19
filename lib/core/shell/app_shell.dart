@@ -1,8 +1,9 @@
 /// App shell — adaptive navigation: bottom bar on phones, side rail on tablets.
 ///
 /// Uses Material 3 NavigationBar (compact) / NavigationRail (medium+).
-/// 5 tabs: Home, Assignments, Files, Courses, Profile.
+/// 4 tabs: Home, Assignments, Courses, Profile.
 library;
+
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -22,9 +23,8 @@ class AppShell extends ConsumerWidget {
   int _currentIndex(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
     if (location.startsWith(Routes.assignments)) return 1;
-    if (location.startsWith(Routes.files)) return 2;
-    if (location.startsWith(Routes.courses)) return 3;
-    if (location.startsWith(Routes.profile)) return 4;
+    if (location.startsWith(Routes.courses)) return 2;
+    if (location.startsWith(Routes.profile)) return 3;
     return 0;
   }
 
@@ -35,10 +35,8 @@ class AppShell extends ConsumerWidget {
       case 1:
         context.go(Routes.assignments);
       case 2:
-        context.go(Routes.files);
-      case 3:
         context.go(Routes.courses);
-      case 4:
+      case 3:
         context.go(Routes.profile);
     }
   }
@@ -162,11 +160,6 @@ class AppShell extends ConsumerWidget {
                   label: Text('作业'),
                 ),
                 NavigationRailDestination(
-                  icon: Icon(Icons.folder_outlined),
-                  selectedIcon: Icon(Icons.folder_rounded),
-                  label: Text('文件'),
-                ),
-                NavigationRailDestination(
                   icon: Icon(Icons.school_outlined),
                   selectedIcon: Icon(Icons.school_rounded),
                   label: Text('课程'),
@@ -218,11 +211,6 @@ class AppShell extends ConsumerWidget {
               icon: Icon(Icons.assignment_outlined),
               selectedIcon: Icon(Icons.assignment_rounded),
               label: '作业',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.folder_outlined),
-              selectedIcon: Icon(Icons.folder_rounded),
-              label: '文件',
             ),
             NavigationDestination(
               icon: Icon(Icons.school_outlined),
