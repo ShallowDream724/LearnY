@@ -39,6 +39,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../core/design/colors.dart';
@@ -46,6 +47,7 @@ import '../../core/design/typography.dart';
 import '../../core/providers/providers.dart';
 import '../../core/api/urls.dart' as urls;
 import '../../core/api/learn_api.dart';
+import '../../core/router/router.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -178,13 +180,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       await ref.read(authProvider.notifier).onLoginSuccess(username);
 
       if (mounted) {
-        setState(() {
-          _showWebView = false;
-          _isLoading = false;
-          _isProcessingTicket = false;
-        });
+        // Navigate to home — GoRouter redirect guard won't
+        // re-fire on its own since there's no refreshListenable.
+        context.go(Routes.home);
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('[LearnX] Login failed: $e');
+      debugPrint('[LearnX] Stack trace: $stackTrace');
       if (mounted) {
         setState(() {
           _errorMessage = '登录认证失败: ${_truncateError(e.toString())}';
@@ -266,11 +268,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       await ref.read(authProvider.notifier).onLoginSuccess(username);
 
       if (mounted) {
-        setState(() {
-          _showWebView = false;
-          _isLoading = false;
-          _isProcessingTicket = false;
-        });
+        context.go(Routes.home);
       }
     } catch (e) {
       if (mounted) {

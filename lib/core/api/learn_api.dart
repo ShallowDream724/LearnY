@@ -15,6 +15,8 @@ library;
 
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
@@ -339,13 +341,17 @@ class Learn2018Helper {
   /// authentication, we intercept the roaming ticket, then use Dio to
   /// establish the API session.
   Future<void> loginWithTicket(String ticket) async {
+    debugPrint('[LearnX] loginWithTicket: starting roam...');
     final roamResp = await _followRedirectsManually(
       urls.learnAuthRoam(ticket),
     );
+    debugPrint('[LearnX] loginWithTicket: roam done, '
+        'status=${roamResp.statusCode}, url=${roamResp.realUri}');
     if (roamResp.statusCode != 200) {
       throw const ApiError(reason: FailReason.errorRoaming);
     }
     await _extractCSRFToken();
+    debugPrint('[LearnX] loginWithTicket: complete, csrf=$_csrfToken');
   }
 
   // -------------------------------------------------------------------
@@ -365,6 +371,7 @@ class Learn2018Helper {
   /// - `followRedirects: false` + redirect interceptor → calling
   ///   `_dio.get()` inside an interceptor deadlocks the queue.
   Future<Response> _followRedirectsManually(String url) async {
+    debugPrint('[LearnX] _followRedirects: start $url');
     final bareDio = Dio(BaseOptions(
       followRedirects: false,
       validateStatus: (_) => true, // accept all status codes
@@ -378,6 +385,8 @@ class Learn2018Helper {
     late Response resp;
     for (int i = 0; i < 10; i++) {
       resp = await bareDio.get(currentUrl);
+      debugPrint('[LearnX] _followRedirects: hop $i '
+          'status=${resp.statusCode} url=$currentUrl');
       if (resp.statusCode != null &&
           resp.statusCode! >= 300 &&
           resp.statusCode! < 400) {
@@ -401,9 +410,13 @@ class Learn2018Helper {
   /// Fetch the student course list page and extract the CSRF token.
   /// Also detects the current language setting.
   Future<void> _extractCSRFToken() async {
+    debugPrint('[LearnX] _extractCSRFToken: fetching course list...');
     final courseListResp =
         await _dio.get(urls.learnStudentCourseListPage());
     final pageSource = courseListResp.data.toString();
+    debugPrint('[LearnX] _extractCSRFToken: page length=${pageSource.length}, '
+        'status=${courseListResp.statusCode}, url=${courseListResp.realUri}');
+    debugPrint('[LearnX] _extractCSRFToken: preview=${pageSource.substring(0, pageSource.length.clamp(0, 300))}');
 
     // Try multiple regex patterns for robustness.
     String? csrfToken;
