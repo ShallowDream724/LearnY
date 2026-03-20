@@ -1,6 +1,7 @@
 /// Notification card — compact unread notification item.
 import 'package:flutter/material.dart';
 
+import '../../../core/design/app_theme_colors.dart';
 import '../../../core/design/colors.dart';
 import '../../../core/design/typography.dart';
 import '../../../core/providers/sync_provider.dart';
@@ -13,18 +14,10 @@ class NotificationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final subColor =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
-    final tertiaryColor =
-        isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+    final c = context.colors;
 
     return Material(
-      color: surface,
+      color: c.surface,
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onTap,
@@ -33,7 +26,7 @@ class NotificationCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: border, width: 0.5),
+        border: Border.all(color: c.border, width: 0.5),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -66,7 +59,7 @@ class NotificationCard extends StatelessWidget {
                       child: Text(
                         notification.courseName,
                         style: AppTypography.labelSmall.copyWith(
-                          color: subColor,
+                          color: c.subtitle,
                           letterSpacing: 0.3,
                         ),
                         maxLines: 1,
@@ -76,7 +69,7 @@ class NotificationCard extends StatelessWidget {
                     Text(
                       _formatTime(notification.publishTime),
                       style: AppTypography.bodySmall.copyWith(
-                        color: tertiaryColor,
+                        color: c.tertiary,
                         fontSize: 11,
                       ),
                     ),
@@ -86,7 +79,7 @@ class NotificationCard extends StatelessWidget {
                 // Notification title
                 Text(
                   notification.title,
-                  style: AppTypography.titleMedium.copyWith(color: textColor),
+                  style: AppTypography.titleMedium.copyWith(color: c.text),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -95,7 +88,7 @@ class NotificationCard extends StatelessWidget {
                   Text(
                     notification.publisher,
                     style: AppTypography.bodySmall.copyWith(
-                      color: tertiaryColor,
+                      color: c.tertiary,
                     ),
                   ),
                 ],

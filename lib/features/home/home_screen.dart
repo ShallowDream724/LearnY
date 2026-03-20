@@ -346,7 +346,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             value: data.totalCourses.toString(),
             icon: Icons.school_rounded,
             color: AppColors.primary,
-            isDark: isDark,
           ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.1, end: 0),
         ),
         const SizedBox(width: 10),
@@ -358,7 +357,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             color: data.pendingAssignments > 0
                 ? AppColors.warning
                 : AppColors.success,
-            isDark: isDark,
           )
               .animate(delay: 100.ms)
               .fadeIn(duration: 400.ms)
@@ -373,7 +371,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             color: data.unreadCount > 0
                 ? AppColors.unreadBadge
                 : AppColors.success,
-            isDark: isDark,
           )
               .animate(delay: 200.ms)
               .fadeIn(duration: 400.ms)

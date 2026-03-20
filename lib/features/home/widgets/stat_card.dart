@@ -2,7 +2,7 @@
 /// Horizontal layout: icon left, number + label right.
 import 'package:flutter/material.dart';
 
-import '../../../core/design/colors.dart';
+import '../../../core/design/app_theme_colors.dart';
 import '../../../core/design/typography.dart';
 
 class StatCard extends StatelessWidget {
@@ -10,7 +10,6 @@ class StatCard extends StatelessWidget {
   final String value;
   final IconData icon;
   final Color color;
-  final bool isDark;
 
   const StatCard({
     super.key,
@@ -18,24 +17,18 @@ class StatCard extends StatelessWidget {
     required this.value,
     required this.icon,
     required this.color,
-    required this.isDark,
   });
 
   @override
   Widget build(BuildContext context) {
-    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final subColor =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+    final c = context.colors;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: surface,
+        color: c.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: border, width: 0.5),
+        border: Border.all(color: c.border, width: 0.5),
       ),
       child: Row(
         children: [
@@ -57,7 +50,7 @@ class StatCard extends StatelessWidget {
                 Text(
                   value,
                   style: AppTypography.statMedium.copyWith(
-                    color: textColor,
+                    color: c.text,
                     fontSize: 18,
                     height: 1.1,
                   ),
@@ -65,7 +58,7 @@ class StatCard extends StatelessWidget {
                 Text(
                   label,
                   style: AppTypography.bodySmall.copyWith(
-                    color: subColor,
+                    color: c.subtitle,
                     fontSize: 11,
                   ),
                 ),

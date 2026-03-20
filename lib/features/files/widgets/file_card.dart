@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/design/app_theme_colors.dart';
 import '../../../core/design/colors.dart';
 import '../../../core/database/database.dart' as db;
 import '../../../core/services/file_download_service.dart';
@@ -26,15 +27,7 @@ class FileCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final sub =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
-    final tertiary =
-        isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
-    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
+    final c = context.colors;
 
     final ext = _extractExt(file.title, file.fileType);
     final color = fileColor(ext);
@@ -53,9 +46,9 @@ class FileCard extends ConsumerWidget {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: surface,
+          color: c.surface,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: border, width: 0.5),
+          border: Border.all(color: c.border, width: 0.5),
         ),
         child: Row(
           children: [
@@ -83,7 +76,7 @@ class FileCard extends ConsumerWidget {
                         decoration: BoxDecoration(
                           color: AppColors.success,
                           shape: BoxShape.circle,
-                          border: Border.all(color: surface, width: 1.5),
+                          border: Border.all(color: c.surface, width: 1.5),
                         ),
                         child: const Icon(Icons.check,
                             size: 7, color: Colors.white),
@@ -121,7 +114,7 @@ class FileCard extends ConsumerWidget {
                         courseName,
                         style: TextStyle(
                           fontSize: 11,
-                          color: tertiary,
+                          color: c.tertiary,
                           fontWeight: FontWeight.w500,
                         ),
                         maxLines: 1,
@@ -138,7 +131,7 @@ class FileCard extends ConsumerWidget {
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            color: textColor,
+                            color: c.text,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -153,7 +146,7 @@ class FileCard extends ConsumerWidget {
                             color: AppColors.info.withAlpha(20),
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: Text(
+                          child: const Text(
                             'NEW',
                             style: TextStyle(
                               color: AppColors.info,
@@ -163,8 +156,8 @@ class FileCard extends ConsumerWidget {
                           ),
                         ),
                       if (file.markedImportant)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 4),
+                        const Padding(
+                          padding: EdgeInsets.only(left: 4),
                           child: Icon(Icons.star_rounded,
                               size: 14, color: AppColors.warning),
                         ),
@@ -188,12 +181,12 @@ class FileCard extends ConsumerWidget {
                         file.size.isNotEmpty
                             ? file.size
                             : '${file.rawSize} B',
-                        style: TextStyle(fontSize: 11, color: tertiary),
+                        style: TextStyle(fontSize: 11, color: c.tertiary),
                       ),
                       const Spacer(),
                       Text(
                         _formatTimeAgo(file.uploadTime),
-                        style: TextStyle(fontSize: 11, color: tertiary),
+                        style: TextStyle(fontSize: 11, color: c.tertiary),
                       ),
                     ],
                   ),
@@ -205,7 +198,7 @@ class FileCard extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.only(left: 6),
               child: Icon(Icons.chevron_right_rounded,
-                  size: 18, color: tertiary),
+                  size: 18, color: c.tertiary),
             ),
           ],
         ),
