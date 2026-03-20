@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/design/colors.dart';
+import '../../core/design/cooldown_toast.dart';
 import '../../core/design/shimmer.dart';
 import '../../core/design/typography.dart';
 import '../../core/design/responsive.dart';
@@ -86,6 +87,10 @@ class CoursesScreen extends ConsumerWidget {
       body: RefreshIndicator(
         onRefresh: () async {
           await ref.read(syncStateProvider.notifier).syncAll();
+          final ss = ref.read(syncStateProvider);
+          if (ss.status == SyncStatus.cooldown && context.mounted) {
+            CooldownToast.show(context, seconds: ss.cooldownSeconds);
+          }
           ref.invalidate(_courseStatsProvider);
         },
         color: AppColors.primary,

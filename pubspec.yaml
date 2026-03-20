@@ -61,6 +61,7 @@ dependencies:
   google_fonts: ^6.2.1
   open_filex: ^4.7.0
   flutter_pdfview: ^1.4.4
+  file_picker: ^10.3.10
 
 dev_dependencies:
   flutter_test:

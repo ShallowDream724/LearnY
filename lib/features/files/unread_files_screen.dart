@@ -11,10 +11,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/design/colors.dart';
+import '../../core/design/cooldown_toast.dart';
 import '../../core/design/swipe_to_read.dart';
 import '../../core/design/typography.dart';
 import '../../core/database/database.dart' as db;
 import '../../core/providers/providers.dart';
+import '../../core/providers/sync_provider.dart';
 import '../../core/router/router.dart';
 import '../files/widgets/file_card.dart';
 
@@ -129,7 +131,16 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
           onPressed: () => context.pop(),
         ),
       ),
-      body: filesAsync.when(
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await ref.read(syncStateProvider.notifier).syncFilesOnly();
+          final ss = ref.read(syncStateProvider);
+          if (ss.status == SyncStatus.cooldown && context.mounted) {
+            CooldownToast.show(context, seconds: ss.cooldownSeconds);
+          }
+        },
+        color: AppColors.primary,
+        child: filesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(
             child: Text('加载失败', style: TextStyle(color: tertiary))),
@@ -256,6 +267,7 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
           );
         },
       ),
+      ),
     );
   }
 
@@ -267,8 +279,10 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
       itemBuilder: (context, i) {
         final f = files[i];
         return Padding(
+          key: ValueKey(f.id),
           padding: const EdgeInsets.only(bottom: 8),
           child: SwipeToRead(
+            key: ValueKey('swipe_${f.id}'),
             exitOnSwipe: true,
             onSwipe: () => _markRead(f),
             child: FileCard(
@@ -387,6 +401,7 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
                     (e) => Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: SwipeToRead(
+                        key: ValueKey('swipe_${e.value.id}'),
                         exitOnSwipe: true,
                         onSwipe: () => _markRead(e.value),
                         child: FileCard(

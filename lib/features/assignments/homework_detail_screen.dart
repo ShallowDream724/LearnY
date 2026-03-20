@@ -30,6 +30,7 @@ import '../../core/design/shimmer.dart';
 import '../../core/design/typography.dart';
 import '../../core/database/database.dart' as db;
 import '../../core/providers/providers.dart';
+import 'assignment_submission_screen.dart';
 
 class HomeworkDetailScreen extends ConsumerStatefulWidget {
   final String homeworkId;
@@ -99,8 +100,44 @@ class _HomeworkDetailScreenState extends ConsumerState<HomeworkDetailScreen> {
       );
     }
 
+    // Can submit: not graded, and deadline hasn't fully passed
+    // (or late submission still possible)
+    final canSubmit = !hw.graded;
+
     return Scaffold(
       backgroundColor: bg,
+      floatingActionButton: canSubmit
+          ? FloatingActionButton.extended(
+              onPressed: () async {
+                final result = await Navigator.of(context).push<bool>(
+                  MaterialPageRoute(
+                    fullscreenDialog: true,
+                    builder: (_) => AssignmentSubmissionScreen(
+                      homework: hw,
+                      courseName: widget.courseName,
+                    ),
+                  ),
+                );
+                if (result == true) {
+                  _loadData(); // Refresh to show updated submission
+                }
+              },
+              backgroundColor: AppColors.primary,
+              icon: Icon(
+                hw.submitted
+                    ? Icons.edit_rounded
+                    : Icons.upload_rounded,
+                color: Colors.white,
+              ),
+              label: Text(
+                hw.submitted ? '重新提交' : '提交作业',
+                style: AppTypography.labelMedium.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            )
+          : null,
       body: CustomScrollView(
         slivers: [
           // ── App Bar ──
@@ -114,7 +151,7 @@ class _HomeworkDetailScreenState extends ConsumerState<HomeworkDetailScreen> {
 
           // ── Content ──
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
                 ResponsiveContent(

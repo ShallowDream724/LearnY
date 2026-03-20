@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/design/colors.dart';
+import '../../core/design/cooldown_toast.dart';
 import '../../core/design/shimmer.dart';
 import '../../core/design/swipe_to_read.dart';
 import '../../core/design/typography.dart';
@@ -70,6 +71,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ),
       );
+    } else if (syncState.status == SyncStatus.cooldown) {
+      CooldownToast.show(context, seconds: syncState.cooldownSeconds);
     } else if (syncState.status == SyncStatus.error) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -134,19 +137,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ],
               ),
               actions: [
-                // Sync indicator
-                if (syncState.status == SyncStatus.syncing)
-                  const Padding(
-                    padding: EdgeInsets.only(right: 16),
-                    child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ),
                 IconButton(
                   icon: const Icon(Icons.search_rounded),
                   onPressed: () {
@@ -217,6 +207,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             (e) => Padding(
                               padding: const EdgeInsets.only(bottom: 10),
                               child: SwipeToRead(
+                                key: ValueKey(e.value.id),
                                 exitOnSwipe: true,
                                 onSwipe: () {
                                   ref.read(databaseProvider)
@@ -302,6 +293,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             (e) => Padding(
                               padding: const EdgeInsets.only(bottom: 8),
                               child: SwipeToRead(
+                                key: ValueKey(e.value.id),
                                 exitOnSwipe: true,
                                 onSwipe: () {
                                   ref.read(databaseProvider)

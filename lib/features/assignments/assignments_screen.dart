@@ -17,6 +17,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/design/colors.dart';
+import '../../core/design/cooldown_toast.dart';
 import '../../core/design/shimmer.dart';
 import '../../core/design/typography.dart';
 import '../../core/providers/providers.dart';
@@ -146,7 +147,11 @@ class AssignmentsScreen extends ConsumerWidget {
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: () async {
-          await ref.read(syncStateProvider.notifier).syncAll();
+          await ref.read(syncStateProvider.notifier).syncHomeworksOnly();
+          final ss = ref.read(syncStateProvider);
+          if (ss.status == SyncStatus.cooldown && context.mounted) {
+            CooldownToast.show(context, seconds: ss.cooldownSeconds);
+          }
           ref.invalidate(_homeworkListProvider);
           ref.invalidate(_courseNameMapProvider);
         },

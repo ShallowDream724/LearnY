@@ -16,6 +16,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/design/colors.dart';
+import '../../core/design/cooldown_toast.dart';
 import '../../core/design/responsive.dart';
 import '../../core/design/shimmer.dart';
 import '../../core/design/swipe_to_read.dart';
@@ -450,7 +451,12 @@ class _FilesTabState extends ConsumerState<_FilesTab> {
   }
 
   Future<void> _onRefresh() async {
-    await ref.read(syncStateProvider.notifier).syncAll();
+    await ref.read(syncStateProvider.notifier).syncCourse(widget.courseId);
+    if (!mounted) return;
+    final ss = ref.read(syncStateProvider);
+    if (ss.status == SyncStatus.cooldown) {
+      CooldownToast.show(context, seconds: ss.cooldownSeconds);
+    }
   }
 
   void _markAsRead(db.CourseFile file) {

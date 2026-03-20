@@ -16,7 +16,7 @@ import 'providers.dart';
 // Sync state
 // ---------------------------------------------------------------------------
 
-enum SyncStatus { idle, syncing, success, error, sessionExpired }
+enum SyncStatus { idle, syncing, success, error, sessionExpired, cooldown }
 
 class SyncState {
   final SyncStatus status;
@@ -29,12 +29,16 @@ class SyncState {
   /// Number of items updated in the last sync.
   final int updatedCount;
 
+  /// Seconds remaining before next sync allowed (only for cooldown status).
+  final int cooldownSeconds;
+
   const SyncState({
     this.status = SyncStatus.idle,
     this.errorMessage,
     this.lastSynced,
     this.syncWarnings = const [],
     this.updatedCount = 0,
+    this.cooldownSeconds = 0,
   });
 }
 
@@ -160,10 +164,50 @@ final syncStateProvider =
 class SyncNotifier extends StateNotifier<SyncState> {
   final Ref _ref;
 
+  /// Last time a full sync completed.
+  DateTime? _lastFullSync;
+
+  /// Per-type last sync timestamps.
+  DateTime? _lastHomeworkSync;
+  DateTime? _lastFileSync;
+
+  /// Per-course last sync timestamps.
+  final _courseSyncTimes = <String, DateTime>{};
+
+  /// Global cooldown: skip full sync if < 30s since last one.
+  static const _globalCooldown = Duration(seconds: 30);
+
+  /// Per-type cooldowns.
+  static const _homeworkCooldown = Duration(seconds: 10);
+  static const _fileCooldown = Duration(seconds: 15);
+
+  /// Per-course cooldown.
+  static const _courseCooldown = Duration(seconds: 5);
+
   SyncNotifier(this._ref) : super(const SyncState());
 
+  // -----------------------------------------------------------------------
+  // Public sync methods — one per page context
+  // -----------------------------------------------------------------------
+
+  /// Full sync for home screen / app launch.
+  /// Priority: homeworks → notifications → files (streaming).
+  /// Each type writes to DB immediately → Drift streams update UI.
   Future<void> syncAll() async {
     if (state.status == SyncStatus.syncing) return;
+
+    // Cooldown check
+    if (_lastFullSync != null &&
+        DateTime.now().difference(_lastFullSync!) < _globalCooldown) {
+      final remaining = _globalCooldown.inSeconds -
+          DateTime.now().difference(_lastFullSync!).inSeconds;
+      state = SyncState(
+        status: SyncStatus.cooldown,
+        cooldownSeconds: remaining,
+        lastSynced: _lastFullSync,
+      );
+      return;
+    }
 
     state = const SyncState(status: SyncStatus.syncing);
 
@@ -171,71 +215,35 @@ class SyncNotifier extends StateNotifier<SyncState> {
       final api = _ref.read(apiClientProvider);
       final db = _ref.read(databaseProvider);
       final warnings = <String>[];
-      int updated = 0;
 
-      // 1. Get current semester
-      final semester = await api.getCurrentSemester();
-      _ref.read(currentSemesterIdProvider.notifier).state = semester.id;
+      // 1. Semester + courses (required before content sync)
+      final courses = await _syncSemesterAndCourses(api, db);
 
-      await db.upsertSemester(SemestersCompanion.insert(
-        id: semester.id,
-        startDate: semester.startDate,
-        endDate: semester.endDate,
-        startYear: semester.startYear,
-        endYear: semester.endYear,
-        type: semester.type.value,
-      ));
+      // 2. Stream content by priority: HW → notifications → files
+      //    Each type completes for ALL courses before next type starts.
+      //    Within each type, batch 4 courses in parallel.
+      await _syncTypeForAllCourses(api, db, courses, _ContentType.homework, warnings);
+      // ↑ At this point DDL banner can already show fresh data
 
-      // 2. Get courses for current semester
-      final courses = await api.getCourseList(semester.id);
+      await _syncTypeForAllCourses(api, db, courses, _ContentType.notification, warnings);
+      // ↑ Now unread notifications are fresh too
 
+      await _syncTypeForAllCourses(api, db, courses, _ContentType.file, warnings);
+      // ↑ Finally, files are up to date
+
+      _lastFullSync = DateTime.now();
       for (final c in courses) {
-        await db.upsertCourse(CoursesCompanion.insert(
-          id: c.id,
-          name: c.name,
-          chineseName: c.chineseName,
-          englishName: Value(c.englishName),
-          teacherName: Value(c.teacherName),
-          teacherNumber: Value(c.teacherNumber),
-          courseNumber: Value(c.courseNumber),
-          courseIndex: Value(c.courseIndex),
-          courseType: c.courseType.value,
-          semesterId: semester.id,
-        ));
-      }
-      updated += courses.length;
-
-      // 3. Fetch notifications, files, and homeworks — 4 courses concurrently
-      const batchSize = 4;
-      for (var i = 0; i < courses.length; i += batchSize) {
-        final batch = courses.skip(i).take(batchSize);
-        await Future.wait(batch.map((course) => _syncCourseData(
-          api, db, _SyncCourseRef(course.id, course.name), warnings,
-        )));
-        updated += batch.length; // rough count
+        _courseSyncTimes[c.id] = DateTime.now();
       }
 
       state = SyncState(
         status: SyncStatus.success,
         lastSynced: DateTime.now(),
         syncWarnings: warnings,
-        updatedCount: updated,
+        updatedCount: courses.length,
       );
-
-      // Force home screen to re-read data from DB.
-      _ref.invalidate(homeDataProvider);
     } on api.ApiError catch (e) {
-      if (e.reason == FailReason.notLoggedIn || e.reason == FailReason.noCredential) {
-        state = const SyncState(
-          status: SyncStatus.sessionExpired,
-          errorMessage: '会话过期，请重新登录',
-        );
-      } else {
-        state = SyncState(
-          status: SyncStatus.error,
-          errorMessage: '同步失败: $e',
-        );
-      }
+      _handleApiError(e);
     } catch (e) {
       state = SyncState(
         status: SyncStatus.error,
@@ -244,49 +252,186 @@ class SyncNotifier extends StateNotifier<SyncState> {
     }
   }
 
-  /// Sync a single course's data (notifications + homeworks + files in parallel).
-  /// Used by pull-to-refresh in course detail.
+  /// Sync only homeworks for all courses.
+  /// Used by: assignments page pull-to-refresh. Cooldown: 10s.
+  Future<void> syncHomeworksOnly() async {
+    if (state.status == SyncStatus.syncing) return;
+
+    if (_lastHomeworkSync != null &&
+        DateTime.now().difference(_lastHomeworkSync!) < _homeworkCooldown) {
+      final remaining = _homeworkCooldown.inSeconds -
+          DateTime.now().difference(_lastHomeworkSync!).inSeconds;
+      state = SyncState(
+        status: SyncStatus.cooldown,
+        cooldownSeconds: remaining,
+        lastSynced: _lastHomeworkSync,
+      );
+      return;
+    }
+
+    state = const SyncState(status: SyncStatus.syncing);
+    try {
+      final api = _ref.read(apiClientProvider);
+      final db = _ref.read(databaseProvider);
+      final courses = await _getStoredCourses(db);
+      final warnings = <String>[];
+      await _syncTypeForAllCourses(api, db, courses, _ContentType.homework, warnings);
+      _lastHomeworkSync = DateTime.now();
+      state = SyncState(
+        status: SyncStatus.success,
+        lastSynced: DateTime.now(),
+        syncWarnings: warnings,
+        updatedCount: courses.length,
+      );
+    } catch (e) {
+      state = SyncState(status: SyncStatus.error, errorMessage: '$e');
+    }
+  }
+
+  /// Sync only files for all courses.
+  /// Used by: unread files page pull-to-refresh. Cooldown: 15s.
+  Future<void> syncFilesOnly() async {
+    if (state.status == SyncStatus.syncing) return;
+
+    if (_lastFileSync != null &&
+        DateTime.now().difference(_lastFileSync!) < _fileCooldown) {
+      final remaining = _fileCooldown.inSeconds -
+          DateTime.now().difference(_lastFileSync!).inSeconds;
+      state = SyncState(
+        status: SyncStatus.cooldown,
+        cooldownSeconds: remaining,
+        lastSynced: _lastFileSync,
+      );
+      return;
+    }
+
+    state = const SyncState(status: SyncStatus.syncing);
+    try {
+      final api = _ref.read(apiClientProvider);
+      final db = _ref.read(databaseProvider);
+      final courses = await _getStoredCourses(db);
+      final warnings = <String>[];
+      await _syncTypeForAllCourses(api, db, courses, _ContentType.file, warnings);
+      _lastFileSync = DateTime.now();
+      state = SyncState(
+        status: SyncStatus.success,
+        lastSynced: DateTime.now(),
+        syncWarnings: warnings,
+        updatedCount: courses.length,
+      );
+    } catch (e) {
+      state = SyncState(status: SyncStatus.error, errorMessage: '$e');
+    }
+  }
+
+  /// Sync a single course (all 3 types in parallel).
+  /// Used by: course detail pull-to-refresh. Cooldown: 5s.
   Future<void> syncCourse(String courseId) async {
+    final lastSync = _courseSyncTimes[courseId];
+    if (lastSync != null &&
+        DateTime.now().difference(lastSync) < _courseCooldown) {
+      final remaining = _courseCooldown.inSeconds -
+          DateTime.now().difference(lastSync).inSeconds;
+      state = SyncState(
+        status: SyncStatus.cooldown,
+        cooldownSeconds: remaining,
+        lastSynced: lastSync,
+      );
+      return;
+    }
+
     final api = _ref.read(apiClientProvider);
     final db = _ref.read(databaseProvider);
     final warnings = <String>[];
-    await _syncCourseData(api, db,
-        _SyncCourseRef(courseId, ''), warnings);
+    final ref = _SyncCourseRef(courseId, '');
+
+    // All 3 types in parallel for this one course
+    await Future.wait([
+      _syncHomeworks(api, db, ref, warnings),
+      _syncNotifications(api, db, ref, warnings),
+      _syncFiles(api, db, ref, warnings),
+    ]);
+
+    _courseSyncTimes[courseId] = DateTime.now();
   }
 
-  /// Internal helper: sync notifications, homeworks, and files for one course
-  /// with parallel API fetches. Errors are collected into [warnings] instead
-  /// of thrown.
-  Future<void> _syncCourseData(
-    Learn2018Helper api,
+  // -----------------------------------------------------------------------
+  // Internal helpers
+  // -----------------------------------------------------------------------
+
+  /// Sync semester info and course list. Returns courses.
+  Future<List<dynamic>> _syncSemesterAndCourses(
+    Learn2018Helper apiClient,
+    AppDatabase db,
+  ) async {
+    final semester = await apiClient.getCurrentSemester();
+    _ref.read(currentSemesterIdProvider.notifier).state = semester.id;
+
+    await db.upsertSemester(SemestersCompanion.insert(
+      id: semester.id,
+      startDate: semester.startDate,
+      endDate: semester.endDate,
+      startYear: semester.startYear,
+      endYear: semester.endYear,
+      type: semester.type.value,
+    ));
+
+    final courses = await apiClient.getCourseList(semester.id);
+    for (final c in courses) {
+      await db.upsertCourse(CoursesCompanion.insert(
+        id: c.id,
+        name: c.name,
+        chineseName: c.chineseName,
+        englishName: Value(c.englishName),
+        teacherName: Value(c.teacherName),
+        teacherNumber: Value(c.teacherNumber),
+        courseNumber: Value(c.courseNumber),
+        courseIndex: Value(c.courseIndex),
+        courseType: c.courseType.value,
+        semesterId: semester.id,
+      ));
+    }
+    return courses;
+  }
+
+  /// Get already-stored courses from DB (for type-only syncs).
+  Future<List<_SyncCourseRef>> _getStoredCourses(AppDatabase db) async {
+    final semId = _ref.read(currentSemesterIdProvider);
+    if (semId == null) return [];
+    final courses = await db.getCoursesBySemester(semId);
+    return courses.map((c) => _SyncCourseRef(c.id, c.name)).toList();
+  }
+
+  /// Sync one content type for all courses in parallel.
+  Future<void> _syncTypeForAllCourses(
+    Learn2018Helper apiClient,
+    AppDatabase db,
+    List<dynamic> courses,
+    _ContentType type,
+    List<String> warnings,
+  ) async {
+    await Future.wait(courses.map((course) {
+      final ref = course is _SyncCourseRef
+          ? course
+          : _SyncCourseRef(course.id, course.name);
+      return switch (type) {
+        _ContentType.homework => _syncHomeworks(apiClient, db, ref, warnings),
+        _ContentType.notification => _syncNotifications(apiClient, db, ref, warnings),
+        _ContentType.file => _syncFiles(apiClient, db, ref, warnings),
+      };
+    }));
+  }
+
+  /// Sync homeworks for one course.
+  Future<void> _syncHomeworks(
+    Learn2018Helper apiClient,
     AppDatabase db,
     _SyncCourseRef course,
     List<String> warnings,
   ) async {
-    await Future.wait([
-      // Notifications
-      api.getNotificationList(course.id).then((notifications) async {
-        for (final n in notifications) {
-          await db.upsertNotification(NotificationsCompanion.insert(
-            id: n.id,
-            courseId: course.id,
-            title: n.title,
-            content: Value(n.content),
-            publisher: Value(n.publisher),
-            publishTime: n.publishTime,
-            expireTime: Value(n.expireTime),
-            hasRead: Value(n.hasRead),
-            markedImportant: Value(n.markedImportant),
-            isFavorite: Value(n.isFavorite),
-            comment: Value(n.comment),
-          ));
-        }
-      }).catchError((e) {
-        warnings.add('${course.name}: 通知同步失败 ($e)');
-      }),
-
-      // Homeworks
-      api.getHomeworkList(course.id).then((homeworks) async {
+    try {
+      final homeworks = await apiClient.getHomeworkList(course.id);
+      await db.transaction(() async {
         for (final h in homeworks) {
           await db.upsertHomework(HomeworksCompanion.insert(
             id: h.id,
@@ -309,13 +454,57 @@ class SyncNotifier extends StateNotifier<SyncState> {
             description: Value(h.description),
           ));
         }
-      }).catchError((e) {
-        warnings.add('${course.name}: 作业同步失败 ($e)');
-      }),
+      });
+    } catch (e) {
+      warnings.add('${course.name}: 作业同步失败 ($e)');
+    }
+  }
 
-      // Files
-      api.getFileList(course.id).then((files) async {
+  /// Sync notifications for one course.
+  Future<void> _syncNotifications(
+    Learn2018Helper apiClient,
+    AppDatabase db,
+    _SyncCourseRef course,
+    List<String> warnings,
+  ) async {
+    try {
+      final notifications = await apiClient.getNotificationList(course.id);
+      await db.transaction(() async {
+        for (final n in notifications) {
+          await db.upsertNotification(NotificationsCompanion.insert(
+            id: n.id,
+            courseId: course.id,
+            title: n.title,
+            content: Value(n.content),
+            publisher: Value(n.publisher),
+            publishTime: n.publishTime,
+            expireTime: Value(n.expireTime),
+            hasRead: Value(n.hasRead),
+            markedImportant: Value(n.markedImportant),
+            isFavorite: Value(n.isFavorite),
+            comment: Value(n.comment),
+          ));
+        }
+      });
+    } catch (e) {
+      warnings.add('${course.name}: 通知同步失败 ($e)');
+    }
+  }
+
+  /// Sync files for one course. Preserves local read state.
+  Future<void> _syncFiles(
+    Learn2018Helper apiClient,
+    AppDatabase db,
+    _SyncCourseRef course,
+    List<String> warnings,
+  ) async {
+    try {
+      final files = await apiClient.getFileList(course.id);
+      await db.transaction(() async {
         for (final f in files) {
+          final existing = await db.getFileById(f.id);
+          final shouldBeNew = existing != null ? existing.isNew : f.isNew;
+
           await db.upsertFile(CourseFilesCompanion.insert(
             id: f.id,
             courseId: course.id,
@@ -328,22 +517,37 @@ class SyncNotifier extends StateNotifier<SyncState> {
             fileType: Value(f.fileType),
             downloadUrl: f.downloadUrl,
             previewUrl: f.previewUrl,
-            isNew: Value(f.isNew),
+            isNew: Value(shouldBeNew),
             markedImportant: Value(f.markedImportant),
             visitCount: Value(f.visitCount),
             downloadCount: Value(f.downloadCount),
           ));
         }
-      }).catchError((e, stackTrace) {
-        debugPrint('[Sync] File sync failed for ${course.name}: $e');
-        debugPrint('[Sync] Stack trace:\n$stackTrace');
-        warnings.add('${course.name}: 文件同步失败 ($e)');
-      }),
-    ]);
+      });
+    } catch (e) {
+      debugPrint('[Sync] File sync failed for ${course.name}: $e');
+      warnings.add('${course.name}: 文件同步失败 ($e)');
+    }
+  }
+
+  void _handleApiError(api.ApiError e) {
+    if (e.reason == FailReason.notLoggedIn || e.reason == FailReason.noCredential) {
+      state = const SyncState(
+        status: SyncStatus.sessionExpired,
+        errorMessage: '会话过期，请重新登录',
+      );
+    } else {
+      state = SyncState(
+        status: SyncStatus.error,
+        errorMessage: '同步失败: $e',
+      );
+    }
   }
 }
 
-/// Lightweight ref for _syncCourseData to avoid passing full Course objects.
+enum _ContentType { homework, notification, file }
+
+/// Lightweight ref for sync helpers.
 class _SyncCourseRef {
   final String id;
   final String name;
