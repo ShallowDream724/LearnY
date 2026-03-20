@@ -11,6 +11,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import 'app_theme_colors.dart';
 import 'colors.dart';
 
 class SwipeToRead extends StatefulWidget {
@@ -61,9 +62,10 @@ class _SwipeToReadState extends State<SwipeToRead>
       vsync: this,
       duration: const Duration(milliseconds: 200),
     );
-    _resetAnimation = Tween<double>(begin: 0, end: 0).animate(
-      CurvedAnimation(parent: _resetController, curve: Curves.easeOut),
-    );
+    _resetAnimation = Tween<double>(
+      begin: 0,
+      end: 0,
+    ).animate(CurvedAnimation(parent: _resetController, curve: Curves.easeOut));
     _resetController.addListener(() {
       if (!_exiting) {
         setState(() => _dragExtent = _resetAnimation.value);
@@ -130,20 +132,20 @@ class _SwipeToReadState extends State<SwipeToRead>
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final c = context.colors;
     final progress = (_dragExtent.abs() / _threshold).clamp(0.0, 1.0);
 
     // Colors & labels based on read state
     final actionColor = widget.isRead
         ? const Color(0xFF007AFF) // Blue for "mark unread"
-        : AppColors.success;      // Green for "mark read"
+        : AppColors.success; // Green for "mark read"
     final actionIcon = widget.isRead
         ? (_thresholdReached
-            ? Icons.mark_email_unread_rounded
-            : Icons.mark_email_unread_outlined)
+              ? Icons.mark_email_unread_rounded
+              : Icons.mark_email_unread_outlined)
         : (_thresholdReached
-            ? Icons.check_circle_rounded
-            : Icons.check_circle_outline_rounded);
+              ? Icons.check_circle_rounded
+              : Icons.check_circle_outline_rounded);
     final actionLabel = widget.isRead ? '标为未读' : '标为已读';
 
     Widget content = Stack(
@@ -155,8 +157,8 @@ class _SwipeToReadState extends State<SwipeToRead>
             padding: const EdgeInsets.only(right: 20),
             decoration: BoxDecoration(
               color: Color.lerp(
-                isDark ? AppColors.darkSurface : AppColors.lightSurface,
-                actionColor.withAlpha(isDark ? 40 : 25),
+                c.surface,
+                actionColor.withAlpha(context.isDark ? 40 : 25),
                 progress,
               ),
               borderRadius: BorderRadius.circular(14),
@@ -197,14 +199,21 @@ class _SwipeToReadState extends State<SwipeToRead>
     // Exit animation: slide left + fade out + height collapse
     if (_exiting) {
       final slide = Tween<Offset>(begin: Offset.zero, end: const Offset(-1, 0))
-          .animate(CurvedAnimation(
-              parent: _exitController, curve: Curves.easeInCubic));
-      final fade = Tween<double>(begin: 1, end: 0).animate(CurvedAnimation(
+          .animate(
+            CurvedAnimation(parent: _exitController, curve: Curves.easeInCubic),
+          );
+      final fade = Tween<double>(begin: 1, end: 0).animate(
+        CurvedAnimation(
           parent: _exitController,
-          curve: const Interval(0.0, 0.8, curve: Curves.easeOut)));
-      final collapse = Tween<double>(begin: 1, end: 0).animate(CurvedAnimation(
+          curve: const Interval(0.0, 0.8, curve: Curves.easeOut),
+        ),
+      );
+      final collapse = Tween<double>(begin: 1, end: 0).animate(
+        CurvedAnimation(
           parent: _exitController,
-          curve: const Interval(0.4, 1.0, curve: Curves.easeInCubic)));
+          curve: const Interval(0.4, 1.0, curve: Curves.easeInCubic),
+        ),
+      );
 
       return SizeTransition(
         sizeFactor: collapse,

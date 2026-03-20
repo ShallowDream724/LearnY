@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/design/app_theme_colors.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/typography.dart';
 import '../../core/providers/providers.dart';
@@ -17,13 +18,7 @@ class ProfileScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final subColor =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
-    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
+    final c = context.colors;
     final authState = ref.watch(authProvider);
     final themeMode = ref.watch(themeModeProvider);
 
@@ -35,7 +30,7 @@ class ProfileScreen extends ConsumerWidget {
             snap: true,
             title: Text(
               '我的',
-              style: AppTypography.headlineMedium.copyWith(color: textColor),
+              style: AppTypography.headlineMedium.copyWith(color: c.text),
             ),
           ),
           SliverPadding(
@@ -44,65 +39,68 @@ class ProfileScreen extends ConsumerWidget {
               delegate: SliverChildListDelegate([
                 // ── User Card ──
                 Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [AppColors.primaryDark, AppColors.primary],
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primary.withAlpha(isDark ? 40 : 30),
-                        blurRadius: 20,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      // Avatar
-                      Container(
-                        width: 52,
-                        height: 52,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withAlpha(30),
-                          borderRadius: BorderRadius.circular(14),
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [AppColors.primaryDark, AppColors.primary],
                         ),
-                        child: Center(
-                          child: Text(
-                            _initials(authState.username ?? ''),
-                            style: AppTypography.titleLarge.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primary.withAlpha(
+                              c.isDark ? 40 : 30,
                             ),
+                            blurRadius: 20,
+                            offset: const Offset(0, 6),
                           ),
-                        ),
+                        ],
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              authState.username ?? '未登录',
-                              style: AppTypography.titleLarge
-                                  .copyWith(color: Colors.white),
+                      child: Row(
+                        children: [
+                          // Avatar
+                          Container(
+                            width: 52,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withAlpha(30),
+                              borderRadius: BorderRadius.circular(14),
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '清华大学',
-                              style: AppTypography.bodySmall.copyWith(
-                                color: Colors.white.withAlpha(180),
+                            child: Center(
+                              child: Text(
+                                _initials(authState.username ?? ''),
+                                style: AppTypography.titleLarge.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  authState.username ?? '未登录',
+                                  style: AppTypography.titleLarge.copyWith(
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '清华大学',
+                                  style: AppTypography.bodySmall.copyWith(
+                                    color: Colors.white.withAlpha(180),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                )
+                    )
                     .animate()
                     .fadeIn(duration: 400.ms)
                     .slideY(begin: 0.05, end: 0),
@@ -110,13 +108,13 @@ class ProfileScreen extends ConsumerWidget {
                 const SizedBox(height: 24),
 
                 // ── Settings Section ──
-                _SectionLabel(label: '偏好设置', textColor: subColor),
+                _SectionLabel(label: '偏好设置', textColor: c.subtitle),
                 const SizedBox(height: 8),
 
                 // Theme setting
                 _SettingsCard(
-                  surface: surface,
-                  border: border,
+                  surface: c.surface,
+                  border: c.border,
                   children: [
                     _SettingsTile(
                       icon: Icons.palette_outlined,
@@ -126,8 +124,8 @@ class ProfileScreen extends ConsumerWidget {
                         'dark' => '深色',
                         _ => '跟随系统',
                       },
-                      textColor: textColor,
-                      subColor: subColor,
+                      textColor: c.text,
+                      subColor: c.subtitle,
                       onTap: () {
                         // Cycle: system → light → dark
                         final next = switch (themeMode) {
@@ -139,66 +137,64 @@ class ProfileScreen extends ConsumerWidget {
                       },
                     ),
                   ],
-                )
-                    .animate(delay: 100.ms)
-                    .fadeIn(duration: 300.ms),
+                ).animate(delay: 100.ms).fadeIn(duration: 300.ms),
 
                 const SizedBox(height: 24),
 
                 // ── Data Management Section ──
-                _SectionLabel(label: '数据管理', textColor: subColor),
+                _SectionLabel(label: '数据管理', textColor: c.subtitle),
                 const SizedBox(height: 8),
 
                 _SettingsCard(
-                  surface: surface,
-                  border: border,
+                  surface: c.surface,
+                  border: c.border,
                   children: [
                     _SettingsTile(
                       icon: Icons.folder_rounded,
                       title: '文件管理',
                       subtitle: '管理已下载的文件',
-                      textColor: textColor,
-                      subColor: subColor,
+                      textColor: c.text,
+                      subColor: c.subtitle,
                       onTap: () => context.push(Routes.fileManager),
                     ),
                   ],
-                )
-                    .animate(delay: 150.ms)
-                    .fadeIn(duration: 300.ms),
+                ).animate(delay: 150.ms).fadeIn(duration: 300.ms),
 
                 const SizedBox(height: 24),
 
                 // ── About Section ──
-                _SectionLabel(label: '关于', textColor: subColor),
+                _SectionLabel(label: '关于', textColor: c.subtitle),
                 const SizedBox(height: 8),
 
                 _SettingsCard(
-                  surface: surface,
-                  border: border,
+                  surface: c.surface,
+                  border: c.border,
                   children: [
                     _SettingsTile(
                       icon: Icons.info_outlined,
                       title: '版本',
                       subtitle: 'v0.1.0',
-                      textColor: textColor,
-                      subColor: subColor,
+                      textColor: c.text,
+                      subColor: c.subtitle,
                     ),
-                    Divider(color: border, height: 0),
+                    Divider(color: c.border, height: 0),
                     _SettingsTile(
                       icon: Icons.code_rounded,
                       title: '源代码',
                       subtitle: 'GitHub',
-                      textColor: textColor,
-                      subColor: subColor,
+                      textColor: c.text,
+                      subColor: c.subtitle,
                       onTap: () {
                         // Open GitHub repo
-                        launchUrl(Uri.parse('https://github.com/ShallowDream724/LearnY'));
+                        launchUrl(
+                          Uri.parse(
+                            'https://github.com/ShallowDream724/LearnY',
+                          ),
+                        );
                       },
                     ),
                   ],
-                )
-                    .animate(delay: 200.ms)
-                    .fadeIn(duration: 300.ms),
+                ).animate(delay: 200.ms).fadeIn(duration: 300.ms),
 
                 const SizedBox(height: 32),
 
@@ -221,13 +217,12 @@ class ProfileScreen extends ConsumerWidget {
                     ),
                     child: Text(
                       '退出登录',
-                      style: AppTypography.labelLarge
-                          .copyWith(color: AppColors.error),
+                      style: AppTypography.labelLarge.copyWith(
+                        color: AppColors.error,
+                      ),
                     ),
                   ),
-                )
-                    .animate(delay: 300.ms)
-                    .fadeIn(duration: 300.ms),
+                ).animate(delay: 300.ms).fadeIn(duration: 300.ms),
               ]),
             ),
           ),
@@ -321,11 +316,15 @@ class _SettingsTile extends StatelessWidget {
             Icon(icon, size: 22, color: subColor),
             const SizedBox(width: 14),
             Expanded(
-              child: Text(title,
-                  style: AppTypography.titleMedium.copyWith(color: textColor)),
+              child: Text(
+                title,
+                style: AppTypography.titleMedium.copyWith(color: textColor),
+              ),
             ),
-            Text(subtitle,
-                style: AppTypography.bodySmall.copyWith(color: subColor)),
+            Text(
+              subtitle,
+              style: AppTypography.bodySmall.copyWith(color: subColor),
+            ),
             if (onTap != null) ...[
               const SizedBox(width: 6),
               Icon(Icons.chevron_right_rounded, size: 18, color: subColor),

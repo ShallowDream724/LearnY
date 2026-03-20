@@ -7,8 +7,6 @@
 ///   - Submit confirmation with Apple-style action sheet
 ///   - Upload progress overlay with smooth animation
 ///   - Success → haptic + checkmark → auto-dismiss
-import 'dart:io';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -16,6 +14,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import '../../core/design/app_theme_colors.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/typography.dart';
 import '../../core/database/database.dart' as db;
@@ -102,9 +101,7 @@ class _AssignmentSubmissionScreenState
     final confirmed = await showModalBottomSheet<bool>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => _ConfirmSheet(
-        isResubmit: widget.homework.submitted,
-      ),
+      builder: (ctx) => _ConfirmSheet(isResubmit: widget.homework.submitted),
     );
     if (confirmed != true || !mounted) return;
 
@@ -155,21 +152,12 @@ class _AssignmentSubmissionScreenState
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? AppColors.darkBackground : AppColors.lightBackground;
-    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final subColor =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
-    final tertiaryColor =
-        isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+    final c = context.colors;
 
     return Scaffold(
-      backgroundColor: bg,
+      backgroundColor: c.bg,
       appBar: AppBar(
-        backgroundColor: bg,
+        backgroundColor: c.bg,
         surfaceTintColor: Colors.transparent,
         leading: IconButton(
           icon: const Icon(Icons.close_rounded),
@@ -177,7 +165,7 @@ class _AssignmentSubmissionScreenState
         ),
         title: Text(
           widget.homework.submitted ? '重新提交' : '提交作业',
-          style: AppTypography.titleMedium.copyWith(color: textColor),
+          style: AppTypography.titleMedium.copyWith(color: c.text),
         ),
         actions: [
           Padding(
@@ -190,8 +178,10 @@ class _AssignmentSubmissionScreenState
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
                 ),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 8,
+                ),
               ),
               child: Text(
                 _submitting ? '提交中…' : '提交',
@@ -217,9 +207,9 @@ class _AssignmentSubmissionScreenState
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: surface,
+                      color: c.surface,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: border, width: 0.5),
+                      border: Border.all(color: c.border, width: 0.5),
                     ),
                     child: Row(
                       children: [
@@ -230,8 +220,11 @@ class _AssignmentSubmissionScreenState
                             color: AppColors.primary.withAlpha(20),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: const Icon(Icons.assignment_rounded,
-                              size: 18, color: AppColors.primary),
+                          child: const Icon(
+                            Icons.assignment_rounded,
+                            size: 18,
+                            color: AppColors.primary,
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -240,16 +233,18 @@ class _AssignmentSubmissionScreenState
                             children: [
                               Text(
                                 widget.homework.title,
-                                style: AppTypography.titleSmall
-                                    .copyWith(color: textColor),
+                                style: AppTypography.titleSmall.copyWith(
+                                  color: c.text,
+                                ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
                               const SizedBox(height: 2),
                               Text(
                                 widget.courseName,
-                                style: AppTypography.bodySmall
-                                    .copyWith(color: subColor),
+                                style: AppTypography.bodySmall.copyWith(
+                                  color: c.subtitle,
+                                ),
                               ),
                             ],
                           ),
@@ -261,15 +256,18 @@ class _AssignmentSubmissionScreenState
                   const SizedBox(height: 20),
 
                   // ── Text input ──
-                  Text('作业内容',
-                      style:
-                          AppTypography.labelMedium.copyWith(color: subColor)),
+                  Text(
+                    '作业内容',
+                    style: AppTypography.labelMedium.copyWith(
+                      color: c.subtitle,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   Container(
                     decoration: BoxDecoration(
-                      color: surface,
+                      color: c.surface,
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: border, width: 0.5),
+                      border: Border.all(color: c.border, width: 0.5),
                     ),
                     child: Column(
                       children: [
@@ -278,12 +276,15 @@ class _AssignmentSubmissionScreenState
                           focusNode: _contentFocus,
                           maxLines: 10,
                           minLines: 6,
-                          style:
-                              AppTypography.bodyLarge.copyWith(color: textColor, height: 1.6),
+                          style: AppTypography.bodyLarge.copyWith(
+                            color: c.text,
+                            height: 1.6,
+                          ),
                           decoration: InputDecoration(
                             hintText: '输入作业内容…',
-                            hintStyle: AppTypography.bodyLarge
-                                .copyWith(color: tertiaryColor),
+                            hintStyle: AppTypography.bodyLarge.copyWith(
+                              color: c.tertiary,
+                            ),
                             border: InputBorder.none,
                             contentPadding: const EdgeInsets.all(16),
                           ),
@@ -295,8 +296,10 @@ class _AssignmentSubmissionScreenState
                           alignment: Alignment.centerRight,
                           child: Text(
                             '${_contentController.text.length} 字',
-                            style: AppTypography.bodySmall
-                                .copyWith(color: tertiaryColor, fontSize: 11),
+                            style: AppTypography.bodySmall.copyWith(
+                              color: c.tertiary,
+                              fontSize: 11,
+                            ),
                           ),
                         ),
                       ],
@@ -306,28 +309,31 @@ class _AssignmentSubmissionScreenState
                   const SizedBox(height: 24),
 
                   // ── Attachment section ──
-                  Text('附件',
-                      style:
-                          AppTypography.labelMedium.copyWith(color: subColor)),
+                  Text(
+                    '附件',
+                    style: AppTypography.labelMedium.copyWith(
+                      color: c.subtitle,
+                    ),
+                  ),
                   const SizedBox(height: 8),
 
                   if (_attachment != null)
                     _FileCard(
-                      name: _attachment!.name,
-                      size: _attachment!.size,
-                      onRemove: _removeAttachment,
-                      isDark: isDark,
-                    ).animate().fadeIn(duration: 200.ms).slideY(begin: 0.05, end: 0)
+                          name: _attachment!.name,
+                          size: _attachment!.size,
+                          onRemove: _removeAttachment,
+                        )
+                        .animate()
+                        .fadeIn(duration: 200.ms)
+                        .slideY(begin: 0.05, end: 0)
                   else if (_hasExistingAttachment)
                     _ExistingAttachmentCard(
-                      isDark: isDark,
                       onRemove: () =>
                           setState(() => _removeExistingAttachment = true),
                     ).animate().fadeIn(duration: 200.ms)
                   else
                     _AddFileButton(
                       onTap: _pickFile,
-                      isDark: isDark,
                     ).animate(delay: 150.ms).fadeIn(duration: 200.ms),
 
                   // Error message
@@ -338,19 +344,24 @@ class _AssignmentSubmissionScreenState
                       decoration: BoxDecoration(
                         color: AppColors.error.withAlpha(15),
                         borderRadius: BorderRadius.circular(10),
-                        border:
-                            Border.all(color: AppColors.error.withAlpha(40)),
+                        border: Border.all(
+                          color: AppColors.error.withAlpha(40),
+                        ),
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.error_outline_rounded,
-                              size: 18, color: AppColors.error),
+                          const Icon(
+                            Icons.error_outline_rounded,
+                            size: 18,
+                            color: AppColors.error,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               _errorMessage!,
-                              style: AppTypography.bodySmall
-                                  .copyWith(color: AppColors.error),
+                              style: AppTypography.bodySmall.copyWith(
+                                color: AppColors.error,
+                              ),
                             ),
                           ),
                         ],
@@ -370,7 +381,7 @@ class _AssignmentSubmissionScreenState
                 child: Container(
                   padding: const EdgeInsets.all(32),
                   decoration: BoxDecoration(
-                    color: surface,
+                    color: c.surface,
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
@@ -391,9 +402,10 @@ class _AssignmentSubmissionScreenState
                         ),
                       ),
                       const SizedBox(height: 16),
-                      Text('正在提交…',
-                          style: AppTypography.titleSmall
-                              .copyWith(color: textColor)),
+                      Text(
+                        '正在提交…',
+                        style: AppTypography.titleSmall.copyWith(color: c.text),
+                      ),
                     ],
                   ),
                 ),
@@ -415,10 +427,7 @@ class _AssignmentSubmissionScreenState
       context: context,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
-        final isDark = Theme.of(ctx).brightness == Brightness.dark;
-        final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
-        final textColor =
-            isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
+        final c = ctx.colors;
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
@@ -427,24 +436,28 @@ class _AssignmentSubmissionScreenState
               children: [
                 Container(
                   decoration: BoxDecoration(
-                    color: surface,
+                    color: c.surface,
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Column(
                     children: [
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                        child: Text('确定放弃编辑？',
-                            style: AppTypography.titleSmall
-                                .copyWith(color: textColor)),
+                        child: Text(
+                          '确定放弃编辑？',
+                          style: AppTypography.titleSmall.copyWith(
+                            color: c.text,
+                          ),
+                        ),
                       ),
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                        child: Text('已输入的内容将不会保存',
-                            style: AppTypography.bodySmall.copyWith(
-                                color: isDark
-                                    ? AppColors.darkTextSecondary
-                                    : AppColors.lightTextSecondary)),
+                        child: Text(
+                          '已输入的内容将不会保存',
+                          style: AppTypography.bodySmall.copyWith(
+                            color: c.subtitle,
+                          ),
+                        ),
                       ),
                       const Divider(height: 1),
                       InkWell(
@@ -455,10 +468,13 @@ class _AssignmentSubmissionScreenState
                         child: Container(
                           width: double.infinity,
                           padding: const EdgeInsets.symmetric(vertical: 14),
-                          child: Text('放弃',
-                              textAlign: TextAlign.center,
-                              style: AppTypography.titleSmall
-                                  .copyWith(color: AppColors.error)),
+                          child: Text(
+                            '放弃',
+                            textAlign: TextAlign.center,
+                            style: AppTypography.titleSmall.copyWith(
+                              color: AppColors.error,
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -467,7 +483,7 @@ class _AssignmentSubmissionScreenState
                 const SizedBox(height: 8),
                 Container(
                   decoration: BoxDecoration(
-                    color: surface,
+                    color: c.surface,
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: InkWell(
@@ -476,12 +492,14 @@ class _AssignmentSubmissionScreenState
                     child: Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      child: Text('继续编辑',
-                          textAlign: TextAlign.center,
-                          style: AppTypography.titleSmall.copyWith(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w600,
-                          )),
+                      child: Text(
+                        '继续编辑',
+                        textAlign: TextAlign.center,
+                        style: AppTypography.titleSmall.copyWith(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -513,23 +531,16 @@ class _FileCard extends StatelessWidget {
   final String name;
   final int size;
   final VoidCallback onRemove;
-  final bool isDark;
 
   const _FileCard({
     required this.name,
     required this.size,
     required this.onRemove,
-    required this.isDark,
   });
 
   @override
   Widget build(BuildContext context) {
-    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final subColor =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+    final c = context.colors;
 
     final ext = p.extension(name).replaceAll('.', '').toUpperCase();
     final sizeStr = _formatSize(size);
@@ -537,9 +548,9 @@ class _FileCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: surface,
+        color: c.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: border, width: 0.5),
+        border: Border.all(color: c.border, width: 0.5),
       ),
       child: Row(
         children: [
@@ -567,20 +578,22 @@ class _FileCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(name,
-                    style:
-                        AppTypography.titleSmall.copyWith(color: textColor),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
+                Text(
+                  name,
+                  style: AppTypography.titleSmall.copyWith(color: c.text),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 const SizedBox(height: 2),
-                Text(sizeStr,
-                    style:
-                        AppTypography.bodySmall.copyWith(color: subColor)),
+                Text(
+                  sizeStr,
+                  style: AppTypography.bodySmall.copyWith(color: c.subtitle),
+                ),
               ],
             ),
           ),
           IconButton(
-            icon: Icon(Icons.close_rounded, size: 20, color: subColor),
+            icon: Icon(Icons.close_rounded, size: 20, color: c.subtitle),
             onPressed: onRemove,
             visualDensity: VisualDensity.compact,
           ),
@@ -601,29 +614,20 @@ class _FileCard extends StatelessWidget {
 // ─────────────────────────────────────────────
 
 class _ExistingAttachmentCard extends StatelessWidget {
-  final bool isDark;
   final VoidCallback onRemove;
 
-  const _ExistingAttachmentCard({
-    required this.isDark,
-    required this.onRemove,
-  });
+  const _ExistingAttachmentCard({required this.onRemove});
 
   @override
   Widget build(BuildContext context) {
-    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final subColor =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+    final c = context.colors;
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: surface,
+        color: c.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: border, width: 0.5),
+        border: Border.all(color: c.border, width: 0.5),
       ),
       child: Row(
         children: [
@@ -634,27 +638,35 @@ class _ExistingAttachmentCard extends StatelessWidget {
               color: AppColors.success.withAlpha(15),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.check_circle_rounded,
-                size: 20, color: AppColors.success),
+            child: const Icon(
+              Icons.check_circle_rounded,
+              size: 20,
+              color: AppColors.success,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('已有附件',
-                    style:
-                        AppTypography.titleSmall.copyWith(color: textColor)),
+                Text(
+                  '已有附件',
+                  style: AppTypography.titleSmall.copyWith(color: c.text),
+                ),
                 const SizedBox(height: 2),
-                Text('上次提交的附件将保留',
-                    style:
-                        AppTypography.bodySmall.copyWith(color: subColor)),
+                Text(
+                  '上次提交的附件将保留',
+                  style: AppTypography.bodySmall.copyWith(color: c.subtitle),
+                ),
               ],
             ),
           ),
           IconButton(
-            icon: Icon(Icons.delete_outline_rounded,
-                size: 20, color: AppColors.error.withAlpha(180)),
+            icon: Icon(
+              Icons.delete_outline_rounded,
+              size: 20,
+              color: AppColors.error.withAlpha(180),
+            ),
             onPressed: onRemove,
             tooltip: '删除附件',
             visualDensity: VisualDensity.compact,
@@ -671,15 +683,12 @@ class _ExistingAttachmentCard extends StatelessWidget {
 
 class _AddFileButton extends StatelessWidget {
   final VoidCallback onTap;
-  final bool isDark;
 
-  const _AddFileButton({required this.onTap, required this.isDark});
+  const _AddFileButton({required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
-    final subColor =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+    final c = context.colors;
 
     return InkWell(
       onTap: onTap,
@@ -690,18 +699,19 @@ class _AddFileButton extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: border,
+            color: c.border,
             width: 1,
             strokeAlign: BorderSide.strokeAlignInside,
           ),
         ),
         child: Column(
           children: [
-            Icon(Icons.add_circle_outline_rounded,
-                size: 28, color: subColor),
+            Icon(Icons.add_circle_outline_rounded, size: 28, color: c.subtitle),
             const SizedBox(height: 6),
-            Text('选择文件',
-                style: AppTypography.labelMedium.copyWith(color: subColor)),
+            Text(
+              '选择文件',
+              style: AppTypography.labelMedium.copyWith(color: c.subtitle),
+            ),
           ],
         ),
       ),
@@ -720,10 +730,7 @@ class _ConfirmSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
+    final c = context.colors;
 
     return SafeArea(
       child: Padding(
@@ -733,7 +740,7 @@ class _ConfirmSheet extends StatelessWidget {
           children: [
             Container(
               decoration: BoxDecoration(
-                color: surface,
+                color: c.surface,
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Column(
@@ -742,8 +749,7 @@ class _ConfirmSheet extends StatelessWidget {
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                     child: Text(
                       isResubmit ? '确认重新提交？' : '确认提交？',
-                      style:
-                          AppTypography.titleSmall.copyWith(color: textColor),
+                      style: AppTypography.titleSmall.copyWith(color: c.text),
                     ),
                   ),
                   Padding(
@@ -751,9 +757,8 @@ class _ConfirmSheet extends StatelessWidget {
                     child: Text(
                       isResubmit ? '将覆盖上次提交的内容' : '提交后仍可重新提交',
                       style: AppTypography.bodySmall.copyWith(
-                          color: isDark
-                              ? AppColors.darkTextSecondary
-                              : AppColors.lightTextSecondary),
+                        color: c.subtitle,
+                      ),
                     ),
                   ),
                   const Divider(height: 1),
@@ -778,7 +783,7 @@ class _ConfirmSheet extends StatelessWidget {
             const SizedBox(height: 8),
             Container(
               decoration: BoxDecoration(
-                color: surface,
+                color: c.surface,
                 borderRadius: BorderRadius.circular(14),
               ),
               child: InkWell(
@@ -787,10 +792,11 @@ class _ConfirmSheet extends StatelessWidget {
                 child: Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 14),
-                  child: Text('取消',
-                      textAlign: TextAlign.center,
-                      style: AppTypography.titleSmall
-                          .copyWith(color: textColor)),
+                  child: Text(
+                    '取消',
+                    textAlign: TextAlign.center,
+                    style: AppTypography.titleSmall.copyWith(color: c.text),
+                  ),
                 ),
               ),
             ),
@@ -823,60 +829,59 @@ class _SuccessOverlayState extends State<_SuccessOverlay> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
+    final c = context.colors;
 
     return Center(
-      child: Container(
-        padding: const EdgeInsets.all(36),
-        decoration: BoxDecoration(
-          color: surface,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withAlpha(30),
-              blurRadius: 40,
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: AppColors.success.withAlpha(20),
-                shape: BoxShape.circle,
+      child:
+          Container(
+                padding: const EdgeInsets.all(36),
+                decoration: BoxDecoration(
+                  color: c.surface,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withAlpha(30),
+                      blurRadius: 40,
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: AppColors.success.withAlpha(20),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.check_rounded,
+                        color: AppColors.success,
+                        size: 32,
+                      ),
+                    ).animate().scale(
+                      begin: const Offset(0.5, 0.5),
+                      end: const Offset(1, 1),
+                      curve: Curves.elasticOut,
+                      duration: 600.ms,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      '提交成功',
+                      style: AppTypography.titleMedium.copyWith(color: c.text),
+                    ),
+                  ],
+                ),
+              )
+              .animate()
+              .fadeIn(duration: 200.ms)
+              .scale(
+                begin: const Offset(0.85, 0.85),
+                end: const Offset(1, 1),
+                curve: Curves.easeOutBack,
+                duration: 300.ms,
               ),
-              child: const Icon(
-                Icons.check_rounded,
-                color: AppColors.success,
-                size: 32,
-              ),
-            )
-                .animate()
-                .scale(
-                    begin: const Offset(0.5, 0.5),
-                    end: const Offset(1, 1),
-                    curve: Curves.elasticOut,
-                    duration: 600.ms),
-            const SizedBox(height: 16),
-            Text('提交成功',
-                style:
-                    AppTypography.titleMedium.copyWith(color: textColor)),
-          ],
-        ),
-      )
-          .animate()
-          .fadeIn(duration: 200.ms)
-          .scale(
-              begin: const Offset(0.85, 0.85),
-              end: const Offset(1, 1),
-              curve: Curves.easeOutBack,
-              duration: 300.ms),
     );
   }
 }

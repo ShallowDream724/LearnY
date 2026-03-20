@@ -10,6 +10,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/design/app_theme_colors.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/cooldown_toast.dart';
 import '../../core/design/shimmer.dart';
@@ -45,7 +46,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (syncState.status == SyncStatus.success) {
       final msg = syncState.syncWarnings.isNotEmpty
           ? '同步完成（${syncState.updatedCount} 项），'
-            '${syncState.syncWarnings.length} 个课程部分失败'
+                '${syncState.syncWarnings.length} 个课程部分失败'
           : '同步完成，更新了 ${syncState.updatedCount} 项';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -91,13 +92,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final subtitleColor =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+    final c = context.colors;
     final authState = ref.watch(authProvider);
-    final syncState = ref.watch(syncStateProvider);
     final homeAsync = ref.watch(homeDataProvider);
 
     // Auto-handle session expiry from ANY sync trigger (auto or manual).
@@ -124,15 +120,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 children: [
                   Text(
                     _greeting(),
-                    style: AppTypography.bodySmall.copyWith(
-                      color: subtitleColor,
-                    ),
+                    style: AppTypography.bodySmall.copyWith(color: c.subtitle),
                   ),
                   Text(
                     authState.username ?? 'LearnY',
-                    style: AppTypography.headlineSmall.copyWith(
-                      color: textColor,
-                    ),
+                    style: AppTypography.headlineSmall.copyWith(color: c.text),
                   ),
                 ],
               ),
@@ -148,20 +140,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
             // ── Content ──
             homeAsync.when(
-              loading: () => const SliverFillRemaining(
-                child: ListSkeleton(),
-              ),
+              loading: () => const SliverFillRemaining(child: ListSkeleton()),
               error: (error, _) => SliverFillRemaining(
                 child: Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.error_outline_rounded,
-                          size: 48, color: subtitleColor),
+                      Icon(
+                        Icons.error_outline_rounded,
+                        size: 48,
+                        color: c.subtitle,
+                      ),
                       const SizedBox(height: 12),
-                      Text('加载失败',
-                          style: AppTypography.titleMedium
-                              .copyWith(color: textColor)),
+                      Text(
+                        '加载失败',
+                        style: AppTypography.titleMedium.copyWith(
+                          color: c.text,
+                        ),
+                      ),
                       const SizedBox(height: 8),
                       TextButton(
                         onPressed: _onRefresh,
@@ -176,7 +172,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 sliver: SliverList(
                   delegate: SliverChildListDelegate([
                     // ── Stats Row ──
-                    _buildStatsRow(data, isDark),
+                    _buildStatsRow(data),
                     const SizedBox(height: 24),
 
                     // ── Urgent Assignments ──
@@ -199,51 +195,55 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       title: '未读通知',
                       count: data.unreadCount,
                       color: AppColors.info,
-                      isDark: isDark,
                     ),
                     const SizedBox(height: 12),
                     if (data.unreadNotifications.isNotEmpty)
                       ...data.unreadNotifications.asMap().entries.map(
-                            (e) => Padding(
-                              padding: const EdgeInsets.only(bottom: 10),
-                              child: SwipeToRead(
-                                key: ValueKey(e.value.id),
-                                exitOnSwipe: true,
-                                onSwipe: () {
-                                  ref.read(databaseProvider)
-                                      .markNotificationReadLocal(e.value.id);
-                                  ref.invalidate(homeDataProvider);
-                                },
-                                child: NotificationCard(
-                                  notification: e.value,
-                                  onTap: () {
-                                    ref.read(databaseProvider)
-                                        .markNotificationReadLocal(e.value.id);
-                                    ref.invalidate(homeDataProvider);
-                                    context.push(
-                                      Routes.notificationDetail(
-                                        notificationId: e.value.id,
-                                        courseId: e.value.courseId,
-                                        courseName: e.value.courseName,
-                                      ),
-                                    );
-                                  },
-                                ),
-                              )
+                        (e) => Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child:
+                              SwipeToRead(
+                                    key: ValueKey(e.value.id),
+                                    exitOnSwipe: true,
+                                    onSwipe: () {
+                                      ref
+                                          .read(databaseProvider)
+                                          .markNotificationReadLocal(
+                                            e.value.id,
+                                          );
+                                      ref.invalidate(homeDataProvider);
+                                    },
+                                    child: NotificationCard(
+                                      notification: e.value,
+                                      onTap: () {
+                                        ref
+                                            .read(databaseProvider)
+                                            .markNotificationReadLocal(
+                                              e.value.id,
+                                            );
+                                        ref.invalidate(homeDataProvider);
+                                        context.push(
+                                          Routes.notificationDetail(
+                                            notificationId: e.value.id,
+                                            courseId: e.value.courseId,
+                                            courseName: e.value.courseName,
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  )
                                   .animate(delay: (100 * e.key).ms)
                                   .fadeIn(duration: 300.ms)
                                   .slideX(begin: 0.05, end: 0),
-                            ),
-                          )
+                        ),
+                      )
                     else
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Text(
                           '暂无未读通知',
                           style: AppTypography.bodyMedium.copyWith(
-                            color: isDark
-                                ? AppColors.darkTextTertiary
-                                : AppColors.lightTextTertiary,
+                            color: c.tertiary,
                           ),
                         ),
                       ),
@@ -256,9 +256,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           Expanded(
                             child: _SectionTitle(
                               title: '未读文件',
-                              count: data.totalUnreadFiles > 5 ? 0 : data.totalUnreadFiles,
+                              count: data.totalUnreadFiles > 5
+                                  ? 0
+                                  : data.totalUnreadFiles,
                               color: const Color(0xFF7B1FA2),
-                              isDark: isDark,
                             ),
                           ),
                           if (data.totalUnreadFiles > 5) ...[
@@ -290,35 +291,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                       const SizedBox(height: 12),
                       ...data.newFiles.asMap().entries.map(
-                            (e) => Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: SwipeToRead(
-                                key: ValueKey(e.value.id),
-                                exitOnSwipe: true,
-                                onSwipe: () {
-                                  ref.read(databaseProvider)
-                                      .markFileRead(e.value.id);
-                                  ref.invalidate(homeDataProvider);
-                                },
-                                child: _NewFileCard(
-                                  file: e.value,
-                                  isDark: isDark,
-                                  onTap: () {
-                                    context.push(
-                                      Routes.fileDetail(
-                                        fileId: e.value.id,
-                                        courseId: e.value.courseId,
-                                        courseName: e.value.courseName,
-                                      ),
-                                    );
-                                  },
-                                ),
-                              )
+                        (e) => Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child:
+                              SwipeToRead(
+                                    key: ValueKey(e.value.id),
+                                    exitOnSwipe: true,
+                                    onSwipe: () {
+                                      ref
+                                          .read(databaseProvider)
+                                          .markFileRead(e.value.id);
+                                      ref.invalidate(homeDataProvider);
+                                    },
+                                    child: _NewFileCard(
+                                      file: e.value,
+                                      onTap: () {
+                                        context.push(
+                                          Routes.fileDetail(
+                                            fileId: e.value.id,
+                                            courseId: e.value.courseId,
+                                            courseName: e.value.courseName,
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  )
                                   .animate(delay: (80 * e.key).ms)
                                   .fadeIn(duration: 300.ms)
                                   .slideX(begin: 0.05, end: 0),
-                            ),
-                          ),
+                        ),
+                      ),
                       const SizedBox(height: 16),
                     ],
 
@@ -326,7 +328,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     if (data.urgentAssignments.isEmpty &&
                         data.unreadNotifications.isEmpty &&
                         data.newFiles.isEmpty)
-                      _buildEmptyState(isDark),
+                      _buildEmptyState(),
                   ]),
                 ),
               ),
@@ -337,7 +339,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildStatsRow(HomeData data, bool isDark) {
+  Widget _buildStatsRow(HomeData data) {
     return Row(
       children: [
         Expanded(
@@ -350,55 +352,59 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: StatCard(
-            label: '待交',
-            value: data.pendingAssignments.toString(),
-            icon: Icons.assignment_late_rounded,
-            color: data.pendingAssignments > 0
-                ? AppColors.warning
-                : AppColors.success,
-          )
-              .animate(delay: 100.ms)
-              .fadeIn(duration: 400.ms)
-              .slideY(begin: 0.1, end: 0),
+          child:
+              StatCard(
+                    label: '待交',
+                    value: data.pendingAssignments.toString(),
+                    icon: Icons.assignment_late_rounded,
+                    color: data.pendingAssignments > 0
+                        ? AppColors.warning
+                        : AppColors.success,
+                  )
+                  .animate(delay: 100.ms)
+                  .fadeIn(duration: 400.ms)
+                  .slideY(begin: 0.1, end: 0),
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: StatCard(
-            label: '未读',
-            value: data.unreadCount.toString(),
-            icon: Icons.notifications_none_rounded,
-            color: data.unreadCount > 0
-                ? AppColors.unreadBadge
-                : AppColors.success,
-          )
-              .animate(delay: 200.ms)
-              .fadeIn(duration: 400.ms)
-              .slideY(begin: 0.1, end: 0),
+          child:
+              StatCard(
+                    label: '未读',
+                    value: data.unreadCount.toString(),
+                    icon: Icons.notifications_none_rounded,
+                    color: data.unreadCount > 0
+                        ? AppColors.unreadBadge
+                        : AppColors.success,
+                  )
+                  .animate(delay: 200.ms)
+                  .fadeIn(duration: 400.ms)
+                  .slideY(begin: 0.1, end: 0),
         ),
       ],
     );
   }
 
-  Widget _buildEmptyState(bool isDark) {
-    final color =
-        isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+  Widget _buildEmptyState() {
+    final c = context.colors;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 48),
       child: Center(
         child: Column(
           children: [
-            Icon(Icons.check_circle_outline_rounded,
-                size: 56, color: color),
+            Icon(
+              Icons.check_circle_outline_rounded,
+              size: 56,
+              color: c.tertiary,
+            ),
             const SizedBox(height: 16),
             Text(
               '一切完成',
-              style: AppTypography.headlineSmall.copyWith(color: color),
+              style: AppTypography.headlineSmall.copyWith(color: c.tertiary),
             ),
             const SizedBox(height: 4),
             Text(
               '没有紧急事项',
-              style: AppTypography.bodyMedium.copyWith(color: color),
+              style: AppTypography.bodyMedium.copyWith(color: c.tertiary),
             ),
           ],
         ),
@@ -427,21 +433,16 @@ class _SectionTitle extends StatelessWidget {
   final String title;
   final int count;
   final Color color;
-  final bool isDark;
 
   const _SectionTitle({
     required this.title,
     required this.count,
     required this.color,
-    required this.isDark,
   });
 
   @override
   Widget build(BuildContext context) {
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final subColor =
-        isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+    final c = context.colors;
 
     return Row(
       children: [
@@ -454,13 +455,13 @@ class _SectionTitle extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        Text(title, style: AppTypography.headlineSmall.copyWith(color: textColor)),
+        Text(title, style: AppTypography.headlineSmall.copyWith(color: c.text)),
         const Spacer(),
         if (count > 0)
           Text(
             '$count 项',
-            style: AppTypography.bodySmall.copyWith(color: subColor),
-        ),
+            style: AppTypography.bodySmall.copyWith(color: c.tertiary),
+          ),
       ],
     );
   }
@@ -472,25 +473,13 @@ class _SectionTitle extends StatelessWidget {
 
 class _NewFileCard extends StatelessWidget {
   final FileSummary file;
-  final bool isDark;
   final VoidCallback? onTap;
 
-  const _NewFileCard({
-    required this.file,
-    required this.isDark,
-    this.onTap,
-  });
+  const _NewFileCard({required this.file, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final sub =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
-    final tertiary =
-        isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
-    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
+    final c = context.colors;
 
     final ext = file.fileType.toLowerCase();
     final color = _fileTypeColor(ext);
@@ -500,9 +489,9 @@ class _NewFileCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: surface,
+          color: c.surface,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: border, width: 0.5),
+          border: Border.all(color: c.border, width: 0.5),
         ),
         child: Row(
           children: [
@@ -522,7 +511,7 @@ class _NewFileCard extends StatelessWidget {
                 children: [
                   Text(
                     file.title,
-                    style: AppTypography.titleMedium.copyWith(color: textColor),
+                    style: AppTypography.titleMedium.copyWith(color: c.text),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -530,7 +519,7 @@ class _NewFileCard extends StatelessWidget {
                   Text(
                     file.courseName,
                     style: AppTypography.bodySmall.copyWith(
-                      color: tertiary,
+                      color: c.tertiary,
                       fontSize: 11,
                     ),
                     maxLines: 1,
@@ -552,12 +541,12 @@ class _NewFileCard extends StatelessWidget {
                 ),
                 Text(
                   file.size.isNotEmpty ? file.size : '',
-                  style: TextStyle(fontSize: 10, color: sub),
+                  style: TextStyle(fontSize: 10, color: c.subtitle),
                 ),
               ],
             ),
             const SizedBox(width: 4),
-            Icon(Icons.chevron_right_rounded, size: 16, color: tertiary),
+            Icon(Icons.chevron_right_rounded, size: 16, color: c.tertiary),
           ],
         ),
       ),
@@ -566,21 +555,37 @@ class _NewFileCard extends StatelessWidget {
 
   IconData _fileTypeIcon(String ext) {
     switch (ext) {
-      case 'pdf': return Icons.picture_as_pdf_rounded;
-      case 'doc': case 'docx': return Icons.description_rounded;
-      case 'ppt': case 'pptx': return Icons.slideshow_rounded;
-      case 'xls': case 'xlsx': return Icons.table_chart_rounded;
-      default: return Icons.insert_drive_file_rounded;
+      case 'pdf':
+        return Icons.picture_as_pdf_rounded;
+      case 'doc':
+      case 'docx':
+        return Icons.description_rounded;
+      case 'ppt':
+      case 'pptx':
+        return Icons.slideshow_rounded;
+      case 'xls':
+      case 'xlsx':
+        return Icons.table_chart_rounded;
+      default:
+        return Icons.insert_drive_file_rounded;
     }
   }
 
   Color _fileTypeColor(String ext) {
     switch (ext) {
-      case 'pdf': return const Color(0xFFE53935);
-      case 'doc': case 'docx': return const Color(0xFF1976D2);
-      case 'ppt': case 'pptx': return const Color(0xFFE65100);
-      case 'xls': case 'xlsx': return const Color(0xFF2E7D32);
-      default: return const Color(0xFF546E7A);
+      case 'pdf':
+        return const Color(0xFFE53935);
+      case 'doc':
+      case 'docx':
+        return const Color(0xFF1976D2);
+      case 'ppt':
+      case 'pptx':
+        return const Color(0xFFE65100);
+      case 'xls':
+      case 'xlsx':
+        return const Color(0xFF2E7D32);
+      default:
+        return const Color(0xFF546E7A);
     }
   }
 }

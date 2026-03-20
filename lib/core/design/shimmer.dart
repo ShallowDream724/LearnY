@@ -4,7 +4,7 @@
 /// for a more polished loading experience.
 import 'package:flutter/material.dart';
 
-import 'colors.dart';
+import 'app_theme_colors.dart';
 
 // ---------------------------------------------------------------------------
 //  Shimmer effect
@@ -57,11 +57,7 @@ class _ShimmerBoxState extends State<ShimmerBox>
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final baseColor =
-        isDark ? AppColors.darkSurface : AppColors.lightSurface;
-    final highlightColor =
-        isDark ? AppColors.darkBorder : AppColors.lightBorder;
+    final c = context.colors;
 
     return AnimatedBuilder(
       animation: _animation,
@@ -74,7 +70,7 @@ class _ShimmerBoxState extends State<ShimmerBox>
             gradient: LinearGradient(
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
-              colors: [baseColor, highlightColor, baseColor],
+              colors: [c.surface, c.border, c.surface],
               stops: [
                 (_animation.value - 0.3).clamp(0.0, 1.0),
                 _animation.value.clamp(0.0, 1.0),
@@ -98,16 +94,14 @@ class ListItemSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
+    final c = context.colors;
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: surface,
+        color: c.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: border, width: 0.5),
+        border: Border.all(color: c.border, width: 0.5),
       ),
       child: Row(
         children: [
@@ -159,16 +153,14 @@ class StatCardSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
+    final c = context.colors;
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: surface,
+        color: c.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: border, width: 0.5),
+        border: Border.all(color: c.border, width: 0.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

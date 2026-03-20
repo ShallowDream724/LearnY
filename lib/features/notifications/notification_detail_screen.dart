@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/design/app_theme_colors.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/responsive.dart';
 import '../../core/design/shimmer.dart';
@@ -54,8 +55,9 @@ class _NotificationDetailScreenState
     final database = ref.read(databaseProvider);
 
     // Load notification data from DB
-    final notifications =
-        await database.getNotificationsByCourse(widget.courseId);
+    final notifications = await database.getNotificationsByCourse(
+      widget.courseId,
+    );
     final notif = notifications
         .where((n) => n.id == widget.notificationId)
         .firstOrNull;
@@ -135,20 +137,11 @@ class _NotificationDetailScreenState
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? AppColors.darkBackground : AppColors.lightBackground;
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final subColor =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
-    final tertiaryColor =
-        isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
-    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
+    final c = context.colors;
 
     if (_loading) {
       return Scaffold(
-        backgroundColor: bg,
+        backgroundColor: c.bg,
         appBar: AppBar(),
         body: const ListSkeleton(),
       );
@@ -157,17 +150,19 @@ class _NotificationDetailScreenState
     final n = _notification;
     if (n == null) {
       return Scaffold(
-        backgroundColor: bg,
+        backgroundColor: c.bg,
         appBar: AppBar(),
         body: Center(
-          child: Text('通知未找到',
-              style: AppTypography.titleMedium.copyWith(color: subColor)),
+          child: Text(
+            '通知未找到',
+            style: AppTypography.titleMedium.copyWith(color: c.subtitle),
+          ),
         ),
       );
     }
 
     return Scaffold(
-      backgroundColor: bg,
+      backgroundColor: c.bg,
       body: CustomScrollView(
         slivers: [
           // ── App Bar ──
@@ -175,7 +170,7 @@ class _NotificationDetailScreenState
             pinned: true,
             title: Text(
               widget.courseName,
-              style: AppTypography.titleMedium.copyWith(color: subColor),
+              style: AppTypography.titleMedium.copyWith(color: c.subtitle),
             ),
             actions: [
               // Favorite toggle
@@ -184,7 +179,7 @@ class _NotificationDetailScreenState
                   _isFavorite
                       ? Icons.bookmark_rounded
                       : Icons.bookmark_border_rounded,
-                  color: _isFavorite ? AppColors.warning : subColor,
+                  color: _isFavorite ? AppColors.warning : c.subtitle,
                 ),
                 onPressed: () => _toggleFavorite(n),
               ),
@@ -203,35 +198,43 @@ class _NotificationDetailScreenState
                     children: [
                       // ── Title ──
                       Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (n.markedImportant)
-                            Container(
-                              margin:
-                                  const EdgeInsets.only(top: 4, right: 8),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: AppColors.warning.withAlpha(20),
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(
-                                    color: AppColors.warning.withAlpha(60)),
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (n.markedImportant)
+                                Container(
+                                  margin: const EdgeInsets.only(
+                                    top: 4,
+                                    right: 8,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.warning.withAlpha(20),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                      color: AppColors.warning.withAlpha(60),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    '重要',
+                                    style: AppTypography.labelSmall.copyWith(
+                                      color: AppColors.warning,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ),
+                              Expanded(
+                                child: Text(
+                                  n.title,
+                                  style: AppTypography.headlineSmall.copyWith(
+                                    color: c.text,
+                                  ),
+                                ),
                               ),
-                              child: Text('重要',
-                                  style: AppTypography.labelSmall.copyWith(
-                                    color: AppColors.warning,
-                                    fontSize: 10,
-                                  )),
-                            ),
-                          Expanded(
-                            child: Text(
-                              n.title,
-                              style: AppTypography.headlineSmall
-                                  .copyWith(color: textColor),
-                            ),
-                          ),
-                        ],
-                      )
+                            ],
+                          )
                           .animate()
                           .fadeIn(duration: 300.ms)
                           .slideY(begin: 0.05, end: 0),
@@ -264,32 +267,37 @@ class _NotificationDetailScreenState
                           Expanded(
                             child: Text(
                               n.publisher ?? '',
-                              style: AppTypography.bodyMedium
-                                  .copyWith(color: subColor),
+                              style: AppTypography.bodyMedium.copyWith(
+                                color: c.subtitle,
+                              ),
                             ),
                           ),
                           Text(
                             _formatFullTime(n.publishTime),
-                            style: AppTypography.bodySmall
-                                .copyWith(color: tertiaryColor),
+                            style: AppTypography.bodySmall.copyWith(
+                              color: c.tertiary,
+                            ),
                           ),
                         ],
-                      )
-                          .animate(delay: 100.ms)
-                          .fadeIn(duration: 250.ms),
+                      ).animate(delay: 100.ms).fadeIn(duration: 250.ms),
 
                       // Expiry indicator
                       if (n.expireTime != null) ...[
                         const SizedBox(height: 6),
                         Row(
                           children: [
-                            Icon(Icons.schedule_rounded,
-                                size: 13, color: tertiaryColor),
+                            Icon(
+                              Icons.schedule_rounded,
+                              size: 13,
+                              color: c.tertiary,
+                            ),
                             const SizedBox(width: 4),
                             Text(
                               '有效期至 ${_formatFullTime(n.expireTime!)}',
-                              style: AppTypography.bodySmall
-                                  .copyWith(color: tertiaryColor, fontSize: 11),
+                              style: AppTypography.bodySmall.copyWith(
+                                color: c.tertiary,
+                                fontSize: 11,
+                              ),
                             ),
                           ],
                         ),
@@ -298,7 +306,7 @@ class _NotificationDetailScreenState
                       const SizedBox(height: 20),
 
                       // ── Divider ──
-                      Divider(color: border, height: 1),
+                      Divider(color: c.border, height: 1),
 
                       const SizedBox(height: 20),
 
@@ -306,78 +314,85 @@ class _NotificationDetailScreenState
                       if (n.content != null && n.content.isNotEmpty)
                         _ContentBody(
                           htmlContent: n.content,
-                          textColor: textColor,
-                          isDark: isDark,
-                        )
-                            .animate(delay: 200.ms)
-                            .fadeIn(duration: 300.ms)
+                        ).animate(delay: 200.ms).fadeIn(duration: 300.ms)
                       else
                         Text(
                           '（无内容）',
-                          style: AppTypography.bodyMedium
-                              .copyWith(color: tertiaryColor),
+                          style: AppTypography.bodyMedium.copyWith(
+                            color: c.tertiary,
+                          ),
                         ),
 
                       // ── Attachment ──
                       if (n.attachmentJson != null &&
                           n.attachmentJson!.isNotEmpty) ...[
                         const SizedBox(height: 24),
-                        Text('附件',
-                            style: AppTypography.labelMedium
-                                .copyWith(color: subColor)),
+                        Text(
+                          '附件',
+                          style: AppTypography.labelMedium.copyWith(
+                            color: c.subtitle,
+                          ),
+                        ),
                         const SizedBox(height: 8),
                         Material(
-                          color: surface,
+                          color: c.surface,
                           borderRadius: BorderRadius.circular(12),
                           child: InkWell(
                             onTap: () => _onAttachmentTap(n),
                             borderRadius: BorderRadius.circular(12),
                             child: Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: border, width: 0.5),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 36,
-                                height: 36,
-                                decoration: BoxDecoration(
-                                  color: AppColors.info.withAlpha(20),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Icon(
-                                    Icons.attach_file_rounded,
-                                    size: 18,
-                                    color: AppColors.info),
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: c.border, width: 0.5),
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  _attachmentName(n.attachmentJson),
-                                  style: AppTypography.titleSmall
-                                      .copyWith(color: textColor),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.info.withAlpha(20),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Icon(
+                                      Icons.attach_file_rounded,
+                                      size: 18,
+                                      color: AppColors.info,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      _attachmentName(n.attachmentJson),
+                                      style: AppTypography.titleSmall.copyWith(
+                                        color: c.text,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  Icon(
+                                    Icons.download_rounded,
+                                    size: 20,
+                                    color: c.subtitle,
+                                  ),
+                                ],
                               ),
-                              Icon(Icons.download_rounded,
-                                  size: 20, color: subColor),
-                            ],
+                            ),
                           ),
-                        )),
-                        )
-                            .animate(delay: 300.ms)
-                            .fadeIn(duration: 250.ms),
+                        ).animate(delay: 300.ms).fadeIn(duration: 250.ms),
                       ],
 
                       // ── Comment ──
                       if (n.comment != null && n.comment!.isNotEmpty) ...[
                         const SizedBox(height: 24),
-                        Text('我的备注',
-                            style: AppTypography.labelMedium
-                                .copyWith(color: subColor)),
+                        Text(
+                          '我的备注',
+                          style: AppTypography.labelMedium.copyWith(
+                            color: c.subtitle,
+                          ),
+                        ),
                         const SizedBox(height: 8),
                         Container(
                           width: double.infinity,
@@ -386,12 +401,14 @@ class _NotificationDetailScreenState
                             color: AppColors.primary.withAlpha(8),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                                color: AppColors.primary.withAlpha(30)),
+                              color: AppColors.primary.withAlpha(30),
+                            ),
                           ),
                           child: Text(
                             n.comment!,
-                            style: AppTypography.bodyMedium
-                                .copyWith(color: textColor),
+                            style: AppTypography.bodyMedium.copyWith(
+                              color: c.text,
+                            ),
                           ),
                         ),
                       ],
@@ -438,17 +455,13 @@ class _NotificationDetailScreenState
 /// Complex HTML (tables, images) falls back to "open in browser".
 class _ContentBody extends StatelessWidget {
   final String htmlContent;
-  final Color textColor;
-  final bool isDark;
 
-  const _ContentBody({
-    required this.htmlContent,
-    required this.textColor,
-    required this.isDark,
-  });
+  const _ContentBody({required this.htmlContent});
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
+
     // Strip HTML tags to get plain text
     final text = _stripHtml(htmlContent);
 
@@ -459,7 +472,7 @@ class _ContentBody extends StatelessWidget {
     return SelectableText(
       text,
       style: AppTypography.bodyLarge.copyWith(
-        color: textColor,
+        color: c.text,
         height: 1.8,
         letterSpacing: 0.1,
       ),

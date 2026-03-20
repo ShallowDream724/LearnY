@@ -10,6 +10,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/design/app_theme_colors.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/shimmer.dart';
 import '../../core/providers/providers.dart';
@@ -77,8 +78,9 @@ class _FileWithCourse {
   const _FileWithCourse({required this.file, required this.courseName});
 }
 
-final _allFilesWithCourseProvider =
-    StreamProvider<List<_FileWithCourse>>((ref) {
+final _allFilesWithCourseProvider = StreamProvider<List<_FileWithCourse>>((
+  ref,
+) {
   final database = ref.watch(databaseProvider);
   final semesterId = ref.watch(currentSemesterIdProvider);
   if (semesterId == null) return Stream.value([]);
@@ -90,10 +92,10 @@ final _allFilesWithCourseProvider =
 
     return files
         .where((f) => courseMap.containsKey(f.courseId))
-        .map((f) => _FileWithCourse(
-              file: f,
-              courseName: courseMap[f.courseId] ?? '',
-            ))
+        .map(
+          (f) =>
+              _FileWithCourse(file: f, courseName: courseMap[f.courseId] ?? ''),
+        )
         .toList();
   });
 });
@@ -129,9 +131,11 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toLowerCase();
       result = result
-          .where((f) =>
-              f.file.title.toLowerCase().contains(q) ||
-              f.courseName.toLowerCase().contains(q))
+          .where(
+            (f) =>
+                f.file.title.toLowerCase().contains(q) ||
+                f.courseName.toLowerCase().contains(q),
+          )
           .toList();
     }
 
@@ -143,8 +147,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
         result = result.where((f) => f.file.isNew).toList();
         break;
       case _FileFilter.favorite:
-        result =
-            result.where((f) => f.file.isFavorite == true).toList();
+        result = result.where((f) => f.file.isFavorite == true).toList();
         break;
       case _FileFilter.downloaded:
         result = result
@@ -157,7 +160,8 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
   }
 
   Map<_TimeGroup, List<_FileWithCourse>> _groupByTime(
-      List<_FileWithCourse> files) {
+    List<_FileWithCourse> files,
+  ) {
     final groups = <_TimeGroup, List<_FileWithCourse>>{};
     for (final f in files) {
       final group = _classifyByTime(f.file.uploadTime);
@@ -168,58 +172,61 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? AppColors.darkBackground : AppColors.lightBackground;
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final sub =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
-    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
+    final c = context.colors;
 
     final filesAsync = ref.watch(_allFilesWithCourseProvider);
 
     return Scaffold(
-      backgroundColor: bg,
+      backgroundColor: c.bg,
       body: CustomScrollView(
         slivers: [
           // App bar
           SliverAppBar(
             floating: true,
             snap: true,
-            title: const Text('文件',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
+            title: const Text(
+              '文件',
+              style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+            ),
             bottom: PreferredSize(
               preferredSize: const Size.fromHeight(100),
               child: Column(
                 children: [
                   // Search bar
                   Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 6,
+                    ),
                     child: Container(
                       height: 40,
                       decoration: BoxDecoration(
-                        color: surface,
+                        color: c.surface,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: border, width: 0.5),
+                        border: Border.all(color: c.border, width: 0.5),
                       ),
                       child: TextField(
                         controller: _searchController,
                         focusNode: _searchFocusNode,
-                        style: TextStyle(fontSize: 14, color: textColor),
+                        style: TextStyle(fontSize: 14, color: c.text),
                         decoration: InputDecoration(
                           hintText: '搜索文件名或课程名...',
                           hintStyle: TextStyle(
                             fontSize: 14,
-                            color: sub.withAlpha(150),
+                            color: c.subtitle.withAlpha(150),
                           ),
-                          prefixIcon:
-                              Icon(Icons.search_rounded, size: 20, color: sub),
+                          prefixIcon: Icon(
+                            Icons.search_rounded,
+                            size: 20,
+                            color: c.subtitle,
+                          ),
                           suffixIcon: _searchQuery.isNotEmpty
                               ? IconButton(
-                                  icon: Icon(Icons.close_rounded,
-                                      size: 18, color: sub),
+                                  icon: Icon(
+                                    Icons.close_rounded,
+                                    size: 18,
+                                    color: c.subtitle,
+                                  ),
                                   onPressed: () {
                                     _searchController.clear();
                                     setState(() => _searchQuery = '');
@@ -227,8 +234,9 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                                 )
                               : null,
                           border: InputBorder.none,
-                          contentPadding:
-                              const EdgeInsets.symmetric(vertical: 10),
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 10,
+                          ),
                         ),
                         onChanged: (v) => setState(() => _searchQuery = v),
                       ),
@@ -248,23 +256,21 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                           child: FilterChip(
                             label: Text(_filterLabel(f)),
                             selected: isActive,
-                            onSelected: (_) =>
-                                setState(() => _filter = f),
+                            onSelected: (_) => setState(() => _filter = f),
                             showCheckmark: false,
                             labelStyle: TextStyle(
                               fontSize: 12,
-                              fontWeight:
-                                  isActive ? FontWeight.w600 : FontWeight.w500,
-                              color: isActive
-                                  ? Colors.white
-                                  : sub,
+                              fontWeight: isActive
+                                  ? FontWeight.w600
+                                  : FontWeight.w500,
+                              color: isActive ? Colors.white : c.subtitle,
                             ),
-                            backgroundColor: surface,
-                            selectedColor: isDark
+                            backgroundColor: c.surface,
+                            selectedColor: context.isDark
                                 ? AppColors.info
                                 : const Color(0xFF007AFF),
                             side: BorderSide(
-                              color: isActive ? Colors.transparent : border,
+                              color: isActive ? Colors.transparent : c.border,
                               width: 0.5,
                             ),
                             shape: RoundedRectangleBorder(
@@ -286,19 +292,19 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
 
           // Content
           filesAsync.when(
-            loading: () => const SliverFillRemaining(
-              child: ListSkeleton(),
-            ),
+            loading: () => const SliverFillRemaining(child: ListSkeleton()),
             error: (e, _) => SliverFillRemaining(
               child: Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.error_outline_rounded,
-                        size: 40, color: sub),
+                    Icon(
+                      Icons.error_outline_rounded,
+                      size: 40,
+                      color: c.subtitle,
+                    ),
                     const SizedBox(height: 10),
-                    Text('加载失败',
-                        style: TextStyle(color: textColor, fontSize: 15)),
+                    Text('加载失败', style: TextStyle(color: c.text, fontSize: 15)),
                   ],
                 ),
               ),
@@ -312,16 +318,19 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.folder_open_rounded,
-                            size: 48, color: sub.withAlpha(100)),
+                        Icon(
+                          Icons.folder_open_rounded,
+                          size: 48,
+                          color: c.subtitle.withAlpha(100),
+                        ),
                         const SizedBox(height: 12),
                         Text(
                           _searchQuery.isNotEmpty
                               ? '没有匹配的文件'
                               : _filter != _FileFilter.all
-                                  ? '暂无${_filterLabel(_filter)}文件'
-                                  : '暂无文件',
-                          style: TextStyle(color: sub, fontSize: 15),
+                              ? '暂无${_filterLabel(_filter)}文件'
+                              : '暂无文件',
+                          style: TextStyle(color: c.subtitle, fontSize: 15),
                         ),
                       ],
                     ),
@@ -346,7 +355,6 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                         return _SectionHeader(
                           group: group,
                           count: items.length,
-                          isDark: isDark,
                         );
                       }
                       cursor++;
@@ -356,12 +364,15 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                         final item = items[itemIndex];
                         return Padding(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 4),
-                          child: FileCard(
-                            file: item.file,
-                            courseName: item.courseName,
-                            onTap: () => _navigateToDetail(item),
-                          ).animate().fadeIn(
+                            horizontal: 16,
+                            vertical: 4,
+                          ),
+                          child:
+                              FileCard(
+                                file: item.file,
+                                courseName: item.courseName,
+                                onTap: () => _navigateToDetail(item),
+                              ).animate().fadeIn(
                                 delay: Duration(milliseconds: itemIndex * 30),
                                 duration: 200.ms,
                               ),
@@ -372,8 +383,11 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                     // Bottom padding
                     return const SizedBox(height: 32);
                   },
-                  childCount: orderedGroups.fold<int>(
-                          0, (sum, g) => sum + groups[g]!.length + 1) +
+                  childCount:
+                      orderedGroups.fold<int>(
+                        0,
+                        (sum, g) => sum + groups[g]!.length + 1,
+                      ) +
                       1,
                 ),
               );
@@ -385,11 +399,13 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
   }
 
   void _navigateToDetail(_FileWithCourse item) {
-    context.push(Routes.fileDetail(
-      fileId: item.file.id,
-      courseId: item.file.courseId,
-      courseName: item.courseName,
-    ));
+    context.push(
+      Routes.fileDetail(
+        fileId: item.file.id,
+        courseId: item.file.courseId,
+        courseName: item.courseName,
+      ),
+    );
   }
 
   String _filterLabel(_FileFilter f) {
@@ -413,41 +429,34 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
 class _SectionHeader extends StatelessWidget {
   final _TimeGroup group;
   final int count;
-  final bool isDark;
 
-  const _SectionHeader({
-    required this.group,
-    required this.count,
-    required this.isDark,
-  });
+  const _SectionHeader({required this.group, required this.count});
 
   @override
   Widget build(BuildContext context) {
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final sub =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+    final c = context.colors;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
       child: Row(
         children: [
-          Icon(_timeGroupIcon(group), size: 18, color: sub),
+          Icon(_timeGroupIcon(group), size: 18, color: c.subtitle),
           const SizedBox(width: 8),
           Text(
             _timeGroupLabel(group),
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              color: textColor,
+              color: c.text,
             ),
           ),
           const SizedBox(width: 6),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
             decoration: BoxDecoration(
-              color: (isDark ? Colors.white : Colors.black).withAlpha(15),
+              color: (context.isDark ? Colors.white : Colors.black).withAlpha(
+                15,
+              ),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
@@ -455,7 +464,7 @@ class _SectionHeader extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: sub,
+                color: c.subtitle,
               ),
             ),
           ),

@@ -10,7 +10,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/design/colors.dart';
+import '../../../core/design/app_theme_colors.dart';
 import '../../../core/design/typography.dart';
 import '../../../core/providers/providers.dart';
 import '../../../core/providers/sync_provider.dart';
@@ -60,10 +60,10 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
   }
 
   Color _tierColor(_UrgencyTier t) => switch (t) {
-        _UrgencyTier.critical => const Color(0xFFFF3B30),
-        _UrgencyTier.warning => const Color(0xFFE8590C),
-        _UrgencyTier.normal => const Color(0xFF007AFF),
-      };
+    _UrgencyTier.critical => const Color(0xFFFF3B30),
+    _UrgencyTier.warning => const Color(0xFFE8590C),
+    _UrgencyTier.normal => const Color(0xFF007AFF),
+  };
 
   // ── Time formatting ──
 
@@ -101,9 +101,11 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
     final deadlineWeekday = deadline.weekday;
     const names = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
     final nowMonday = now.subtract(Duration(days: nowWeekday - 1));
-    final deadlineMonday =
-        deadline.subtract(Duration(days: deadlineWeekday - 1));
-    final sameWeek = nowMonday.year == deadlineMonday.year &&
+    final deadlineMonday = deadline.subtract(
+      Duration(days: deadlineWeekday - 1),
+    );
+    final sameWeek =
+        nowMonday.year == deadlineMonday.year &&
         nowMonday.month == deadlineMonday.month &&
         nowMonday.day == deadlineMonday.day;
 
@@ -162,9 +164,7 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
             onPressed: () {
               final v = int.tryParse(controller.text);
               if (v != null && v > 0) {
-                ref
-                    .read(deadlineThresholdHoursProvider.notifier)
-                    .setHours(v);
+                ref.read(deadlineThresholdHoursProvider.notifier).setHours(v);
               }
               Navigator.pop(ctx);
             },
@@ -248,8 +248,10 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
                 const Spacer(),
                 // Threshold badge
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFB4783C).withAlpha(18),
                     borderRadius: BorderRadius.circular(4),
@@ -301,9 +303,7 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
             return InkWell(
               onTap: () => widget.onTap?.call(hw),
               child: Container(
-                padding: EdgeInsets.fromLTRB(
-                  16, 11, 16, isLast ? 14 : 11,
-                ),
+                padding: EdgeInsets.fromLTRB(16, 11, 16, isLast ? 14 : 11),
                 decoration: BoxDecoration(
                   border: isLast
                       ? null
@@ -330,8 +330,8 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
                             tier == _UrgencyTier.critical
                                 ? 153 // 0.6
                                 : tier == _UrgencyTier.warning
-                                    ? 128 // 0.5
-                                    : 89, // 0.35
+                                ? 128 // 0.5
+                                : 89, // 0.35
                           ),
                         ),
                       ),
@@ -360,7 +360,7 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
                             hw.title,
                             style: AppTypography.bodyMedium.copyWith(
                               color: isDark
-                                  ? AppColors.darkTextPrimary
+                                  ? context.colors.text
                                   : const Color(0xFF1C1C1E),
                               fontWeight: FontWeight.w600,
                               fontSize: 15,
@@ -401,8 +401,7 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
                           ),
                         ],
                         // Progress bar for critical items
-                        if (tier == _UrgencyTier.critical &&
-                            !hw.isOverdue) ...[
+                        if (tier == _UrgencyTier.critical && !hw.isOverdue) ...[
                           const SizedBox(height: 3),
                           _ProgressBar(remaining: hw.timeRemaining),
                         ],
@@ -440,8 +439,7 @@ class _ProgressBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Fraction elapsed out of 24h
-    final fraction =
-        (1.0 - remaining.inSeconds / (24 * 3600)).clamp(0.0, 1.0);
+    final fraction = (1.0 - remaining.inSeconds / (24 * 3600)).clamp(0.0, 1.0);
 
     return SizedBox(
       width: 56,

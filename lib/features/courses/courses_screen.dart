@@ -7,11 +7,12 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/design/app_theme_colors.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/cooldown_toast.dart';
 import '../../core/design/shimmer.dart';
-import '../../core/design/typography.dart';
 import '../../core/design/responsive.dart';
+import '../../core/design/typography.dart';
 import '../../core/providers/providers.dart';
 import '../../core/providers/sync_provider.dart';
 import '../../core/database/database.dart';
@@ -48,15 +49,19 @@ final _courseStatsProvider = FutureProvider<List<CourseStats>>((ref) async {
     final homeworks = await db.getHomeworksByCourse(c.id);
     final files = await db.getFilesByCourse(c.id);
 
-    final unread = notifications.where((n) => !n.hasRead && !n.hasReadLocal).length;
+    final unread = notifications
+        .where((n) => !n.hasRead && !n.hasReadLocal)
+        .length;
     final pending = homeworks.where((h) => !h.submitted && !h.graded).length;
 
-    stats.add(CourseStats(
-      course: c,
-      unreadNotifications: unread,
-      pendingHomeworks: pending,
-      totalFiles: files.length,
-    ));
+    stats.add(
+      CourseStats(
+        course: c,
+        unreadNotifications: unread,
+        pendingHomeworks: pending,
+        totalFiles: files.length,
+      ),
+    );
   }
 
   // Sort: put courses with pending items first
@@ -78,9 +83,7 @@ class CoursesScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
+    final c = context.colors;
     final statsAsync = ref.watch(_courseStatsProvider);
 
     return Scaffold(
@@ -97,118 +100,122 @@ class CoursesScreen extends ConsumerWidget {
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-          SliverAppBar(
-            floating: true,
-            snap: true,
-            title: Text(
-              '课程',
-              style: AppTypography.headlineMedium.copyWith(color: textColor),
-            ),
-          ),
-
-          // ── Content ──
-          statsAsync.when(
-            loading: () => const SliverFillRemaining(
-              child: ListSkeleton(),
-            ),
-            error: (e, _) => SliverFillRemaining(
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.error_outline_rounded,
-                        size: 48,
-                        color: isDark
-                            ? AppColors.darkTextSecondary
-                            : AppColors.lightTextSecondary),
-                    const SizedBox(height: 12),
-                    Text('加载失败',
-                        style: AppTypography.titleMedium
-                            .copyWith(color: textColor)),
-                    const SizedBox(height: 8),
-                    Text('请下拉刷新重试',
-                        style: AppTypography.bodySmall.copyWith(
-                            color: isDark
-                                ? AppColors.darkTextTertiary
-                                : AppColors.lightTextTertiary)),
-                  ],
-                ),
+            SliverAppBar(
+              floating: true,
+              snap: true,
+              title: Text(
+                '课程',
+                style: AppTypography.headlineMedium.copyWith(color: c.text),
               ),
             ),
-            data: (stats) {
-              if (stats.isEmpty) {
-                return SliverFillRemaining(
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.school_outlined,
+
+            // ── Content ──
+            statsAsync.when(
+              loading: () => const SliverFillRemaining(child: ListSkeleton()),
+              error: (e, _) => SliverFillRemaining(
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.error_outline_rounded,
+                        size: 48,
+                        color: c.subtitle,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        '加载失败',
+                        style: AppTypography.titleMedium.copyWith(
+                          color: c.text,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '请下拉刷新重试',
+                        style: AppTypography.bodySmall.copyWith(
+                          color: c.tertiary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              data: (stats) {
+                if (stats.isEmpty) {
+                  return SliverFillRemaining(
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.school_outlined,
                             size: 48,
-                            color: isDark
-                                ? AppColors.darkTextTertiary
-                                : AppColors.lightTextTertiary),
-                        const SizedBox(height: 12),
-                        Text('暂无课程',
+                            color: c.tertiary,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            '暂无课程',
                             style: AppTypography.titleMedium.copyWith(
-                              color: isDark
-                                  ? AppColors.darkTextTertiary
-                                  : AppColors.lightTextTertiary,
-                            )),
-                      ],
+                              color: c.tertiary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
+                return SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, rowIndex) {
+                        final cols = courseGridColumns(context);
+                        final i1 = rowIndex * cols;
+                        final i2 = i1 + 1;
+                        final hasSecond = cols > 1 && i2 < stats.length;
+
+                        Widget card(int index) {
+                          return Expanded(
+                            child:
+                                _CourseCard(
+                                      stats: stats[index],
+                                      colorIndex: index,
+                                    )
+                                    .animate(delay: (60 * index).ms)
+                                    .fadeIn(duration: 300.ms)
+                                    .scale(
+                                      begin: const Offset(0.95, 0.95),
+                                      end: const Offset(1, 1),
+                                    ),
+                          );
+                        }
+
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: IntrinsicHeight(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                card(i1),
+                                if (hasSecond) ...[
+                                  const SizedBox(width: 10),
+                                  card(i2),
+                                ] else if (cols > 1)
+                                  const Expanded(child: SizedBox()),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                      childCount:
+                          (stats.length + courseGridColumns(context) - 1) ~/
+                          courseGridColumns(context),
                     ),
                   ),
                 );
-              }
-
-              return SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, rowIndex) {
-                      final cols = courseGridColumns(context);
-                      final i1 = rowIndex * cols;
-                      final i2 = i1 + 1;
-                      final hasSecond = cols > 1 && i2 < stats.length;
-
-                      Widget card(int index) {
-                        return Expanded(
-                          child: _CourseCard(
-                            stats: stats[index],
-                            isDark: isDark,
-                            colorIndex: index,
-                          )
-                              .animate(delay: (60 * index).ms)
-                              .fadeIn(duration: 300.ms)
-                              .scale(
-                                  begin: const Offset(0.95, 0.95),
-                                  end: const Offset(1, 1)),
-                        );
-                      }
-
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: IntrinsicHeight(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              card(i1),
-                              if (hasSecond) ...[
-                                const SizedBox(width: 10),
-                                card(i2),
-                              ] else if (cols > 1)
-                                const Expanded(child: SizedBox()),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                    childCount: (stats.length + courseGridColumns(context) - 1) ~/
-                        courseGridColumns(context),
-                  ),
-                ),
-              );
-            },
-          ),
+              },
+            ),
           ],
         ),
       ),
@@ -234,32 +241,21 @@ const _cardColors = [
 
 class _CourseCard extends StatelessWidget {
   final CourseStats stats;
-  final bool isDark;
   final int colorIndex;
 
-  const _CourseCard({
-    required this.stats,
-    required this.isDark,
-    required this.colorIndex,
-  });
+  const _CourseCard({required this.stats, required this.colorIndex});
 
   @override
   Widget build(BuildContext context) {
-    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final subColor =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
-    final tertiaryColor =
-        isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+    final c = context.colors;
 
     final accent = _cardColors[colorIndex % _cardColors.length];
     final course = stats.course;
-    final hasBadge = stats.unreadNotifications > 0 || stats.pendingHomeworks > 0;
+    final hasBadge =
+        stats.unreadNotifications > 0 || stats.pendingHomeworks > 0;
 
     return Material(
-      color: surface,
+      color: c.surface,
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: () {
@@ -267,108 +263,113 @@ class _CourseCard extends StatelessWidget {
         },
         borderRadius: BorderRadius.circular(16),
         child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: border, width: 0.5),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Top row: accent bar + badge
-            Row(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [accent, accent.withAlpha(180)],
-                    ),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Center(
-                    child: Text(
-                      _initials(course.name),
-                      style: AppTypography.labelSmall.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ),
-                const Spacer(),
-                if (hasBadge)
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: c.border, width: 0.5),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top row: accent bar + badge
+              Row(
+                children: [
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    width: 36,
+                    height: 36,
                     decoration: BoxDecoration(
-                      color: AppColors.unreadBadge,
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [accent, accent.withAlpha(180)],
+                      ),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Text(
-                      '${stats.unreadNotifications + stats.pendingHomeworks}',
-                      style: AppTypography.labelSmall.copyWith(
-                        color: Colors.white,
-                        fontSize: 10,
+                    child: Center(
+                      child: Text(
+                        _initials(course.name),
+                        style: AppTypography.labelSmall.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                   ),
-              ],
-            ),
+                  const Spacer(),
+                  if (hasBadge)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.unreadBadge,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '${stats.unreadNotifications + stats.pendingHomeworks}',
+                        style: AppTypography.labelSmall.copyWith(
+                          color: Colors.white,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
 
-            const SizedBox(height: 12),
+              const SizedBox(height: 12),
 
-            // Course name
-            Text(
-              course.name,
-              style: AppTypography.titleMedium.copyWith(color: textColor),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
+              // Course name
+              Text(
+                course.name,
+                style: AppTypography.titleMedium.copyWith(color: c.text),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
 
-            const SizedBox(height: 4),
+              const SizedBox(height: 4),
 
-            // Teacher
-            Text(
-              course.teacherName ?? '',
-              style: AppTypography.bodySmall.copyWith(color: subColor),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+              // Teacher
+              Text(
+                course.teacherName ?? '',
+                style: AppTypography.bodySmall.copyWith(color: c.subtitle),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
 
-            const SizedBox(height: 8),
+              const SizedBox(height: 8),
 
-            // Bottom stats row
-            Row(
-              children: [
-                _MicroStat(
+              // Bottom stats row
+              Row(
+                children: [
+                  _MicroStat(
                     icon: Icons.notifications_none_rounded,
                     count: stats.unreadNotifications,
                     color: stats.unreadNotifications > 0
                         ? AppColors.info
-                        : tertiaryColor),
-                const SizedBox(width: 12),
-                _MicroStat(
+                        : c.tertiary,
+                  ),
+                  const SizedBox(width: 12),
+                  _MicroStat(
                     icon: Icons.assignment_outlined,
                     count: stats.pendingHomeworks,
                     color: stats.pendingHomeworks > 0
                         ? AppColors.warning
-                        : tertiaryColor),
-                const SizedBox(width: 12),
-                _MicroStat(
+                        : c.tertiary,
+                  ),
+                  const SizedBox(width: 12),
+                  _MicroStat(
                     icon: Icons.folder_outlined,
                     count: stats.totalFiles,
-                    color: tertiaryColor),
-              ],
-            ),
-          ],
+                    color: c.tertiary,
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
-    ),
     );
   }
 

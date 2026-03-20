@@ -24,6 +24,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/design/app_theme_colors.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/responsive.dart';
 import '../../core/design/shimmer.dart';
@@ -62,8 +63,7 @@ class _HomeworkDetailScreenState extends ConsumerState<HomeworkDetailScreen> {
   Future<void> _loadData() async {
     final database = ref.read(databaseProvider);
     final homeworks = await database.getHomeworksByCourse(widget.courseId);
-    final hw =
-        homeworks.where((h) => h.id == widget.homeworkId).firstOrNull;
+    final hw = homeworks.where((h) => h.id == widget.homeworkId).firstOrNull;
 
     if (mounted) {
       setState(() {
@@ -75,14 +75,11 @@ class _HomeworkDetailScreenState extends ConsumerState<HomeworkDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? AppColors.darkBackground : AppColors.lightBackground;
-    final subColor =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+    final c = context.colors;
 
     if (_loading) {
       return Scaffold(
-        backgroundColor: bg,
+        backgroundColor: c.bg,
         appBar: AppBar(),
         body: const ListSkeleton(),
       );
@@ -91,11 +88,13 @@ class _HomeworkDetailScreenState extends ConsumerState<HomeworkDetailScreen> {
     final hw = _homework;
     if (hw == null) {
       return Scaffold(
-        backgroundColor: bg,
+        backgroundColor: c.bg,
         appBar: AppBar(),
         body: Center(
-          child: Text('作业未找到',
-              style: AppTypography.titleMedium.copyWith(color: subColor)),
+          child: Text(
+            '作业未找到',
+            style: AppTypography.titleMedium.copyWith(color: c.subtitle),
+          ),
         ),
       );
     }
@@ -105,7 +104,7 @@ class _HomeworkDetailScreenState extends ConsumerState<HomeworkDetailScreen> {
     final canSubmit = !hw.graded;
 
     return Scaffold(
-      backgroundColor: bg,
+      backgroundColor: c.bg,
       floatingActionButton: canSubmit
           ? FloatingActionButton.extended(
               onPressed: () async {
@@ -124,9 +123,7 @@ class _HomeworkDetailScreenState extends ConsumerState<HomeworkDetailScreen> {
               },
               backgroundColor: AppColors.primary,
               icon: Icon(
-                hw.submitted
-                    ? Icons.edit_rounded
-                    : Icons.upload_rounded,
+                hw.submitted ? Icons.edit_rounded : Icons.upload_rounded,
                 color: Colors.white,
               ),
               label: Text(
@@ -145,7 +142,7 @@ class _HomeworkDetailScreenState extends ConsumerState<HomeworkDetailScreen> {
             pinned: true,
             title: Text(
               widget.courseName,
-              style: AppTypography.titleMedium.copyWith(color: subColor),
+              style: AppTypography.titleMedium.copyWith(color: c.subtitle),
             ),
           ),
 
@@ -159,14 +156,14 @@ class _HomeworkDetailScreenState extends ConsumerState<HomeworkDetailScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // ── Status Header ──
-                      _StatusHeader(homework: hw, isDark: isDark)
-                          .animate()
-                          .fadeIn(duration: 300.ms),
+                      _StatusHeader(
+                        homework: hw,
+                      ).animate().fadeIn(duration: 300.ms),
 
                       const SizedBox(height: 20),
 
                       // ── Deadline Info ──
-                      _DeadlineCard(homework: hw, isDark: isDark)
+                      _DeadlineCard(homework: hw)
                           .animate(delay: 100.ms)
                           .fadeIn(duration: 250.ms)
                           .slideY(begin: 0.03, end: 0),
@@ -176,15 +173,11 @@ class _HomeworkDetailScreenState extends ConsumerState<HomeworkDetailScreen> {
                           hw.description!.isNotEmpty) ...[
                         const SizedBox(height: 16),
                         _SectionCard(
-                          title: '作业要求',
-                          icon: Icons.description_rounded,
-                          iconColor: AppColors.info,
-                          isDark: isDark,
-                          child: _HtmlText(
-                            html: hw.description!,
-                            isDark: isDark,
-                          ),
-                        )
+                              title: '作业要求',
+                              icon: Icons.description_rounded,
+                              iconColor: AppColors.info,
+                              child: _HtmlText(html: hw.description!),
+                            )
                             .animate(delay: 150.ms)
                             .fadeIn(duration: 250.ms)
                             .slideY(begin: 0.03, end: 0),
@@ -196,50 +189,41 @@ class _HomeworkDetailScreenState extends ConsumerState<HomeworkDetailScreen> {
                         const SizedBox(height: 12),
                         _AttachmentCard(
                           label: '作业附件',
-                          isDark: isDark,
-                        )
-                            .animate(delay: 200.ms)
-                            .fadeIn(duration: 250.ms),
+                        ).animate(delay: 200.ms).fadeIn(duration: 250.ms),
                       ],
 
                       // ── Submission Section ──
                       if (hw.submitted) ...[
                         const SizedBox(height: 16),
                         _SectionCard(
-                          title: '我的提交',
-                          icon: Icons.upload_file_rounded,
-                          iconColor: AppColors.success,
-                          isDark: isDark,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (hw.submittedContent != null &&
-                                  hw.submittedContent!.isNotEmpty)
-                                _HtmlText(
-                                  html: hw.submittedContent!,
-                                  isDark: isDark,
-                                ),
-                              if (hw.submitTime != null) ...[
-                                const SizedBox(height: 8),
-                                _MetaChip(
-                                  icon: Icons.schedule_rounded,
-                                  label:
-                                      '提交于 ${_formatFullTime(hw.submitTime!)}',
-                                  isDark: isDark,
-                                ),
-                              ],
-                              if (hw.isLateSubmission) ...[
-                                const SizedBox(height: 6),
-                                _MetaChip(
-                                  icon: Icons.warning_amber_rounded,
-                                  label: '迟交',
-                                  isDark: isDark,
-                                  color: AppColors.warning,
-                                ),
-                              ],
-                            ],
-                          ),
-                        )
+                              title: '我的提交',
+                              icon: Icons.upload_file_rounded,
+                              iconColor: AppColors.success,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (hw.submittedContent != null &&
+                                      hw.submittedContent!.isNotEmpty)
+                                    _HtmlText(html: hw.submittedContent!),
+                                  if (hw.submitTime != null) ...[
+                                    const SizedBox(height: 8),
+                                    _MetaChip(
+                                      icon: Icons.schedule_rounded,
+                                      label:
+                                          '提交于 ${_formatFullTime(hw.submitTime!)}',
+                                    ),
+                                  ],
+                                  if (hw.isLateSubmission) ...[
+                                    const SizedBox(height: 6),
+                                    _MetaChip(
+                                      icon: Icons.warning_amber_rounded,
+                                      label: '迟交',
+                                      color: AppColors.warning,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            )
                             .animate(delay: 250.ms)
                             .fadeIn(duration: 250.ms)
                             .slideY(begin: 0.03, end: 0),
@@ -251,16 +235,13 @@ class _HomeworkDetailScreenState extends ConsumerState<HomeworkDetailScreen> {
                         const SizedBox(height: 12),
                         _AttachmentCard(
                           label: '提交附件',
-                          isDark: isDark,
-                        )
-                            .animate(delay: 280.ms)
-                            .fadeIn(duration: 250.ms),
+                        ).animate(delay: 280.ms).fadeIn(duration: 250.ms),
                       ],
 
                       // ── Grade Section ──
                       if (hw.graded) ...[
                         const SizedBox(height: 16),
-                        _GradeSection(homework: hw, isDark: isDark)
+                        _GradeSection(homework: hw)
                             .animate(delay: 300.ms)
                             .fadeIn(duration: 300.ms)
                             .slideY(begin: 0.03, end: 0),
@@ -271,15 +252,11 @@ class _HomeworkDetailScreenState extends ConsumerState<HomeworkDetailScreen> {
                           hw.answerContent!.isNotEmpty) ...[
                         const SizedBox(height: 16),
                         _SectionCard(
-                          title: '参考答案',
-                          icon: Icons.auto_stories_rounded,
-                          iconColor: const Color(0xFF8B5CF6),
-                          isDark: isDark,
-                          child: _HtmlText(
-                            html: hw.answerContent!,
-                            isDark: isDark,
-                          ),
-                        )
+                              title: '参考答案',
+                              icon: Icons.auto_stories_rounded,
+                              iconColor: const Color(0xFF8B5CF6),
+                              child: _HtmlText(html: hw.answerContent!),
+                            )
                             .animate(delay: 350.ms)
                             .fadeIn(duration: 250.ms)
                             .slideY(begin: 0.03, end: 0),
@@ -292,13 +269,10 @@ class _HomeworkDetailScreenState extends ConsumerState<HomeworkDetailScreen> {
                           title: '我的备注',
                           icon: Icons.sticky_note_2_rounded,
                           iconColor: AppColors.primary,
-                          isDark: isDark,
                           child: Text(
                             hw.comment!,
                             style: AppTypography.bodyMedium.copyWith(
-                              color: isDark
-                                  ? AppColors.darkTextPrimary
-                                  : AppColors.lightTextPrimary,
+                              color: c.text,
                             ),
                           ),
                         ),
@@ -322,14 +296,12 @@ class _HomeworkDetailScreenState extends ConsumerState<HomeworkDetailScreen> {
 /// Color-coded status header showing the assignment lifecycle state.
 class _StatusHeader extends StatelessWidget {
   final db.Homework homework;
-  final bool isDark;
 
-  const _StatusHeader({required this.homework, required this.isDark});
+  const _StatusHeader({required this.homework});
 
   @override
   Widget build(BuildContext context) {
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
+    final c = context.colors;
     final (statusText, statusColor, statusIcon) = _statusInfo();
 
     return Column(
@@ -339,8 +311,7 @@ class _StatusHeader extends StatelessWidget {
         Row(
           children: [
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: statusColor.withAlpha(20),
                 borderRadius: BorderRadius.circular(8),
@@ -351,18 +322,19 @@ class _StatusHeader extends StatelessWidget {
                 children: [
                   Icon(statusIcon, size: 14, color: statusColor),
                   const SizedBox(width: 5),
-                  Text(statusText,
-                      style: AppTypography.labelMedium.copyWith(
-                        color: statusColor,
-                        fontWeight: FontWeight.w600,
-                      )),
+                  Text(
+                    statusText,
+                    style: AppTypography.labelMedium.copyWith(
+                      color: statusColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ],
               ),
             ),
             if (homework.isFavorite) ...[
               const SizedBox(width: 8),
-              Icon(Icons.bookmark_rounded,
-                  size: 18, color: AppColors.warning),
+              Icon(Icons.bookmark_rounded, size: 18, color: AppColors.warning),
             ],
           ],
         ),
@@ -372,7 +344,7 @@ class _StatusHeader extends StatelessWidget {
         // Title
         Text(
           homework.title,
-          style: AppTypography.headlineSmall.copyWith(color: textColor),
+          style: AppTypography.headlineSmall.copyWith(color: c.text),
         ),
       ],
     );
@@ -401,18 +373,12 @@ class _StatusHeader extends StatelessWidget {
 /// Shows deadline with countdown for pending assignments.
 class _DeadlineCard extends StatelessWidget {
   final db.Homework homework;
-  final bool isDark;
 
-  const _DeadlineCard({required this.homework, required this.isDark});
+  const _DeadlineCard({required this.homework});
 
   @override
   Widget build(BuildContext context) {
-    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final subColor =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+    final c = context.colors;
 
     final deadlineMs = int.tryParse(homework.deadline);
     final deadline = deadlineMs != null
@@ -442,36 +408,37 @@ class _DeadlineCard extends StatelessWidget {
       }
     } else if (deadline != null && isOverdue && isPending) {
       final diff = now.difference(deadline);
-      countdown = '已超期 ${diff.inDays > 0 ? '${diff.inDays} 天' : '${diff.inHours} 小时'}';
+      countdown =
+          '已超期 ${diff.inDays > 0 ? '${diff.inDays} 天' : '${diff.inHours} 小时'}';
       countdownColor = AppColors.error;
     }
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: surface,
+        color: c.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: border, width: 0.5),
+        border: Border.all(color: c.border, width: 0.5),
       ),
       child: Column(
         children: [
           // Deadline row
           Row(
             children: [
-              Icon(Icons.event_rounded, size: 18, color: subColor),
+              Icon(Icons.event_rounded, size: 18, color: c.subtitle),
               const SizedBox(width: 8),
-              Text('截止时间',
-                  style:
-                      AppTypography.labelMedium.copyWith(color: subColor)),
+              Text(
+                '截止时间',
+                style: AppTypography.labelMedium.copyWith(color: c.subtitle),
+              ),
               const Spacer(),
               Text(
                 deadline != null
                     ? '${deadline.year}/${deadline.month}/${deadline.day} '
-                        '${deadline.hour.toString().padLeft(2, '0')}:'
-                        '${deadline.minute.toString().padLeft(2, '0')}'
+                          '${deadline.hour.toString().padLeft(2, '0')}:'
+                          '${deadline.minute.toString().padLeft(2, '0')}'
                     : '未知',
-                style:
-                    AppTypography.titleSmall.copyWith(color: textColor),
+                style: AppTypography.titleSmall.copyWith(color: c.text),
               ),
             ],
           ),
@@ -481,16 +448,16 @@ class _DeadlineCard extends StatelessWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                Icon(Icons.schedule_rounded, size: 18, color: subColor),
+                Icon(Icons.schedule_rounded, size: 18, color: c.subtitle),
                 const SizedBox(width: 8),
-                Text('补交截止',
-                    style: AppTypography.labelMedium
-                        .copyWith(color: subColor)),
+                Text(
+                  '补交截止',
+                  style: AppTypography.labelMedium.copyWith(color: c.subtitle),
+                ),
                 const Spacer(),
                 Text(
                   _formatFullTime(homework.lateSubmissionDeadline!),
-                  style: AppTypography.bodySmall
-                      .copyWith(color: subColor),
+                  style: AppTypography.bodySmall.copyWith(color: c.subtitle),
                 ),
               ],
             ),
@@ -536,20 +503,12 @@ class _DeadlineCard extends StatelessWidget {
 /// - When only `gradeLevel` exists (no numeric grade), we show the level text.
 class _GradeSection extends StatelessWidget {
   final db.Homework homework;
-  final bool isDark;
 
-  const _GradeSection({required this.homework, required this.isDark});
+  const _GradeSection({required this.homework});
 
   @override
   Widget build(BuildContext context) {
-    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final subColor =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
-    final tertiaryColor =
-        isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+    final c = context.colors;
 
     final grade = homework.grade;
     final gradeColor = _gradeColor(grade);
@@ -557,9 +516,9 @@ class _GradeSection extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: surface,
+        color: c.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: border, width: 0.5),
+        border: Border.all(color: c.border, width: 0.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -569,9 +528,10 @@ class _GradeSection extends StatelessWidget {
             children: [
               Icon(Icons.grading_rounded, size: 18, color: AppColors.success),
               const SizedBox(width: 8),
-              Text('批改结果',
-                  style: AppTypography.titleMedium
-                      .copyWith(color: textColor)),
+              Text(
+                '批改结果',
+                style: AppTypography.titleMedium.copyWith(color: c.text),
+              ),
             ],
           ),
 
@@ -597,7 +557,8 @@ class _GradeSection extends StatelessWidget {
                   child: Center(
                     child: Text(
                       grade.toStringAsFixed(
-                          grade == grade.roundToDouble() ? 0 : 1),
+                        grade == grade.roundToDouble() ? 0 : 1,
+                      ),
                       style: AppTypography.statMedium.copyWith(
                         color: gradeColor,
                         fontWeight: FontWeight.w800,
@@ -622,8 +583,9 @@ class _GradeSection extends StatelessWidget {
                   child: Center(
                     child: Text(
                       _gradeLevelDisplay(homework.gradeLevel),
-                      style: AppTypography.titleMedium
-                          .copyWith(color: gradeColor),
+                      style: AppTypography.titleMedium.copyWith(
+                        color: gradeColor,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -639,22 +601,26 @@ class _GradeSection extends StatelessWidget {
                     if (homework.graderName != null) ...[
                       Text(
                         '批改人: ${homework.graderName}',
-                        style: AppTypography.bodyMedium
-                            .copyWith(color: subColor),
+                        style: AppTypography.bodyMedium.copyWith(
+                          color: c.subtitle,
+                        ),
                       ),
                       const SizedBox(height: 4),
                     ],
                     if (homework.gradeTime != null)
                       Text(
                         '批改于 ${_formatFullTime(homework.gradeTime!)}',
-                        style: AppTypography.bodySmall
-                            .copyWith(color: tertiaryColor),
+                        style: AppTypography.bodySmall.copyWith(
+                          color: c.tertiary,
+                        ),
                       ),
                     if (homework.gradeLevel != null) ...[
                       const SizedBox(height: 4),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: gradeColor.withAlpha(15),
                           borderRadius: BorderRadius.circular(6),
@@ -678,20 +644,21 @@ class _GradeSection extends StatelessWidget {
           if (homework.gradeContent != null &&
               homework.gradeContent!.isNotEmpty) ...[
             const SizedBox(height: 16),
-            Divider(color: border, height: 1),
+            Divider(color: c.border, height: 1),
             const SizedBox(height: 12),
-            Text('批改评语',
-                style:
-                    AppTypography.labelMedium.copyWith(color: subColor)),
+            Text(
+              '批改评语',
+              style: AppTypography.labelMedium.copyWith(color: c.subtitle),
+            ),
             const SizedBox(height: 8),
-            _HtmlText(html: homework.gradeContent!, isDark: isDark),
+            _HtmlText(html: homework.gradeContent!),
           ],
 
           // Grade attachment
           if (homework.gradeAttachmentJson != null &&
               homework.gradeAttachmentJson!.isNotEmpty) ...[
             const SizedBox(height: 12),
-            _AttachmentCard(label: '批改附件', isDark: isDark),
+            _AttachmentCard(label: '批改附件'),
           ],
         ],
       ),
@@ -732,31 +699,26 @@ class _SectionCard extends StatelessWidget {
   final String title;
   final IconData icon;
   final Color iconColor;
-  final bool isDark;
   final Widget child;
 
   const _SectionCard({
     required this.title,
     required this.icon,
     required this.iconColor,
-    required this.isDark,
     required this.child,
   });
 
   @override
   Widget build(BuildContext context) {
-    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
+    final c = context.colors;
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: surface,
+        color: c.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: border, width: 0.5),
+        border: Border.all(color: c.border, width: 0.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -765,9 +727,10 @@ class _SectionCard extends StatelessWidget {
             children: [
               Icon(icon, size: 18, color: iconColor),
               const SizedBox(width: 8),
-              Text(title,
-                  style: AppTypography.titleMedium
-                      .copyWith(color: textColor)),
+              Text(
+                title,
+                style: AppTypography.titleMedium.copyWith(color: c.text),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -781,25 +744,19 @@ class _SectionCard extends StatelessWidget {
 /// Attachment card (consistent design for all attachment types).
 class _AttachmentCard extends StatelessWidget {
   final String label;
-  final bool isDark;
 
-  const _AttachmentCard({required this.label, required this.isDark});
+  const _AttachmentCard({required this.label});
 
   @override
   Widget build(BuildContext context) {
-    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final subColor =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+    final c = context.colors;
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: surface,
+        color: c.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: border, width: 0.5),
+        border: Border.all(color: c.border, width: 0.5),
       ),
       child: Row(
         children: [
@@ -810,16 +767,20 @@ class _AttachmentCard extends StatelessWidget {
               color: AppColors.info.withAlpha(20),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.attach_file_rounded,
-                size: 18, color: AppColors.info),
+            child: const Icon(
+              Icons.attach_file_rounded,
+              size: 18,
+              color: AppColors.info,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(label,
-                style:
-                    AppTypography.titleSmall.copyWith(color: textColor)),
+            child: Text(
+              label,
+              style: AppTypography.titleSmall.copyWith(color: c.text),
+            ),
           ),
-          Icon(Icons.download_rounded, size: 20, color: subColor),
+          Icon(Icons.download_rounded, size: 20, color: c.subtitle),
         ],
       ),
     );
@@ -830,29 +791,26 @@ class _AttachmentCard extends StatelessWidget {
 class _MetaChip extends StatelessWidget {
   final IconData icon;
   final String label;
-  final bool isDark;
   final Color? color;
 
-  const _MetaChip({
-    required this.icon,
-    required this.label,
-    required this.isDark,
-    this.color,
-  });
+  const _MetaChip({required this.icon, required this.label, this.color});
 
   @override
   Widget build(BuildContext context) {
-    final chipColor = color ??
-        (isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary);
+    final chipColor = color ?? context.colors.tertiary;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, size: 13, color: chipColor),
         const SizedBox(width: 4),
-        Text(label,
-            style:
-                AppTypography.bodySmall.copyWith(color: chipColor, fontSize: 11)),
+        Text(
+          label,
+          style: AppTypography.bodySmall.copyWith(
+            color: chipColor,
+            fontSize: 11,
+          ),
+        ),
       ],
     );
   }
@@ -861,21 +819,16 @@ class _MetaChip extends StatelessWidget {
 /// Renders HTML as stripped text (same approach as notification detail).
 class _HtmlText extends StatelessWidget {
   final String html;
-  final bool isDark;
 
-  const _HtmlText({required this.html, required this.isDark});
+  const _HtmlText({required this.html});
 
   @override
   Widget build(BuildContext context) {
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
+    final c = context.colors;
 
     return SelectableText(
       _stripHtml(html),
-      style: AppTypography.bodyMedium.copyWith(
-        color: textColor,
-        height: 1.7,
-      ),
+      style: AppTypography.bodyMedium.copyWith(color: c.text, height: 1.7),
     );
   }
 

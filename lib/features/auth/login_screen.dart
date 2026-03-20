@@ -32,16 +32,14 @@
 /// If ticket interception fails (URL pattern changed), we fall back to
 /// extracting cookies via the WebView's cookie manager and injecting
 /// them into Dio's CookieJar.
-import 'dart:io';
-
 import 'package:cookie_jar/cookie_jar.dart';
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../../core/design/app_theme_colors.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/typography.dart';
 import '../../core/providers/providers.dart';
@@ -72,11 +70,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   void _initWebView() {
     _webViewController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(NavigationDelegate(
-        onPageStarted: _onPageStarted,
-        onPageFinished: _onPageFinished,
-        onNavigationRequest: _onNavigationRequest,
-      ));
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageStarted: _onPageStarted,
+          onPageFinished: _onPageFinished,
+          onNavigationRequest: _onNavigationRequest,
+        ),
+      );
   }
 
   // ─────────────────────────────────────────────
@@ -210,13 +210,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       await Future.delayed(const Duration(seconds: 2));
 
       // Try to navigate to the course list page in the WebView
-      await _webViewController
-          .loadRequest(Uri.parse(urls.learnStudentCourseListPage()));
+      await _webViewController.loadRequest(
+        Uri.parse(urls.learnStudentCourseListPage()),
+      );
       await Future.delayed(const Duration(seconds: 3));
 
       // Extract CSRF token via JavaScript
-      final rawHtml = await _webViewController
-          .runJavaScriptReturningResult('document.documentElement.outerHTML');
+      final rawHtml = await _webViewController.runJavaScriptReturningResult(
+        'document.documentElement.outerHTML',
+      );
 
       // The returned value might be JSON-encoded string (with surrounding quotes)
       String pageSource = rawHtml.toString();
@@ -243,8 +245,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
 
       if (csrfToken == null || csrfToken.isEmpty) {
-        debugPrint('[LearnY] Fallback CSRF extraction failed. '
-            'Page length: ${pageSource.length}');
+        debugPrint(
+          '[LearnY] Fallback CSRF extraction failed. '
+          'Page length: ${pageSource.length}',
+        );
         throw Exception('Fallback: could not find CSRF token in page');
       }
 
@@ -283,8 +287,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Future<void> _transferWebViewCookiesToDio(Learn2018Helper api) async {
     try {
       // Get JavaScript-accessible cookies (non-HttpOnly only)
-      final cookieStr = await _webViewController
-          .runJavaScriptReturningResult('document.cookie');
+      final cookieStr = await _webViewController.runJavaScriptReturningResult(
+        'document.cookie',
+      );
 
       String cookieString = cookieStr.toString();
       if (cookieString.startsWith('"') && cookieString.endsWith('"')) {
@@ -351,15 +356,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   // ─────────────────────────────────────────────
 
   Widget _buildBrandedScreen() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? AppColors.darkBackground : AppColors.lightBackground;
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final subtitleColor =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+    final c = context.colors;
 
     return Scaffold(
-      backgroundColor: bg,
+      backgroundColor: c.bg,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -368,7 +368,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               const Spacer(flex: 3),
 
               // Logo
-              _buildLogo(isDark)
+              _buildLogo()
                   .animate()
                   .fadeIn(duration: 600.ms, curve: Curves.easeOut)
                   .slideY(begin: -0.1, end: 0),
@@ -377,12 +377,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
               // Title
               Text(
-                'LearnY',
-                style: AppTypography.statLarge.copyWith(
-                  color: textColor,
-                  letterSpacing: -1.5,
-                ),
-              )
+                    'LearnY',
+                    style: AppTypography.statLarge.copyWith(
+                      color: c.text,
+                      letterSpacing: -1.5,
+                    ),
+                  )
                   .animate(delay: 200.ms)
                   .fadeIn(duration: 500.ms)
                   .slideY(begin: 0.1, end: 0),
@@ -393,7 +393,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               Text(
                 '清华大学网络学堂',
                 style: AppTypography.bodyLarge.copyWith(
-                  color: subtitleColor,
+                  color: c.subtitle,
                   letterSpacing: 2,
                 ),
               ).animate(delay: 400.ms).fadeIn(duration: 500.ms),
@@ -404,8 +404,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               if (_errorMessage != null) ...[
                 Container(
                   width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.error.withAlpha(20),
                     borderRadius: BorderRadius.circular(12),
@@ -413,14 +415,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.error_outline_rounded,
-                          color: AppColors.error, size: 20),
+                      const Icon(
+                        Icons.error_outline_rounded,
+                        color: AppColors.error,
+                        size: 20,
+                      ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
                           _errorMessage!,
-                          style: AppTypography.bodySmall
-                              .copyWith(color: AppColors.error),
+                          style: AppTypography.bodySmall.copyWith(
+                            color: AppColors.error,
+                          ),
                         ),
                       ),
                     ],
@@ -431,36 +437,36 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
               // Login button
               SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _startLogin,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Text(
-                          '统一身份认证登录',
-                          style: AppTypography.labelLarge.copyWith(
-                            color: Colors.white,
-                            fontSize: 15,
-                          ),
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton(
+                      onPressed: _isLoading ? null : _startLogin,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
                         ),
-                ),
-              )
+                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Text(
+                              '统一身份认证登录',
+                              style: AppTypography.labelLarge.copyWith(
+                                color: Colors.white,
+                                fontSize: 15,
+                              ),
+                            ),
+                    ),
+                  )
                   .animate(delay: 600.ms)
                   .fadeIn(duration: 500.ms)
                   .slideY(begin: 0.15, end: 0),
@@ -471,7 +477,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               Text(
                 'v0.1.0',
                 style: AppTypography.bodySmall.copyWith(
-                  color: subtitleColor.withAlpha(120),
+                  color: c.subtitle.withAlpha(120),
                 ),
               ).animate(delay: 800.ms).fadeIn(duration: 400.ms),
 
@@ -483,7 +489,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  Widget _buildLogo(bool isDark) {
+  Widget _buildLogo() {
     return Container(
       width: 88,
       height: 88,
@@ -496,7 +502,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         borderRadius: BorderRadius.circular(22),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withAlpha(isDark ? 60 : 40),
+            color: AppColors.primary.withAlpha(context.isDark ? 60 : 40),
             blurRadius: 24,
             offset: const Offset(0, 8),
           ),
@@ -558,9 +564,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   Text(
                     '正在建立安全会话...',
                     style: AppTypography.bodyMedium.copyWith(
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? AppColors.darkTextSecondary
-                          : AppColors.lightTextSecondary,
+                      color: context.colors.subtitle,
                     ),
                   ),
                 ],

@@ -20,6 +20,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/design/app_theme_colors.dart';
 import '../../core/design/colors.dart';
 import '../../core/providers/providers.dart';
 import '../../core/providers/sync_provider.dart';
@@ -157,16 +158,15 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? AppColors.darkBackground : AppColors.lightBackground;
+    final c = context.colors;
     final downloadStates = ref.watch(fileDownloadProvider);
     final fileState = _file != null
         ? (downloadStates[_file!.id] ??
-            FileDownloadState(fileId: _file!.id, status: DownloadStatus.none))
+              FileDownloadState(fileId: _file!.id, status: DownloadStatus.none))
         : null;
 
     return Scaffold(
-      backgroundColor: bg,
+      backgroundColor: c.bg,
       appBar: AppBar(
         title: Text(
           widget.courseName,
@@ -177,33 +177,28 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator.adaptive())
           : _file == null
-              ? _ErrorView(
-                  message: '文件不存在',
-                  onRetry: null,
-                )
-              : Stack(
-                  children: [
-                    _buildBody(fileState!, isDark),
-                    if (fileState.status == DownloadStatus.downloading)
-                      Positioned(
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        child: LinearProgressIndicator(
-                          value: fileState.progress > 0
-                              ? fileState.progress
-                              : null,
-                          minHeight: 3,
-                          backgroundColor: Colors.transparent,
-                          valueColor: AlwaysStoppedAnimation(
-                            isDark
-                                ? AppColors.info
-                                : const Color(0xFF007AFF),
-                          ),
-                        ),
+          ? _ErrorView(message: '文件不存在', onRetry: null)
+          : Stack(
+              children: [
+                _buildBody(fileState!),
+                if (fileState.status == DownloadStatus.downloading)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: LinearProgressIndicator(
+                      value: fileState.progress > 0 ? fileState.progress : null,
+                      minHeight: 3,
+                      backgroundColor: Colors.transparent,
+                      valueColor: AlwaysStoppedAnimation(
+                        context.isDark
+                            ? AppColors.info
+                            : const Color(0xFF007AFF),
                       ),
-                  ],
-                ),
+                    ),
+                  ),
+              ],
+            ),
     );
   }
 
@@ -268,7 +263,7 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
     ];
   }
 
-  Widget _buildBody(FileDownloadState fs, bool isDark) {
+  Widget _buildBody(FileDownloadState fs) {
     switch (fs.status) {
       case DownloadStatus.downloading:
       case DownloadStatus.none:
@@ -302,9 +297,9 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
       await Share.shareXFiles([XFile(fs.localPath!)]);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('分享失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('分享失败: $e')));
       }
     }
   }
@@ -313,9 +308,9 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
     if (fs.localPath == null) return;
     final result = await OpenFilex.open(fs.localPath!);
     if (result.type != ResultType.done && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('无法打开文件')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('无法打开文件')));
     }
   }
 }
@@ -396,8 +391,10 @@ class _PdfPreviewState extends State<_PdfPreview> {
             right: 0,
             child: Center(
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.black54,
                   borderRadius: BorderRadius.circular(16),
@@ -440,11 +437,16 @@ class _ImagePreview extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.broken_image_rounded,
-                    size: 48, color: Colors.grey),
+                const Icon(
+                  Icons.broken_image_rounded,
+                  size: 48,
+                  color: Colors.grey,
+                ),
                 const SizedBox(height: 8),
-                Text('图片加载失败',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                Text(
+                  '图片加载失败',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                ),
               ],
             ),
           ),
@@ -502,9 +504,7 @@ class _TextPreviewState extends State<_TextPreview> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
+    final c = context.colors;
 
     if (_loading) {
       return const Center(child: CircularProgressIndicator.adaptive());
@@ -524,7 +524,7 @@ class _TextPreviewState extends State<_TextPreview> {
           fontFamilyFallback: const ['monospace'],
           fontSize: 13,
           height: 1.6,
-          color: textColor,
+          color: c.text,
         ),
       ),
     );
@@ -541,11 +541,7 @@ class _DownloadingView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final sub =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+    final c = context.colors;
 
     return Center(
       child: Column(
@@ -560,12 +556,12 @@ class _DownloadingView extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          Text('正在下载...', style: TextStyle(color: textColor, fontSize: 15)),
+          Text('正在下载...', style: TextStyle(color: c.text, fontSize: 15)),
           const SizedBox(height: 4),
           Text(
             '${(progress * 100).toInt()}%',
             style: TextStyle(
-              color: sub,
+              color: c.subtitle,
               fontSize: 13,
               fontFamily: 'JetBrains Mono',
               fontFamilyFallback: const ['monospace'],
@@ -592,17 +588,15 @@ class _ErrorView extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.error_outline_rounded,
-              size: 48, color: Colors.grey),
+          const Icon(Icons.error_outline_rounded, size: 48, color: Colors.grey),
           const SizedBox(height: 12),
-          Text(message,
-              style: const TextStyle(color: Colors.grey, fontSize: 15)),
+          Text(
+            message,
+            style: const TextStyle(color: Colors.grey, fontSize: 15),
+          ),
           if (onRetry != null) ...[
             const SizedBox(height: 16),
-            FilledButton.tonal(
-              onPressed: onRetry,
-              child: const Text('重试'),
-            ),
+            FilledButton.tonal(onPressed: onRetry, child: const Text('重试')),
           ],
         ],
       ),
@@ -631,13 +625,7 @@ class _FileInfoPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final sub =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
-    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
+    final c = context.colors;
     final ext = _extractExtension(file.title, file.fileType);
 
     return Column(
@@ -650,20 +638,20 @@ class _FileInfoPanel extends StatelessWidget {
               children: [
                 // File icon
                 Center(
-                  child: Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      color: fileColor(ext).withAlpha(25),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Icon(
-                      fileIcon(ext),
-                      color: fileColor(ext),
-                      size: 36,
-                    ),
-                  ),
-                )
+                      child: Container(
+                        width: 72,
+                        height: 72,
+                        decoration: BoxDecoration(
+                          color: fileColor(ext).withAlpha(25),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Icon(
+                          fileIcon(ext),
+                          color: fileColor(ext),
+                          size: 36,
+                        ),
+                      ),
+                    )
                     .animate()
                     .fadeIn(duration: 300.ms)
                     .scale(
@@ -680,70 +668,71 @@ class _FileInfoPanel extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
-                      color: textColor,
+                      color: c.text,
                     ),
                     textAlign: TextAlign.center,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Center(
-                  child: Text(courseName,
-                      style: TextStyle(fontSize: 13, color: sub)),
+                  child: Text(
+                    courseName,
+                    style: TextStyle(fontSize: 13, color: c.subtitle),
+                  ),
                 ),
                 const SizedBox(height: 24),
 
                 // Metadata card
                 Container(
-                  decoration: BoxDecoration(
-                    color: surface,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: border, width: 0.5),
-                  ),
-                  child: Column(
-                    children: [
-                      _MetaRow(
-                        icon: Icons.insert_drive_file_rounded,
-                        label: '类型',
-                        value: ext.toUpperCase(),
-                        textColor: textColor,
-                        sub: sub,
+                      decoration: BoxDecoration(
+                        color: c.surface,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: c.border, width: 0.5),
                       ),
-                      Divider(height: 1, color: border),
-                      _MetaRow(
-                        icon: Icons.file_download_rounded,
-                        label: '大小',
-                        value: file.size.isNotEmpty
-                            ? file.size
-                            : '${file.rawSize} B',
-                        textColor: textColor,
-                        sub: sub,
+                      child: Column(
+                        children: [
+                          _MetaRow(
+                            icon: Icons.insert_drive_file_rounded,
+                            label: '类型',
+                            value: ext.toUpperCase(),
+                            textColor: c.text,
+                            sub: c.subtitle,
+                          ),
+                          Divider(height: 1, color: c.border),
+                          _MetaRow(
+                            icon: Icons.file_download_rounded,
+                            label: '大小',
+                            value: file.size.isNotEmpty
+                                ? file.size
+                                : '${file.rawSize} B',
+                            textColor: c.text,
+                            sub: c.subtitle,
+                          ),
+                          Divider(height: 1, color: c.border),
+                          _MetaRow(
+                            icon: Icons.access_time_rounded,
+                            label: '上传时间',
+                            value: _formatUploadTime(file.uploadTime),
+                            textColor: c.text,
+                            sub: c.subtitle,
+                          ),
+                          if (file.markedImportant) ...[
+                            Divider(height: 1, color: c.border),
+                            _MetaRow(
+                              icon: Icons.star_rounded,
+                              label: '标记',
+                              value: '重要文件',
+                              textColor: c.text,
+                              sub: c.subtitle,
+                              valueColor: AppColors.warning,
+                            ),
+                          ],
+                        ],
                       ),
-                      Divider(height: 1, color: border),
-                      _MetaRow(
-                        icon: Icons.access_time_rounded,
-                        label: '上传时间',
-                        value: _formatUploadTime(file.uploadTime),
-                        textColor: textColor,
-                        sub: sub,
-                      ),
-                      if (file.markedImportant) ...[
-                        Divider(height: 1, color: border),
-                        _MetaRow(
-                          icon: Icons.star_rounded,
-                          label: '标记',
-                          value: '重要文件',
-                          textColor: textColor,
-                          sub: sub,
-                          valueColor: AppColors.warning,
-                        ),
-                      ],
-                    ],
-                  ),
-                ).animate().fadeIn(delay: 100.ms, duration: 300.ms).slideY(
-                      begin: 0.1,
-                      end: 0,
-                      duration: 300.ms,
-                    ),
+                    )
+                    .animate()
+                    .fadeIn(delay: 100.ms, duration: 300.ms)
+                    .slideY(begin: 0.1, end: 0, duration: 300.ms),
 
                 // Description
                 if (file.description.isNotEmpty) ...[
@@ -752,9 +741,9 @@ class _FileInfoPanel extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: surface,
+                      color: c.surface,
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: border, width: 0.5),
+                      border: Border.all(color: c.border, width: 0.5),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -764,7 +753,7 @@ class _FileInfoPanel extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: sub,
+                            color: c.subtitle,
                             letterSpacing: 0.5,
                           ),
                         ),
@@ -773,7 +762,7 @@ class _FileInfoPanel extends StatelessWidget {
                           file.description,
                           style: TextStyle(
                             fontSize: 14,
-                            color: textColor,
+                            color: c.text,
                             height: 1.6,
                           ),
                         ),
@@ -789,11 +778,10 @@ class _FileInfoPanel extends StatelessWidget {
         // Bottom action bar for non-previewable files
         if (isDownloaded)
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             decoration: BoxDecoration(
-              color: surface,
-              border: Border(top: BorderSide(color: border, width: 0.5)),
+              color: c.surface,
+              border: Border(top: BorderSide(color: c.border, width: 0.5)),
             ),
             child: SafeArea(
               top: false,

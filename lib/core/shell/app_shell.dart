@@ -4,14 +4,14 @@
 /// 4 tabs: Home, Assignments, Courses, Profile.
 library;
 
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../design/app_theme_colors.dart';
 import '../design/colors.dart';
-import '../design/typography.dart';
 import '../design/responsive.dart';
+import '../design/typography.dart';
 import '../providers/connectivity_provider.dart';
 import '../router/router.dart';
 
@@ -55,9 +55,7 @@ class AppShell extends ConsumerWidget {
         AnimatedSize(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
-          child: isOffline
-              ? _OfflineBanner()
-              : const SizedBox.shrink(),
+          child: isOffline ? _OfflineBanner() : const SizedBox.shrink(),
         ),
         // Content
         Expanded(child: child),
@@ -75,9 +73,7 @@ class AppShell extends ConsumerWidget {
   // ─────────────────────────────────────────────
 
   Widget _buildRailLayout(BuildContext context, int index, Widget content) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
+    final c = context.colors;
     final layout = layoutTypeOf(context);
     final extended = layout == LayoutType.expanded;
 
@@ -87,10 +83,8 @@ class AppShell extends ConsumerWidget {
           // Side rail
           Container(
             decoration: BoxDecoration(
-              color: surface,
-              border: Border(
-                right: BorderSide(color: border, width: 0.5),
-              ),
+              color: c.surface,
+              border: Border(right: BorderSide(color: c.border, width: 0.5)),
             ),
             child: NavigationRail(
               selectedIndex: index,
@@ -100,20 +94,16 @@ class AppShell extends ConsumerWidget {
               minExtendedWidth: 200,
               backgroundColor: Colors.transparent,
               indicatorColor: AppColors.primary.withAlpha(30),
-              selectedIconTheme:
-                  const IconThemeData(color: AppColors.primary, size: 24),
-              unselectedIconTheme: IconThemeData(
-                color: isDark
-                    ? AppColors.darkTextTertiary
-                    : AppColors.lightTextTertiary,
+              selectedIconTheme: const IconThemeData(
+                color: AppColors.primary,
                 size: 24,
               ),
-              selectedLabelTextStyle:
-                  AppTypography.labelSmall.copyWith(color: AppColors.primary),
+              unselectedIconTheme: IconThemeData(color: c.tertiary, size: 24),
+              selectedLabelTextStyle: AppTypography.labelSmall.copyWith(
+                color: AppColors.primary,
+              ),
               unselectedLabelTextStyle: AppTypography.labelSmall.copyWith(
-                color: isDark
-                    ? AppColors.darkTextTertiary
-                    : AppColors.lightTextTertiary,
+                color: c.tertiary,
               ),
               labelType: extended
                   ? NavigationRailLabelType.none
@@ -127,9 +117,7 @@ class AppShell extends ConsumerWidget {
                     ? Text(
                         'LearnY',
                         style: AppTypography.headlineSmall.copyWith(
-                          color: isDark
-                              ? AppColors.darkTextPrimary
-                              : AppColors.lightTextPrimary,
+                          color: c.text,
                         ),
                       )
                     : Container(
@@ -137,15 +125,15 @@ class AppShell extends ConsumerWidget {
                         height: 36,
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
-                            colors: [
-                              AppColors.primary,
-                              AppColors.primaryDark,
-                            ],
+                            colors: [AppColors.primary, AppColors.primaryDark],
                           ),
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: const Icon(Icons.school_rounded,
-                            color: Colors.white, size: 20),
+                        child: const Icon(
+                          Icons.school_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
                       ),
               ),
               destinations: const [
@@ -184,17 +172,18 @@ class AppShell extends ConsumerWidget {
   //  Phone: bottom NavigationBar
   // ─────────────────────────────────────────────
 
-  Widget _buildBottomNavLayout(BuildContext context, int index, Widget content) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final borderColor = isDark ? AppColors.darkBorder : AppColors.lightBorder;
+  Widget _buildBottomNavLayout(
+    BuildContext context,
+    int index,
+    Widget content,
+  ) {
+    final c = context.colors;
 
     return Scaffold(
       body: content,
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          border: Border(
-            top: BorderSide(color: borderColor, width: 0.5),
-          ),
+          border: Border(top: BorderSide(color: c.border, width: 0.5)),
         ),
         child: NavigationBar(
           selectedIndex: index,
@@ -233,19 +222,16 @@ class AppShell extends ConsumerWidget {
 class _OfflineBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      color: AppColors.warning.withAlpha(isDark ? 40 : 25),
+      color: AppColors.warning.withAlpha(context.isDark ? 40 : 25),
       child: SafeArea(
         bottom: false,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.wifi_off_rounded,
-                size: 14, color: AppColors.warning),
+            Icon(Icons.wifi_off_rounded, size: 14, color: AppColors.warning),
             const SizedBox(width: 6),
             Text(
               '网络不可用，显示的是缓存数据',

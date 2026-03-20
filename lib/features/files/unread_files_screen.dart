@@ -10,6 +10,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/design/app_theme_colors.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/cooldown_toast.dart';
 import '../../core/design/swipe_to_read.dart';
@@ -76,9 +77,11 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
     if (_search.isNotEmpty) {
       final q = _search.toLowerCase();
       result = result
-          .where((f) =>
-              f.title.toLowerCase().contains(q) ||
-              f.description.toLowerCase().contains(q))
+          .where(
+            (f) =>
+                f.title.toLowerCase().contains(q) ||
+                f.description.toLowerCase().contains(q),
+          )
           .toList();
     }
     if (_typeFilter != null) {
@@ -90,7 +93,10 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
   }
 
   Set<String> _extractAllTypes(List<db.CourseFile> files) {
-    return files.map((f) => _extractExt(f.title, f.fileType)).where((e) => e.isNotEmpty).toSet();
+    return files
+        .map((f) => _extractExt(f.title, f.fileType))
+        .where((e) => e.isNotEmpty)
+        .toSet();
   }
 
   static String _extractExt(String title, String fileType) {
@@ -108,26 +114,22 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? AppColors.darkBackground : AppColors.lightBackground;
-    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final sub = isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
-    final tertiary =
-        isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+    final c = context.colors;
 
     final filesAsync = ref.watch(_unreadFilesProvider);
     final courseNamesAsync = ref.watch(_courseNamesProvider);
 
     return Scaffold(
-      backgroundColor: bg,
+      backgroundColor: c.bg,
       appBar: AppBar(
-        backgroundColor: bg,
+        backgroundColor: c.bg,
         surfaceTintColor: Colors.transparent,
-        title: Text('未读文件', style: AppTypography.headlineSmall.copyWith(color: textColor)),
+        title: Text(
+          '未读文件',
+          style: AppTypography.headlineSmall.copyWith(color: c.text),
+        ),
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_rounded, color: textColor),
+          icon: Icon(Icons.arrow_back_rounded, color: c.text),
           onPressed: () => context.pop(),
         ),
       ),
@@ -141,138 +143,149 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
         },
         color: AppColors.primary,
         child: filesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-            child: Text('加载失败', style: TextStyle(color: tertiary))),
-        data: (allFiles) {
-          final courseNames = courseNamesAsync.valueOrNull ?? {};
-          final types = _extractAllTypes(allFiles);
-          final filtered = _filter(allFiles);
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Center(
+            child: Text('加载失败', style: TextStyle(color: c.tertiary)),
+          ),
+          data: (allFiles) {
+            final courseNames = courseNamesAsync.valueOrNull ?? {};
+            final types = _extractAllTypes(allFiles);
+            final filtered = _filter(allFiles);
 
-          return Column(
-            children: [
-              // ── Search bar ──
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: (v) => setState(() => _search = v),
-                  style: TextStyle(color: textColor, fontSize: 14),
-                  decoration: InputDecoration(
-                    hintText: '搜索文件...',
-                    hintStyle: TextStyle(color: tertiary, fontSize: 14),
-                    prefixIcon:
-                        Icon(Icons.search_rounded, color: tertiary, size: 20),
-                    suffixIcon: _search.isNotEmpty
-                        ? IconButton(
-                            icon: Icon(Icons.close_rounded,
-                                color: tertiary, size: 18),
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() => _search = '');
-                            },
-                          )
-                        : null,
-                    filled: true,
-                    fillColor: surface,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
+            return Column(
+              children: [
+                // ── Search bar ──
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: (v) => setState(() => _search = v),
+                    style: TextStyle(color: c.text, fontSize: 14),
+                    decoration: InputDecoration(
+                      hintText: '搜索文件...',
+                      hintStyle: TextStyle(color: c.tertiary, fontSize: 14),
+                      prefixIcon: Icon(
+                        Icons.search_rounded,
+                        color: c.tertiary,
+                        size: 20,
+                      ),
+                      suffixIcon: _search.isNotEmpty
+                          ? IconButton(
+                              icon: Icon(
+                                Icons.close_rounded,
+                                color: c.tertiary,
+                                size: 18,
+                              ),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() => _search = '');
+                              },
+                            )
+                          : null,
+                      filled: true,
+                      fillColor: c.surface,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
                     ),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
                   ),
                 ),
-              ),
 
-              // ── Sort toggle + type filter ──
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    _SortPill(
-                      label: '按时间',
-                      icon: Icons.schedule_rounded,
-                      isActive: _sort == _SortMode.byTime,
-                      isDark: isDark,
-                      onTap: () => setState(() => _sort = _SortMode.byTime),
-                    ),
-                    const SizedBox(width: 8),
-                    _SortPill(
-                      label: '按课程',
-                      icon: Icons.folder_rounded,
-                      isActive: _sort == _SortMode.byCourse,
-                      isDark: isDark,
-                      onTap: () => setState(() => _sort = _SortMode.byCourse),
-                    ),
-                    const SizedBox(width: 12),
-                    Container(
-                      width: 1,
-                      height: 24,
-                      color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
-                    ),
-                    const SizedBox(width: 12),
-                    _TypeFilterButton(
-                      currentFilter: _typeFilter,
-                      types: types,
-                      allFiles: allFiles,
-                      isDark: isDark,
-                      onChanged: (v) => setState(() => _typeFilter = v),
-                    ),
-                  ],
+                // ── Sort toggle + type filter ──
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      _SortPill(
+                        label: '按时间',
+                        icon: Icons.schedule_rounded,
+                        isActive: _sort == _SortMode.byTime,
+                        onTap: () => setState(() => _sort = _SortMode.byTime),
+                      ),
+                      const SizedBox(width: 8),
+                      _SortPill(
+                        label: '按课程',
+                        icon: Icons.folder_rounded,
+                        isActive: _sort == _SortMode.byCourse,
+                        onTap: () => setState(() => _sort = _SortMode.byCourse),
+                      ),
+                      const SizedBox(width: 12),
+                      Container(width: 1, height: 24, color: c.border),
+                      const SizedBox(width: 12),
+                      _TypeFilterButton(
+                        currentFilter: _typeFilter,
+                        types: types,
+                        allFiles: allFiles,
+                        onChanged: (v) => setState(() => _typeFilter = v),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
+                const SizedBox(height: 8),
 
-              // ── Count + sort info ──
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    Text(
-                      '${filtered.length} 个未读文件',
-                      style: TextStyle(
-                          fontSize: 12, fontWeight: FontWeight.w500, color: sub),
-                    ),
-                    const Spacer(),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-
-              // ── File list ──
-              Expanded(
-                child: filtered.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.check_circle_outline_rounded,
-                                size: 48, color: tertiary),
-                            const SizedBox(height: 12),
-                            Text(
-                              _search.isNotEmpty
-                                  ? '没有找到匹配的文件'
-                                  : '所有文件已读',
-                              style: TextStyle(color: sub, fontSize: 14),
-                            ),
-                          ],
+                // ── Count + sort info ──
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      Text(
+                        '${filtered.length} 个未读文件',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: c.subtitle,
                         ),
-                      )
-                    : _sort == _SortMode.byTime
-                        ? _buildTimeList(filtered, courseNames, isDark)
-                        : _buildCourseList(filtered, courseNames, isDark, textColor, sub),
-              ),
-            ],
-          );
-        },
-      ),
+                      ),
+                      const Spacer(),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // ── File list ──
+                Expanded(
+                  child: filtered.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.check_circle_outline_rounded,
+                                size: 48,
+                                color: c.tertiary,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                _search.isNotEmpty ? '没有找到匹配的文件' : '所有文件已读',
+                                style: TextStyle(
+                                  color: c.subtitle,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : _sort == _SortMode.byTime
+                      ? _buildTimeList(filtered, courseNames)
+                      : _buildCourseList(filtered, courseNames),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
 
   Widget _buildTimeList(
-      List<db.CourseFile> files, Map<String, String> courseNames, bool isDark) {
+    List<db.CourseFile> files,
+    Map<String, String> courseNames,
+  ) {
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
       itemCount: files.length,
@@ -289,11 +302,13 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
               file: f,
               courseName: courseNames[f.courseId] ?? '',
               onTap: () {
-                context.push(Routes.fileDetail(
-                  fileId: f.id,
-                  courseId: f.courseId,
-                  courseName: courseNames[f.courseId] ?? '',
-                ));
+                context.push(
+                  Routes.fileDetail(
+                    fileId: f.id,
+                    courseId: f.courseId,
+                    courseName: courseNames[f.courseId] ?? '',
+                  ),
+                );
               },
             ),
           ),
@@ -302,8 +317,11 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
     );
   }
 
-  Widget _buildCourseList(List<db.CourseFile> files,
-      Map<String, String> courseNames, bool isDark, Color textColor, Color sub) {
+  Widget _buildCourseList(
+    List<db.CourseFile> files,
+    Map<String, String> courseNames,
+  ) {
+    final c = context.colors;
     // Group by courseId
     final grouped = <String, List<db.CourseFile>>{};
     for (final f in files) {
@@ -311,8 +329,7 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
     }
 
     final courseIds = grouped.keys.toList()
-      ..sort((a, b) =>
-          (courseNames[a] ?? '').compareTo(courseNames[b] ?? ''));
+      ..sort((a, b) => (courseNames[a] ?? '').compareTo(courseNames[b] ?? ''));
 
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
@@ -338,47 +355,51 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
                 });
               },
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
                 margin: EdgeInsets.only(bottom: 8, top: i > 0 ? 8 : 0),
                 decoration: BoxDecoration(
-                  color: isDark
-                      ? AppColors.darkSurface
-                      : AppColors.lightSurface,
+                  color: c.surface,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: isDark
-                        ? AppColors.darkBorder
-                        : AppColors.lightBorder,
-                    width: 0.5,
-                  ),
+                  border: Border.all(color: c.border, width: 0.5),
                 ),
                 child: Row(
                   children: [
                     AnimatedRotation(
                       turns: isCollapsed ? -0.25 : 0,
                       duration: const Duration(milliseconds: 200),
-                      child: Icon(Icons.expand_more_rounded,
-                          size: 20, color: AppColors.primary),
+                      child: Icon(
+                        Icons.expand_more_rounded,
+                        size: 20,
+                        color: AppColors.primary,
+                      ),
                     ),
                     const SizedBox(width: 8),
-                    Icon(Icons.folder_rounded,
-                        size: 18, color: AppColors.primary.withAlpha(180)),
+                    Icon(
+                      Icons.folder_rounded,
+                      size: 18,
+                      color: AppColors.primary.withAlpha(180),
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         courseName,
-                        style: AppTypography.titleSmall
-                            .copyWith(color: textColor),
+                        style: AppTypography.titleSmall.copyWith(color: c.text),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
-                        color: AppColors.primary.withAlpha(isDark ? 40 : 25),
+                        color: AppColors.primary.withAlpha(
+                          context.isDark ? 40 : 25,
+                        ),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
@@ -398,29 +419,29 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
             // Files under this course
             if (!isCollapsed)
               ...courseFiles.asMap().entries.map(
-                    (e) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: SwipeToRead(
-                        key: ValueKey('swipe_${e.value.id}'),
-                        exitOnSwipe: true,
-                        onSwipe: () => _markRead(e.value),
-                        child: FileCard(
-                          file: e.value,
-                          courseName: courseName,
-                          hideCourseName: true,
-                          onTap: () {
-                            context.push(Routes.fileDetail(
-                              fileId: e.value.id,
-                              courseId: courseId,
-                              courseName: courseName,
-                            ));
-                          },
-                        ),
-                      ),
-                    )
-                        .animate(delay: (30 * e.key).ms)
-                        .fadeIn(duration: 200.ms),
+                (e) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: SwipeToRead(
+                    key: ValueKey('swipe_${e.value.id}'),
+                    exitOnSwipe: true,
+                    onSwipe: () => _markRead(e.value),
+                    child: FileCard(
+                      file: e.value,
+                      courseName: courseName,
+                      hideCourseName: true,
+                      onTap: () {
+                        context.push(
+                          Routes.fileDetail(
+                            fileId: e.value.id,
+                            courseId: courseId,
+                            courseName: courseName,
+                          ),
+                        );
+                      },
+                    ),
                   ),
+                ).animate(delay: (30 * e.key).ms).fadeIn(duration: 200.ms),
+              ),
           ],
         );
       },
@@ -436,19 +457,18 @@ class _SortPill extends StatelessWidget {
   final String label;
   final IconData icon;
   final bool isActive;
-  final bool isDark;
   final VoidCallback onTap;
 
   const _SortPill({
     required this.label,
     required this.icon,
     required this.isActive,
-    required this.isDark,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -456,10 +476,8 @@ class _SortPill extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: isActive
-              ? AppColors.primary.withAlpha(isDark ? 40 : 25)
-              : isDark
-                  ? AppColors.darkSurfaceHigh
-                  : AppColors.lightSurfaceHigh,
+              ? AppColors.primary.withAlpha(context.isDark ? 40 : 25)
+              : c.surfaceHigh,
           borderRadius: BorderRadius.circular(20),
           border: isActive
               ? Border.all(color: AppColors.primary.withAlpha(80), width: 1)
@@ -468,24 +486,18 @@ class _SortPill extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon,
-                size: 14,
-                color: isActive
-                    ? AppColors.primary
-                    : isDark
-                        ? AppColors.darkTextSecondary
-                        : AppColors.lightTextSecondary),
+            Icon(
+              icon,
+              size: 14,
+              color: isActive ? AppColors.primary : c.subtitle,
+            ),
             const SizedBox(width: 4),
             Text(
               label,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
-                color: isActive
-                    ? AppColors.primary
-                    : isDark
-                        ? AppColors.darkTextSecondary
-                        : AppColors.lightTextSecondary,
+                color: isActive ? AppColors.primary : c.subtitle,
               ),
             ),
           ],
@@ -503,14 +515,12 @@ class _TypeFilterButton extends StatefulWidget {
   final String? currentFilter;
   final Set<String> types;
   final List<db.CourseFile> allFiles;
-  final bool isDark;
   final ValueChanged<String?> onChanged;
 
   const _TypeFilterButton({
     required this.currentFilter,
     required this.types,
     required this.allFiles,
-    required this.isDark,
     required this.onChanged,
   });
 
@@ -550,7 +560,7 @@ class _TypeFilterButtonState extends State<_TypeFilterButton> {
         types: sorted,
         counts: counts,
         currentFilter: widget.currentFilter,
-        isDark: widget.isDark,
+        isDark: context.isDark,
         totalCount: widget.allFiles.length,
         onSelected: (type) {
           widget.onChanged(type);
@@ -571,10 +581,9 @@ class _TypeFilterButtonState extends State<_TypeFilterButton> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final isFiltered = widget.currentFilter != null;
-    final label = isFiltered
-        ? widget.currentFilter!.toUpperCase()
-        : '全部类型';
+    final label = isFiltered ? widget.currentFilter!.toUpperCase() : '全部类型';
 
     return GestureDetector(
       key: _buttonKey,
@@ -584,10 +593,8 @@ class _TypeFilterButtonState extends State<_TypeFilterButton> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: isFiltered
-              ? AppColors.primary.withAlpha(widget.isDark ? 40 : 25)
-              : widget.isDark
-                  ? AppColors.darkSurfaceHigh
-                  : AppColors.lightSurfaceHigh,
+              ? AppColors.primary.withAlpha(context.isDark ? 40 : 25)
+              : c.surfaceHigh,
           borderRadius: BorderRadius.circular(20),
           border: isFiltered
               ? Border.all(color: AppColors.primary.withAlpha(80), width: 1)
@@ -599,11 +606,7 @@ class _TypeFilterButtonState extends State<_TypeFilterButton> {
             Icon(
               isFiltered ? Icons.filter_alt_rounded : Icons.filter_alt_outlined,
               size: 14,
-              color: isFiltered
-                  ? AppColors.primary
-                  : widget.isDark
-                      ? AppColors.darkTextSecondary
-                      : AppColors.lightTextSecondary,
+              color: isFiltered ? AppColors.primary : c.subtitle,
             ),
             const SizedBox(width: 4),
             Text(
@@ -611,22 +614,14 @@ class _TypeFilterButtonState extends State<_TypeFilterButton> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: isFiltered ? FontWeight.w600 : FontWeight.w500,
-                color: isFiltered
-                    ? AppColors.primary
-                    : widget.isDark
-                        ? AppColors.darkTextSecondary
-                        : AppColors.lightTextSecondary,
+                color: isFiltered ? AppColors.primary : c.subtitle,
               ),
             ),
             const SizedBox(width: 2),
             Icon(
               Icons.keyboard_arrow_down_rounded,
               size: 16,
-              color: isFiltered
-                  ? AppColors.primary
-                  : widget.isDark
-                      ? AppColors.darkTextTertiary
-                      : AppColors.lightTextTertiary,
+              color: isFiltered ? AppColors.primary : c.tertiary,
             ),
           ],
         ),
@@ -699,19 +694,17 @@ class _TypeFilterPopupRoute extends PopupRoute<void> {
   }
 
   @override
-  Widget buildTransitions(BuildContext context, Animation<double> animation,
-      Animation<double> secondaryAnimation, Widget child) {
+  Widget buildTransitions(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
     return FadeTransition(
-      opacity: CurvedAnimation(
-        parent: animation,
-        curve: Curves.easeOutCubic,
-      ),
+      opacity: CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
       child: ScaleTransition(
         scale: Tween<double>(begin: 0.92, end: 1.0).animate(
-          CurvedAnimation(
-            parent: animation,
-            curve: Curves.easeOutBack,
-          ),
+          CurvedAnimation(parent: animation, curve: Curves.easeOutBack),
         ),
         alignment: Alignment.topLeft,
         child: child,
@@ -720,8 +713,12 @@ class _TypeFilterPopupRoute extends PopupRoute<void> {
   }
 
   @override
-  Widget buildPage(BuildContext context, Animation<double> animation,
-      Animation<double> secondaryAnimation) {
+  Widget buildPage(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+  ) {
+    final c = context.colors;
     final mq = MediaQuery.of(context);
     final menuWidth = 220.0;
 
@@ -735,12 +732,11 @@ class _TypeFilterPopupRoute extends PopupRoute<void> {
     final surface = isDark
         ? const Color(0xFF1C1C1E) // iOS dark elevated surface
         : const Color(0xFFF9F9FB);
-    final textPrimary =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final textSecondary =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
-    final dividerColor =
-        isDark ? Colors.white.withAlpha(15) : Colors.black.withAlpha(10);
+    final textPrimary = c.text;
+    final textSecondary = c.subtitle;
+    final dividerColor = isDark
+        ? Colors.white.withAlpha(15)
+        : Colors.black.withAlpha(10);
 
     return Stack(
       children: [
@@ -791,8 +787,7 @@ class _TypeFilterPopupRoute extends PopupRoute<void> {
                           onTap: () => onSelected(null),
                         ),
                         Padding(
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 12),
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
                           child: Divider(
                             height: 1,
                             thickness: 0.5,
@@ -800,16 +795,18 @@ class _TypeFilterPopupRoute extends PopupRoute<void> {
                           ),
                         ),
                         // Type items
-                        ...types.map((t) => _menuItem(
-                              label: t.toUpperCase(),
-                              count: counts[t] ?? 0,
-                              icon: _extIcon(t),
-                              iconColor: _extColor(t),
-                              isSelected: currentFilter == t,
-                              textPrimary: textPrimary,
-                              textSecondary: textSecondary,
-                              onTap: () => onSelected(t),
-                            )),
+                        ...types.map(
+                          (t) => _menuItem(
+                            label: t.toUpperCase(),
+                            count: counts[t] ?? 0,
+                            icon: _extIcon(t),
+                            iconColor: _extColor(t),
+                            isSelected: currentFilter == t,
+                            textPrimary: textPrimary,
+                            textSecondary: textSecondary,
+                            onTap: () => onSelected(t),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -879,4 +876,3 @@ class _TypeFilterPopupRoute extends PopupRoute<void> {
     );
   }
 }
-

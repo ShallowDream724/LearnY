@@ -15,9 +15,9 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/design/app_theme_colors.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/cooldown_toast.dart';
-import '../../core/design/responsive.dart';
 import '../../core/design/shimmer.dart';
 import '../../core/design/swipe_to_read.dart';
 import '../../core/design/typography.dart';
@@ -36,35 +36,34 @@ import '../files/widgets/file_card.dart';
 final _courseIdProvider = Provider<String>((ref) => throw UnimplementedError());
 
 /// Course data for the detail view.
-final _courseDetailProvider = FutureProvider.family<db.Course?, String>(
-  (ref, courseId) async {
-    final database = ref.watch(databaseProvider);
-    final courses = await database.getCoursesBySemester(
-      ref.watch(currentSemesterIdProvider) ?? '',
-    );
-    try {
-      return courses.firstWhere((c) => c.id == courseId);
-    } catch (_) {
-      return null;
-    }
-  },
-);
+final _courseDetailProvider = FutureProvider.family<db.Course?, String>((
+  ref,
+  courseId,
+) async {
+  final database = ref.watch(databaseProvider);
+  final courses = await database.getCoursesBySemester(
+    ref.watch(currentSemesterIdProvider) ?? '',
+  );
+  try {
+    return courses.firstWhere((c) => c.id == courseId);
+  } catch (_) {
+    return null;
+  }
+});
 
 /// Notifications for this course — reactive, auto-updates on DB writes.
 final _courseNotificationsProvider =
-    StreamProvider.family<List<db.Notification>, String>(
-  (ref, courseId) {
-    final database = ref.watch(databaseProvider);
-    return database.watchNotificationsByCourse(courseId).map((notifications) {
-      // Sort: unread first, then by publish time descending
-      notifications.sort((a, b) {
-        if (a.hasRead != b.hasRead) return a.hasRead ? 1 : -1;
-        return b.publishTime.compareTo(a.publishTime);
+    StreamProvider.family<List<db.Notification>, String>((ref, courseId) {
+      final database = ref.watch(databaseProvider);
+      return database.watchNotificationsByCourse(courseId).map((notifications) {
+        // Sort: unread first, then by publish time descending
+        notifications.sort((a, b) {
+          if (a.hasRead != b.hasRead) return a.hasRead ? 1 : -1;
+          return b.publishTime.compareTo(a.publishTime);
+        });
+        return notifications;
       });
-      return notifications;
     });
-  },
-);
 
 /// Files for this course — reactive.
 final _courseFilesProvider = StreamProvider.family<List<db.CourseFile>, String>(
@@ -78,15 +77,14 @@ final _courseFilesProvider = StreamProvider.family<List<db.CourseFile>, String>(
 );
 
 /// Homeworks for this course — reactive.
-final _courseHomeworksProvider = StreamProvider.family<List<db.Homework>, String>(
-  (ref, courseId) {
-    final database = ref.watch(databaseProvider);
-    return database.watchHomeworksByCourse(courseId).map((homeworks) {
-      homeworks.sort((a, b) => b.deadline.compareTo(a.deadline));
-      return homeworks;
+final _courseHomeworksProvider =
+    StreamProvider.family<List<db.Homework>, String>((ref, courseId) {
+      final database = ref.watch(databaseProvider);
+      return database.watchHomeworksByCourse(courseId).map((homeworks) {
+        homeworks.sort((a, b) => b.deadline.compareTo(a.deadline));
+        return homeworks;
+      });
     });
-  },
-);
 
 // ---------------------------------------------------------------------------
 //  Screen
@@ -119,11 +117,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final subColor =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+    final c = context.colors;
     final courseAsync = ref.watch(_courseDetailProvider(widget.courseId));
 
     return Scaffold(
@@ -133,108 +127,120 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.error_outline_rounded,
-                  size: 48, color: subColor),
+              Icon(Icons.error_outline_rounded, size: 48, color: c.subtitle),
               const SizedBox(height: 12),
-              Text('加载失败',
-                  style: AppTypography.titleMedium
-                      .copyWith(color: subColor)),
+              Text(
+                '加载失败',
+                style: AppTypography.titleMedium.copyWith(color: c.subtitle),
+              ),
               const SizedBox(height: 8),
-              Text('请返回重试',
-                  style: AppTypography.bodySmall.copyWith(
-                      color: subColor.withAlpha(180))),
+              Text(
+                '请返回重试',
+                style: AppTypography.bodySmall.copyWith(
+                  color: c.subtitle.withAlpha(180),
+                ),
+              ),
             ],
           ),
         ),
         data: (course) {
           if (course == null) {
             return Center(
-              child: Text('课程未找到',
-                  style: AppTypography.titleMedium.copyWith(color: subColor)),
+              child: Text(
+                '课程未找到',
+                style: AppTypography.titleMedium.copyWith(color: c.subtitle),
+              ),
             );
           }
 
           return RefreshIndicator(
             onRefresh: () async {
-              await ref.read(syncStateProvider.notifier).syncCourse(widget.courseId);
+              await ref
+                  .read(syncStateProvider.notifier)
+                  .syncCourse(widget.courseId);
             },
             color: AppColors.primary,
             child: NestedScrollView(
-            headerSliverBuilder: (context, innerBoxIsScrolled) => [
-              SliverAppBar(
-                pinned: true,
-                expandedHeight: 120,
-                flexibleSpace: FlexibleSpaceBar(
-                  titlePadding:
-                      const EdgeInsets.only(left: 56, bottom: 50, right: 16),
-                  title: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        course.name,
-                        style: AppTypography.titleMedium.copyWith(
-                          color: textColor,
-                          fontSize: 14,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (course.teacherName.isNotEmpty)
+              headerSliverBuilder: (context, innerBoxIsScrolled) => [
+                SliverAppBar(
+                  pinned: true,
+                  expandedHeight: 120,
+                  flexibleSpace: FlexibleSpaceBar(
+                    titlePadding: const EdgeInsets.only(
+                      left: 56,
+                      bottom: 50,
+                      right: 16,
+                    ),
+                    title: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Text(
-                          course.teacherName,
-                          style: AppTypography.bodySmall.copyWith(
-                            color: subColor,
-                            fontSize: 10,
+                          course.name,
+                          style: AppTypography.titleMedium.copyWith(
+                            color: c.text,
+                            fontSize: 14,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                    ],
-                  ),
-                  background: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          AppColors.primary.withAlpha(isDark ? 40 : 30),
-                          Colors.transparent,
-                        ],
+                        if (course.teacherName.isNotEmpty)
+                          Text(
+                            course.teacherName,
+                            style: AppTypography.bodySmall.copyWith(
+                              color: c.subtitle,
+                              fontSize: 10,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                      ],
+                    ),
+                    background: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            AppColors.primary.withAlpha(
+                              context.isDark ? 40 : 30,
+                            ),
+                            Colors.transparent,
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-                bottom: TabBar(
-                  controller: _tabController,
-                  labelColor: AppColors.primary,
-                  unselectedLabelColor: subColor,
-                  indicatorColor: AppColors.primary,
-                  indicatorSize: TabBarIndicatorSize.label,
-                  labelStyle: AppTypography.labelLarge,
-                  unselectedLabelStyle: AppTypography.labelMedium,
-                  tabs: [
-                    _buildTab('通知', _courseNotificationsProvider),
-                    _buildTab('文件', _courseFilesProvider),
-                    _buildTab('作业', _courseHomeworksProvider),
-                  ],
-                ),
-              ),
-            ],
-            body: TabBarView(
-              controller: _tabController,
-              children: [
-                _NotificationsTab(
-                  courseId: widget.courseId,
-                  courseName: course.name,
-                ),
-                _FilesTab(courseId: widget.courseId, courseName: course.name),
-                _HomeworksTab(
-                  courseId: widget.courseId,
-                  courseName: course.name,
+                  bottom: TabBar(
+                    controller: _tabController,
+                    labelColor: AppColors.primary,
+                    unselectedLabelColor: c.subtitle,
+                    indicatorColor: AppColors.primary,
+                    indicatorSize: TabBarIndicatorSize.label,
+                    labelStyle: AppTypography.labelLarge,
+                    unselectedLabelStyle: AppTypography.labelMedium,
+                    tabs: [
+                      _buildTab('通知', _courseNotificationsProvider),
+                      _buildTab('文件', _courseFilesProvider),
+                      _buildTab('作业', _courseHomeworksProvider),
+                    ],
+                  ),
                 ),
               ],
-            ),
+              body: TabBarView(
+                controller: _tabController,
+                children: [
+                  _NotificationsTab(
+                    courseId: widget.courseId,
+                    courseName: course.name,
+                  ),
+                  _FilesTab(courseId: widget.courseId, courseName: course.name),
+                  _HomeworksTab(
+                    courseId: widget.courseId,
+                    courseName: course.name,
+                  ),
+                ],
+              ),
             ),
           );
         },
@@ -258,15 +264,7 @@ class _NotificationsTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final subColor =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
-    final tertiaryColor =
-        isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
-    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
+    final c = context.colors;
     final notifAsync = ref.watch(_courseNotificationsProvider(courseId));
 
     return notifAsync.when(
@@ -277,12 +275,12 @@ class _NotificationsTab extends ConsumerWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.error_outline_rounded,
-                  size: 40, color: tertiaryColor),
+              Icon(Icons.error_outline_rounded, size: 40, color: c.tertiary),
               const SizedBox(height: 10),
-              Text('加载失败',
-                  style: AppTypography.bodyMedium
-                      .copyWith(color: textColor)),
+              Text(
+                '加载失败',
+                style: AppTypography.bodyMedium.copyWith(color: c.text),
+              ),
             ],
           ),
         ),
@@ -290,9 +288,9 @@ class _NotificationsTab extends ConsumerWidget {
       data: (notifications) {
         if (notifications.isEmpty) {
           return _EmptyState(
-              icon: Icons.notifications_none_rounded,
-              label: '暂无通知',
-              isDark: isDark);
+            icon: Icons.notifications_none_rounded,
+            label: '暂无通知',
+          );
         }
 
         return ListView.builder(
@@ -305,21 +303,23 @@ class _NotificationsTab extends ConsumerWidget {
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: Material(
-                color: surface,
+                color: c.surface,
                 borderRadius: BorderRadius.circular(14),
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
-                  onTap: () => context.push(Routes.notificationDetail(
-                    notificationId: n.id,
-                    courseId: courseId,
-                    courseName: courseName,
-                  )),
+                  onTap: () => context.push(
+                    Routes.notificationDetail(
+                      notificationId: n.id,
+                      courseId: courseId,
+                      courseName: courseName,
+                    ),
+                  ),
                   borderRadius: BorderRadius.circular(14),
                   child: Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: border, width: 0.5),
+                      border: Border.all(color: c.border, width: 0.5),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -350,9 +350,10 @@ class _NotificationsTab extends ConsumerWidget {
                                     child: Text(
                                       n.title,
                                       style: AppTypography.titleMedium.copyWith(
-                                        color: isRead ? subColor : textColor,
-                                        fontWeight:
-                                            isRead ? FontWeight.w400 : FontWeight.w600,
+                                        color: isRead ? c.subtitle : c.text,
+                                        fontWeight: isRead
+                                            ? FontWeight.w400
+                                            : FontWeight.w600,
                                       ),
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
@@ -362,17 +363,20 @@ class _NotificationsTab extends ConsumerWidget {
                                     Container(
                                       margin: const EdgeInsets.only(left: 8),
                                       padding: const EdgeInsets.symmetric(
-                                          horizontal: 6, vertical: 2),
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
                                       decoration: BoxDecoration(
                                         color: AppColors.warning.withAlpha(20),
                                         borderRadius: BorderRadius.circular(4),
                                       ),
                                       child: Text(
                                         '重要',
-                                        style: AppTypography.labelSmall.copyWith(
-                                          color: AppColors.warning,
-                                          fontSize: 10,
-                                        ),
+                                        style: AppTypography.labelSmall
+                                            .copyWith(
+                                              color: AppColors.warning,
+                                              fontSize: 10,
+                                            ),
                                       ),
                                     ),
                                 ],
@@ -382,15 +386,19 @@ class _NotificationsTab extends ConsumerWidget {
                                 children: [
                                   if (n.publisher != null &&
                                       n.publisher!.isNotEmpty) ...[
-                                    Text(n.publisher!,
-                                        style: AppTypography.bodySmall
-                                            .copyWith(color: tertiaryColor)),
+                                    Text(
+                                      n.publisher!,
+                                      style: AppTypography.bodySmall.copyWith(
+                                        color: c.tertiary,
+                                      ),
+                                    ),
                                     const SizedBox(width: 12),
                                   ],
                                   Text(
                                     _formatTime(n.publishTime),
-                                    style: AppTypography.bodySmall
-                                        .copyWith(color: tertiaryColor),
+                                    style: AppTypography.bodySmall.copyWith(
+                                      color: c.tertiary,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -402,9 +410,7 @@ class _NotificationsTab extends ConsumerWidget {
                   ),
                 ),
               ),
-            )
-                .animate(delay: (40 * index).ms)
-                .fadeIn(duration: 200.ms);
+            ).animate(delay: (40 * index).ms).fadeIn(duration: 200.ms);
           },
         );
       },
@@ -446,7 +452,9 @@ class _FilesTabState extends ConsumerState<_FilesTab> {
       case _FileFilter.favorite:
         return files.where((f) => f.isFavorite == true).toList();
       case _FileFilter.downloaded:
-        return files.where((f) => f.localDownloadState == 'downloaded').toList();
+        return files
+            .where((f) => f.localDownloadState == 'downloaded')
+            .toList();
     }
   }
 
@@ -467,11 +475,7 @@ class _FilesTabState extends ConsumerState<_FilesTab> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final tertiaryColor =
-        isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+    final c = context.colors;
     final filesAsync = ref.watch(_courseFilesProvider(widget.courseId));
 
     return filesAsync.when(
@@ -482,12 +486,12 @@ class _FilesTabState extends ConsumerState<_FilesTab> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.error_outline_rounded,
-                  size: 40, color: tertiaryColor),
+              Icon(Icons.error_outline_rounded, size: 40, color: c.tertiary),
               const SizedBox(height: 10),
-              Text('加载失败',
-                  style: AppTypography.bodyMedium
-                      .copyWith(color: textColor)),
+              Text(
+                '加载失败',
+                style: AppTypography.bodyMedium.copyWith(color: c.text),
+              ),
             ],
           ),
         ),
@@ -521,8 +525,7 @@ class _FilesTabState extends ConsumerState<_FilesTab> {
                         allFiles.where((f) => f.isFavorite == true).length,
                       _FileFilter.downloaded =>
                         allFiles
-                            .where(
-                                (f) => f.localDownloadState == 'downloaded')
+                            .where((f) => f.localDownloadState == 'downloaded')
                             .length,
                     };
                     return Padding(
@@ -531,7 +534,6 @@ class _FilesTabState extends ConsumerState<_FilesTab> {
                         label: label,
                         count: count,
                         isActive: isActive,
-                        isDark: isDark,
                         onTap: () => setState(() => _filter = filter),
                       ),
                     );
@@ -558,42 +560,46 @@ class _FilesTabState extends ConsumerState<_FilesTab> {
                                     _FileFilter.downloaded => '已下载',
                                     _ => '',
                                   }}文件',
-                            isDark: isDark,
                           ),
                         ],
                       )
                     : ListView.builder(
-                        padding:
-                            const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
                         itemCount: files.length,
                         itemBuilder: (context, index) {
                           final f = files[index];
                           return Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: SwipeToRead(
-                              isRead: !f.isNew,
-                              onSwipe: () {
-                                if (f.isNew) {
-                                  ref.read(databaseProvider).markFileRead(f.id);
-                                } else {
-                                  ref.read(databaseProvider).markFileUnread(f.id);
-                                }
-                                ref.invalidate(homeDataProvider);
-                              },
-                              child: FileCard(
-                                file: f,
-                                courseName: widget.courseName,
-                                hideCourseName: true,
-                                onTap: () {
-                                  context.push(Routes.fileDetail(
-                                    fileId: f.id,
-                                    courseId: widget.courseId,
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: SwipeToRead(
+                                  isRead: !f.isNew,
+                                  onSwipe: () {
+                                    if (f.isNew) {
+                                      ref
+                                          .read(databaseProvider)
+                                          .markFileRead(f.id);
+                                    } else {
+                                      ref
+                                          .read(databaseProvider)
+                                          .markFileUnread(f.id);
+                                    }
+                                    ref.invalidate(homeDataProvider);
+                                  },
+                                  child: FileCard(
+                                    file: f,
                                     courseName: widget.courseName,
-                                  ));
-                                },
-                              ),
-                            ),
-                          )
+                                    hideCourseName: true,
+                                    onTap: () {
+                                      context.push(
+                                        Routes.fileDetail(
+                                          fileId: f.id,
+                                          courseId: widget.courseId,
+                                          courseName: widget.courseName,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              )
                               .animate(delay: (40 * index).ms)
                               .fadeIn(duration: 200.ms);
                         },
@@ -612,24 +618,19 @@ class _FilterPill extends StatelessWidget {
   final String label;
   final int count;
   final bool isActive;
-  final bool isDark;
   final VoidCallback onTap;
 
   const _FilterPill({
     required this.label,
     required this.count,
     required this.isActive,
-    required this.isDark,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final activeColor = AppColors.primary;
-    final inactiveText =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
-    final inactiveBg =
-        isDark ? AppColors.darkSurfaceHigh : AppColors.lightSurfaceHigh;
 
     return GestureDetector(
       onTap: onTap,
@@ -637,7 +638,9 @@ class _FilterPill extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: isActive ? activeColor.withAlpha(isDark ? 40 : 25) : inactiveBg,
+          color: isActive
+              ? activeColor.withAlpha(context.isDark ? 40 : 25)
+              : c.surfaceHigh,
           borderRadius: BorderRadius.circular(20),
           border: isActive
               ? Border.all(color: activeColor.withAlpha(80), width: 1)
@@ -651,7 +654,7 @@ class _FilterPill extends StatelessWidget {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
-                color: isActive ? activeColor : inactiveText,
+                color: isActive ? activeColor : c.subtitle,
               ),
             ),
             if (count > 0) ...[
@@ -661,9 +664,7 @@ class _FilterPill extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  color: isActive
-                      ? activeColor
-                      : inactiveText.withAlpha(128),
+                  color: isActive ? activeColor : c.subtitle.withAlpha(128),
                 ),
               ),
             ],
@@ -685,15 +686,7 @@ class _HomeworksTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
-    final subColor =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
-    final tertiaryColor =
-        isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
-    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
+    final c = context.colors;
     final hwAsync = ref.watch(_courseHomeworksProvider(courseId));
 
     return hwAsync.when(
@@ -704,22 +697,19 @@ class _HomeworksTab extends ConsumerWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.error_outline_rounded,
-                  size: 40, color: tertiaryColor),
+              Icon(Icons.error_outline_rounded, size: 40, color: c.tertiary),
               const SizedBox(height: 10),
-              Text('加载失败',
-                  style: AppTypography.bodyMedium
-                      .copyWith(color: textColor)),
+              Text(
+                '加载失败',
+                style: AppTypography.bodyMedium.copyWith(color: c.text),
+              ),
             ],
           ),
         ),
       ),
       data: (homeworks) {
         if (homeworks.isEmpty) {
-          return _EmptyState(
-              icon: Icons.assignment_outlined,
-              label: '暂无作业',
-              isDark: isDark);
+          return _EmptyState(icon: Icons.assignment_outlined, label: '暂无作业');
         }
 
         return ListView.builder(
@@ -733,80 +723,93 @@ class _HomeworksTab extends ConsumerWidget {
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: Material(
-                color: surface,
+                color: c.surface,
                 borderRadius: BorderRadius.circular(14),
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
-                  onTap: () => context.push(Routes.homeworkDetail(
-                    homeworkId: hw.id,
-                    courseId: courseId,
-                    courseName: courseName,
-                  )),
+                  onTap: () => context.push(
+                    Routes.homeworkDetail(
+                      homeworkId: hw.id,
+                      courseId: courseId,
+                      courseName: courseName,
+                    ),
+                  ),
                   borderRadius: BorderRadius.circular(14),
                   child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: border, width: 0.5),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Title + status
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            hw.title,
-                            style: AppTypography.titleMedium
-                                .copyWith(color: textColor),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: statusColor.withAlpha(20),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(statusText,
-                              style: AppTypography.labelSmall.copyWith(
-                                color: statusColor,
-                                fontSize: 10,
-                              )),
-                        ),
-                      ],
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: c.border, width: 0.5),
                     ),
-                    const SizedBox(height: 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Title + status
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                hw.title,
+                                style: AppTypography.titleMedium.copyWith(
+                                  color: c.text,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: statusColor.withAlpha(20),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                statusText,
+                                style: AppTypography.labelSmall.copyWith(
+                                  color: statusColor,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
 
-                    // Bottom: deadline + grade
-                    Row(
-                      children: [
-                        Icon(Icons.schedule_rounded,
-                            size: 14, color: tertiaryColor),
-                        const SizedBox(width: 4),
-                        Text(_formatDeadline(hw.deadline),
-                            style: AppTypography.bodySmall
-                                .copyWith(color: tertiaryColor)),
-                        if (hw.graded && hw.grade != null) ...[
-                          const Spacer(),
-                          Text('${hw.grade}',
-                              style: AppTypography.titleSmall.copyWith(
-                                color: _gradeColor(hw.grade!),
-                                fontWeight: FontWeight.w700,
-                              )),
-                        ],
+                        // Bottom: deadline + grade
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.schedule_rounded,
+                              size: 14,
+                              color: c.tertiary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _formatDeadline(hw.deadline),
+                              style: AppTypography.bodySmall.copyWith(
+                                color: c.tertiary,
+                              ),
+                            ),
+                            if (hw.graded && hw.grade != null) ...[
+                              const Spacer(),
+                              Text(
+                                '${hw.grade}',
+                                style: AppTypography.titleSmall.copyWith(
+                                  color: _gradeColor(hw.grade!),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
-              ),
-              )
-                  .animate(delay: (40 * index).ms)
-                  .fadeIn(duration: 200.ms),
+              ).animate(delay: (40 * index).ms).fadeIn(duration: 200.ms),
             );
           },
         );
@@ -871,9 +874,10 @@ class _FileDownloadButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final downloadStates = ref.watch(fileDownloadProvider);
     final fileState = downloadStates[file.id];
-    final status = fileState?.status ?? 
-        (file.localDownloadState == 'downloaded' 
-            ? DownloadStatus.downloaded 
+    final status =
+        fileState?.status ??
+        (file.localDownloadState == 'downloaded'
+            ? DownloadStatus.downloaded
             : DownloadStatus.none);
     final progress = fileState?.progress ?? 0.0;
 
@@ -882,53 +886,61 @@ class _FileDownloadButton extends ConsumerWidget {
       height: 40,
       child: switch (status) {
         DownloadStatus.downloading => Stack(
-            alignment: Alignment.center,
-            children: [
-              CircularProgressIndicator(
-                value: progress > 0 ? progress : null,
-                strokeWidth: 2.5,
+          alignment: Alignment.center,
+          children: [
+            CircularProgressIndicator(
+              value: progress > 0 ? progress : null,
+              strokeWidth: 2.5,
+              color: AppColors.primary,
+            ),
+            Text(
+              '${(progress * 100).toInt()}',
+              style: AppTypography.labelSmall.copyWith(
                 color: AppColors.primary,
+                fontSize: 9,
               ),
-              Text(
-                '${(progress * 100).toInt()}',
-                style: AppTypography.labelSmall.copyWith(
-                  color: AppColors.primary,
-                  fontSize: 9,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
+        ),
         DownloadStatus.downloaded => IconButton(
-            icon: const Icon(Icons.check_circle_rounded,
-                color: AppColors.success, size: 22),
-            tooltip: '打开文件',
-            onPressed: () async {
-              final notifier = ref.read(fileDownloadProvider.notifier);
-              final opened = await notifier.openFile(file.id);
-              if (!opened && context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('无法打开文件')),
-                );
-              }
-            },
+          icon: const Icon(
+            Icons.check_circle_rounded,
+            color: AppColors.success,
+            size: 22,
           ),
+          tooltip: '打开文件',
+          onPressed: () async {
+            final notifier = ref.read(fileDownloadProvider.notifier);
+            final opened = await notifier.openFile(file.id);
+            if (!opened && context.mounted) {
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(const SnackBar(content: Text('无法打开文件')));
+            }
+          },
+        ),
         DownloadStatus.failed => IconButton(
-            icon: const Icon(Icons.error_outline_rounded,
-                color: AppColors.error, size: 22),
-            tooltip: '下载失败，点击重试',
-            onPressed: () => _startDownload(ref),
+          icon: const Icon(
+            Icons.error_outline_rounded,
+            color: AppColors.error,
+            size: 22,
           ),
+          tooltip: '下载失败，点击重试',
+          onPressed: () => _startDownload(ref),
+        ),
         _ => IconButton(
-            icon: Icon(Icons.download_rounded, color: subColor, size: 22),
-            tooltip: '下载',
-            onPressed: () => _startDownload(ref),
-          ),
+          icon: Icon(Icons.download_rounded, color: subColor, size: 22),
+          tooltip: '下载',
+          onPressed: () => _startDownload(ref),
+        ),
       },
     );
   }
 
   void _startDownload(WidgetRef ref) {
-    ref.read(fileDownloadProvider.notifier).downloadFile(
+    ref
+        .read(fileDownloadProvider.notifier)
+        .downloadFile(
           fileId: file.id,
           courseId: courseId,
           downloadUrl: file.downloadUrl,
@@ -944,26 +956,22 @@ class _FileDownloadButton extends ConsumerWidget {
 class _EmptyState extends StatelessWidget {
   final IconData icon;
   final String label;
-  final bool isDark;
 
-  const _EmptyState({
-    required this.icon,
-    required this.label,
-    required this.isDark,
-  });
+  const _EmptyState({required this.icon, required this.label});
 
   @override
   Widget build(BuildContext context) {
-    final color =
-        isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+    final c = context.colors;
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 48, color: color),
+          Icon(icon, size: 48, color: c.tertiary),
           const SizedBox(height: 12),
-          Text(label,
-              style: AppTypography.titleMedium.copyWith(color: color)),
+          Text(
+            label,
+            style: AppTypography.titleMedium.copyWith(color: c.tertiary),
+          ),
         ],
       ),
     );

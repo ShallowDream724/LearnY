@@ -16,6 +16,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/design/app_theme_colors.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/cooldown_toast.dart';
 import '../../core/design/shimmer.dart';
@@ -31,8 +32,9 @@ import '../../core/router/router.dart';
 
 enum HomeworkFilter { all, pending, submitted, graded }
 
-final _homeworkFilterProvider =
-    StateProvider<HomeworkFilter>((ref) => HomeworkFilter.all);
+final _homeworkFilterProvider = StateProvider<HomeworkFilter>(
+  (ref) => HomeworkFilter.all,
+);
 
 final _homeworkListProvider = FutureProvider<List<Homework>>((ref) async {
   final db = ref.watch(databaseProvider);
@@ -47,8 +49,7 @@ final _homeworkListProvider = FutureProvider<List<Homework>>((ref) async {
   return all;
 });
 
-final _courseNameMapProvider =
-    FutureProvider<Map<String, String>>((ref) async {
+final _courseNameMapProvider = FutureProvider<Map<String, String>>((ref) async {
   final db = ref.watch(databaseProvider);
   final semesterId = ref.watch(currentSemesterIdProvider);
   if (semesterId == null) return {};
@@ -70,11 +71,11 @@ class _GroupMeta {
 }
 
 _GroupMeta _groupMeta(_TimeGroup g) => switch (g) {
-      _TimeGroup.thisWeek => _GroupMeta('本周截止', const Color(0xFFFF3B30)),
-      _TimeGroup.nextWeek => _GroupMeta('下周截止', const Color(0xFFFF9500)),
-      _TimeGroup.later => _GroupMeta('更远', const Color(0xFF007AFF)),
-      _TimeGroup.done => _GroupMeta('已完成', const Color(0xFF34C759)),
-    };
+  _TimeGroup.thisWeek => _GroupMeta('本周截止', const Color(0xFFFF3B30)),
+  _TimeGroup.nextWeek => _GroupMeta('下周截止', const Color(0xFFFF9500)),
+  _TimeGroup.later => _GroupMeta('更远', const Color(0xFF007AFF)),
+  _TimeGroup.done => _GroupMeta('已完成', const Color(0xFF34C759)),
+};
 
 _TimeGroup _classify(Homework hw) {
   if (hw.submitted || hw.graded) return _TimeGroup.done;
@@ -91,7 +92,8 @@ _TimeGroup _classify(Homework hw) {
   // Same ISO week?
   final nowMonday = now.subtract(Duration(days: now.weekday - 1));
   final dlMonday = deadline.subtract(Duration(days: deadline.weekday - 1));
-  final sameWeek = nowMonday.year == dlMonday.year &&
+  final sameWeek =
+      nowMonday.year == dlMonday.year &&
       nowMonday.month == dlMonday.month &&
       nowMonday.day == dlMonday.day;
 
@@ -137,9 +139,7 @@ class AssignmentsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor =
-        isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
+    final c = context.colors;
     final filter = ref.watch(_homeworkFilterProvider);
     final homeworkAsync = ref.watch(_homeworkListProvider);
     final courseNameAsync = ref.watch(_courseNameMapProvider);
@@ -164,15 +164,14 @@ class AssignmentsScreen extends ConsumerWidget {
               snap: true,
               title: Text(
                 '作业',
-                style: AppTypography.headlineMedium.copyWith(color: textColor),
+                style: AppTypography.headlineMedium.copyWith(color: c.text),
               ),
             ),
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
               sliver: homeworkAsync.when(
-                loading: () =>
-                    const SliverFillRemaining(child: ListSkeleton()),
-                error: (e, _) => _buildError(isDark, textColor, ref),
+                loading: () => const SliverFillRemaining(child: ListSkeleton()),
+                error: (e, _) => _buildError(context),
                 data: (allHomeworks) {
                   final courseNames =
                       courseNameAsync.valueOrNull ?? <String, String>{};
@@ -197,42 +196,43 @@ class AssignmentsScreen extends ConsumerWidget {
                   return SliverList(
                     delegate: SliverChildListDelegate([
                       // Stats strip
-                      _StatsStrip(stats: stats, isDark: isDark)
-                          .animate()
-                          .fadeIn(duration: 300.ms),
+                      _StatsStrip(
+                        stats: stats,
+                      ).animate().fadeIn(duration: 300.ms),
                       const SizedBox(height: 16),
 
                       // Filter pills
                       _FilterRow(
                         current: filter,
-                        onChanged: (f) => ref
-                            .read(_homeworkFilterProvider.notifier)
-                            .state = f,
-                        isDark: isDark,
+                        onChanged: (f) =>
+                            ref.read(_homeworkFilterProvider.notifier).state =
+                                f,
                       ),
                       const SizedBox(height: 20),
 
                       // Timeline groups
                       if (filtered.isEmpty)
-                        _buildEmpty(isDark)
+                        _buildEmpty(context)
                       else
                         ...order
                             .where((g) => groups.containsKey(g))
-                            .map((g) => _TimelineSection(
-                                  group: g,
-                                  homeworks: groups[g]!,
-                                  courseNames: courseNames,
-                                  isDark: isDark,
-                                  onTapItem: (hw) {
-                                    final name =
-                                        courseNames[hw.courseId] ?? '';
-                                    context.push(Routes.homeworkDetail(
+                            .map(
+                              (g) => _TimelineSection(
+                                group: g,
+                                homeworks: groups[g]!,
+                                courseNames: courseNames,
+                                onTapItem: (hw) {
+                                  final name = courseNames[hw.courseId] ?? '';
+                                  context.push(
+                                    Routes.homeworkDetail(
                                       homeworkId: hw.id,
                                       courseId: hw.courseId,
                                       courseName: name,
-                                    ));
-                                  },
-                                )),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
                     ]),
                   );
                 },
@@ -267,49 +267,55 @@ class AssignmentsScreen extends ConsumerWidget {
   }
 
   List<Homework> _applyFilter(List<Homework> all, HomeworkFilter f) {
-    return all.where((hw) => switch (f) {
-          HomeworkFilter.pending => !hw.submitted && !hw.graded,
-          HomeworkFilter.submitted => hw.submitted && !hw.graded,
-          HomeworkFilter.graded => hw.graded,
-          HomeworkFilter.all => true,
-        }).toList();
+    return all
+        .where(
+          (hw) => switch (f) {
+            HomeworkFilter.pending => !hw.submitted && !hw.graded,
+            HomeworkFilter.submitted => hw.submitted && !hw.graded,
+            HomeworkFilter.graded => hw.graded,
+            HomeworkFilter.all => true,
+          },
+        )
+        .toList();
   }
 
-  SliverFillRemaining _buildError(
-      bool isDark, Color textColor, WidgetRef ref) {
-    final sub = isDark
-        ? AppColors.darkTextSecondary
-        : AppColors.lightTextSecondary;
+  SliverFillRemaining _buildError(BuildContext context) {
+    final c = context.colors;
     return SliverFillRemaining(
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.error_outline_rounded, size: 48, color: sub),
+            Icon(Icons.error_outline_rounded, size: 48, color: c.subtitle),
             const SizedBox(height: 12),
-            Text('加载失败',
-                style: AppTypography.titleMedium.copyWith(color: textColor)),
+            Text(
+              '加载失败',
+              style: AppTypography.titleMedium.copyWith(color: c.text),
+            ),
             const SizedBox(height: 8),
-            Text('请下拉刷新重试',
-                style: AppTypography.bodySmall.copyWith(color: sub)),
+            Text(
+              '请下拉刷新重试',
+              style: AppTypography.bodySmall.copyWith(color: c.subtitle),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildEmpty(bool isDark) {
-    final color =
-        isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+  Widget _buildEmpty(BuildContext context) {
+    final c = context.colors;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 32),
       child: Center(
         child: Column(
           children: [
-            Icon(Icons.inbox_rounded, size: 48, color: color),
+            Icon(Icons.inbox_rounded, size: 48, color: c.tertiary),
             const SizedBox(height: 12),
-            Text('暂无作业',
-                style: AppTypography.titleMedium.copyWith(color: color)),
+            Text(
+              '暂无作业',
+              style: AppTypography.titleMedium.copyWith(color: c.tertiary),
+            ),
           ],
         ),
       ),
@@ -332,50 +338,50 @@ class _Stats {
 
 class _StatsStrip extends StatelessWidget {
   final _Stats stats;
-  final bool isDark;
 
-  const _StatsStrip({required this.stats, required this.isDark});
+  const _StatsStrip({required this.stats});
 
   @override
   Widget build(BuildContext context) {
-    final surface = isDark ? AppColors.darkSurface : AppColors.lightSurface;
-    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
-    final sub =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+    final c = context.colors;
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
       decoration: BoxDecoration(
-        color: surface,
+        color: c.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: border, width: 0.5),
+        border: Border.all(color: c.border, width: 0.5),
       ),
       child: Row(
         children: [
           _StatChip(
-              n: stats.pending,
-              label: '待交',
-              color: stats.pending > 0
-                  ? const Color(0xFFFF9500)
-                  : const Color(0xFF34C759),
-              sub: sub),
+            n: stats.pending,
+            label: '待交',
+            color: stats.pending > 0
+                ? const Color(0xFFFF9500)
+                : const Color(0xFF34C759),
+            sub: c.subtitle,
+          ),
           _StatChip(
-              n: stats.submitted,
-              label: '已交',
-              color: const Color(0xFF007AFF),
-              sub: sub),
+            n: stats.submitted,
+            label: '已交',
+            color: const Color(0xFF007AFF),
+            sub: c.subtitle,
+          ),
           _StatChip(
-              n: stats.graded,
-              label: '已批',
-              color: const Color(0xFF34C759),
-              sub: sub),
+            n: stats.graded,
+            label: '已批',
+            color: const Color(0xFF34C759),
+            sub: c.subtitle,
+          ),
           _StatChip(
-              n: stats.overdue,
-              label: '超期',
-              color: stats.overdue > 0
-                  ? const Color(0xFFFF3B30)
-                  : const Color(0xFF34C759),
-              sub: sub),
+            n: stats.overdue,
+            label: '超期',
+            color: stats.overdue > 0
+                ? const Color(0xFFFF3B30)
+                : const Color(0xFF34C759),
+            sub: c.subtitle,
+          ),
         ],
       ),
     );
@@ -431,16 +437,12 @@ class _StatChip extends StatelessWidget {
 class _FilterRow extends StatelessWidget {
   final HomeworkFilter current;
   final ValueChanged<HomeworkFilter> onChanged;
-  final bool isDark;
 
-  const _FilterRow({
-    required this.current,
-    required this.onChanged,
-    required this.isDark,
-  });
+  const _FilterRow({required this.current, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
@@ -448,14 +450,12 @@ class _FilterRow extends StatelessWidget {
           final isSelected = f == current;
           final bg = isSelected
               ? const Color(0xFF007AFF)
-              : (isDark
-                  ? const Color(0xFF2C2C2E)
-                  : const Color(0xFFF5F5F7));
+              : (context.isDark
+                    ? const Color(0xFF2C2C2E)
+                    : const Color(0xFFF5F5F7));
           final fg = isSelected
               ? Colors.white
-              : (isDark
-                  ? AppColors.darkTextSecondary
-                  : const Color(0xFF636366));
+              : (context.isDark ? c.subtitle : const Color(0xFF636366));
 
           return Padding(
             padding: const EdgeInsets.only(right: 8),
@@ -463,17 +463,19 @@ class _FilterRow extends StatelessWidget {
               onTap: () => onChanged(f),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
                   color: bg,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
                     color: isSelected
                         ? Colors.transparent
-                        : (isDark
-                            ? const Color(0xFF3A3A3C)
-                            : const Color(0xFFE5E5EA)),
+                        : (context.isDark
+                              ? const Color(0xFF3A3A3C)
+                              : const Color(0xFFE5E5EA)),
                     width: 0.5,
                   ),
                 ),
@@ -494,11 +496,11 @@ class _FilterRow extends StatelessWidget {
   }
 
   String _label(HomeworkFilter f) => switch (f) {
-        HomeworkFilter.all => '全部',
-        HomeworkFilter.pending => '待提交',
-        HomeworkFilter.submitted => '已提交',
-        HomeworkFilter.graded => '已批改',
-      };
+    HomeworkFilter.all => '全部',
+    HomeworkFilter.pending => '待提交',
+    HomeworkFilter.submitted => '已提交',
+    HomeworkFilter.graded => '已批改',
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -509,19 +511,18 @@ class _TimelineSection extends StatelessWidget {
   final _TimeGroup group;
   final List<Homework> homeworks;
   final Map<String, String> courseNames;
-  final bool isDark;
   final void Function(Homework hw) onTapItem;
 
   const _TimelineSection({
     required this.group,
     required this.homeworks,
     required this.courseNames,
-    required this.isDark,
     required this.onTapItem,
   });
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final meta = _groupMeta(group);
     final isDone = group == _TimeGroup.done;
 
@@ -565,9 +566,7 @@ class _TimelineSection extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
-                  color: isDark
-                      ? AppColors.darkTextTertiary
-                      : const Color(0xFF8E8E93),
+                  color: c.tertiary,
                 ),
               ),
             ],
@@ -581,7 +580,7 @@ class _TimelineSection extends StatelessWidget {
             decoration: BoxDecoration(
               border: Border(
                 left: BorderSide(
-                  color: isDark
+                  color: context.isDark
                       ? const Color(0xFF3A3A3C)
                       : const Color(0xFFE5E5EA),
                   width: 2,
@@ -597,7 +596,6 @@ class _TimelineSection extends StatelessWidget {
                   child: _HomeworkItem(
                     hw: hw,
                     courseName: courseName,
-                    isDark: isDark,
                     isDone: isDone,
                     onTap: () => onTapItem(hw),
                   ),
@@ -618,20 +616,19 @@ class _TimelineSection extends StatelessWidget {
 class _HomeworkItem extends StatelessWidget {
   final Homework hw;
   final String courseName;
-  final bool isDark;
   final bool isDone;
   final VoidCallback? onTap;
 
   const _HomeworkItem({
     required this.hw,
     required this.courseName,
-    required this.isDark,
     required this.isDone,
     this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final isGraded = hw.graded;
     final isSubmitted = hw.submitted;
 
@@ -639,19 +636,16 @@ class _HomeworkItem extends StatelessWidget {
     Color cardBg;
     BoxBorder? cardBorder;
     if (isGraded) {
-      cardBg = isDark
+      cardBg = context.isDark
           ? const Color(0xFF1A2E1A)
           : const Color(0xFFF0FFF4);
       cardBorder = Border.all(
-        color: const Color(0xFF34C759).withAlpha(isDark ? 25 : 20),
+        color: const Color(0xFF34C759).withAlpha(context.isDark ? 25 : 20),
         width: 0.5,
       );
     } else {
-      cardBg = isDark ? AppColors.darkSurface : Colors.white;
-      cardBorder = Border.all(
-        color: isDark ? AppColors.darkBorder : const Color(0xFFF0F0F2),
-        width: 0.5,
-      );
+      cardBg = c.surface;
+      cardBorder = Border.all(color: c.border, width: 0.5);
     }
 
     final opacity = (isSubmitted && !isGraded) ? 0.85 : 1.0;
@@ -682,16 +676,14 @@ class _HomeworkItem extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w500,
-                          color: isDark
-                              ? AppColors.darkTextTertiary
-                              : const Color(0xFF8E8E93),
+                          color: c.tertiary,
                           letterSpacing: 0.2,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    _StatusBadge(hw: hw, isDark: isDark),
+                    _StatusBadge(hw: hw),
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -713,9 +705,7 @@ class _HomeworkItem extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
-                          color: isDark
-                              ? AppColors.darkTextPrimary
-                              : const Color(0xFF1C1C1E),
+                          color: c.text,
                           decoration: null,
                         ),
                         maxLines: 1,
@@ -752,7 +742,7 @@ class _HomeworkItem extends StatelessWidget {
                     Icon(
                       Icons.chevron_right_rounded,
                       size: 16,
-                      color: isDark
+                      color: context.isDark
                           ? const Color(0xFF48484A)
                           : const Color(0xFFC7C7CC),
                     ),
@@ -771,8 +761,9 @@ class _HomeworkItem extends StatelessWidget {
   Color _deadlineColor() {
     final ms = int.tryParse(hw.deadline);
     if (ms == null) return const Color(0xFF007AFF);
-    final remaining =
-        DateTime.fromMillisecondsSinceEpoch(ms).difference(DateTime.now());
+    final remaining = DateTime.fromMillisecondsSinceEpoch(
+      ms,
+    ).difference(DateTime.now());
     if (remaining.isNegative) return const Color(0xFFFF3B30);
     if (remaining.inHours < 24) return const Color(0xFFFF3B30);
     if (remaining.inHours < 72) return const Color(0xFFE8590C);
@@ -808,7 +799,8 @@ class _HomeworkItem extends StatelessWidget {
     const weekdays = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
     final nowMonday = now.subtract(Duration(days: now.weekday - 1));
     final dMonday = d.subtract(Duration(days: d.weekday - 1));
-    final sameWeek = nowMonday.year == dMonday.year &&
+    final sameWeek =
+        nowMonday.year == dMonday.year &&
         nowMonday.month == dMonday.month &&
         nowMonday.day == dMonday.day;
 
@@ -827,9 +819,8 @@ class _HomeworkItem extends StatelessWidget {
 
 class _StatusBadge extends StatelessWidget {
   final Homework hw;
-  final bool isDark;
 
-  const _StatusBadge({required this.hw, required this.isDark});
+  const _StatusBadge({required this.hw});
 
   @override
   Widget build(BuildContext context) {
@@ -838,7 +829,7 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withAlpha(isDark ? 30 : 20),
+        color: color.withAlpha(context.isDark ? 30 : 20),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
