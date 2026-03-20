@@ -2,6 +2,9 @@
 ///
 /// These providers handle the bridge between the API and local database.
 /// Partial failures are tracked and reported, not silently swallowed.
+///
+/// Re-exports [sync_models.dart] and [home_data_provider.dart] so that
+/// consumers only need `import 'sync_provider.dart'` for full access.
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,146 +14,11 @@ import '../api/enums.dart';
 import '../api/learn_api.dart';
 import '../database/database.dart';
 import 'providers.dart';
+import 'sync_models.dart';
 
-// ---------------------------------------------------------------------------
-// Sync state
-// ---------------------------------------------------------------------------
-
-enum SyncStatus { idle, syncing, success, error, sessionExpired, cooldown }
-
-class SyncState {
-  final SyncStatus status;
-  final String? errorMessage;
-  final DateTime? lastSynced;
-
-  /// Per-course warnings (partial failures that didn't block overall sync).
-  final List<String> syncWarnings;
-
-  /// Number of items updated in the last sync.
-  final int updatedCount;
-
-  /// Seconds remaining before next sync allowed (only for cooldown status).
-  final int cooldownSeconds;
-
-  const SyncState({
-    this.status = SyncStatus.idle,
-    this.errorMessage,
-    this.lastSynced,
-    this.syncWarnings = const [],
-    this.updatedCount = 0,
-    this.cooldownSeconds = 0,
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Home data — aggregated from multiple sources
-// ---------------------------------------------------------------------------
-
-class HomeData {
-  final List<HomeworkSummary> urgentAssignments;
-  final List<NotificationSummary> unreadNotifications;
-  final List<FileSummary> newFiles;
-  final List<GradeSummary> recentGrades;
-  final int totalCourses;
-  final int pendingAssignments;
-  final int unreadCount;
-  final int totalUnreadFiles;
-
-  const HomeData({
-    this.urgentAssignments = const [],
-    this.unreadNotifications = const [],
-    this.newFiles = const [],
-    this.recentGrades = const [],
-    this.totalCourses = 0,
-    this.pendingAssignments = 0,
-    this.unreadCount = 0,
-    this.totalUnreadFiles = 0,
-  });
-}
-
-/// Lightweight homework summary for home screen cards.
-class HomeworkSummary {
-  final String id;
-  final String courseId;
-  final String courseName;
-  final String title;
-  final String deadline;
-  final Duration timeRemaining;
-  final bool isOverdue;
-
-  const HomeworkSummary({
-    required this.id,
-    required this.courseId,
-    required this.courseName,
-    required this.title,
-    required this.deadline,
-    required this.timeRemaining,
-    required this.isOverdue,
-  });
-}
-
-/// Lightweight notification summary.
-class NotificationSummary {
-  final String id;
-  final String courseId;
-  final String courseName;
-  final String title;
-  final String publisher;
-  final String publishTime;
-  final bool markedImportant;
-
-  const NotificationSummary({
-    required this.id,
-    required this.courseId,
-    required this.courseName,
-    required this.title,
-    required this.publisher,
-    required this.publishTime,
-    required this.markedImportant,
-  });
-}
-
-/// Lightweight file summary.
-class FileSummary {
-  final String id;
-  final String courseId;
-  final String courseName;
-  final String title;
-  final String size;
-  final String fileType;
-  final String uploadTime;
-
-  const FileSummary({
-    required this.id,
-    required this.courseId,
-    required this.courseName,
-    required this.title,
-    required this.size,
-    required this.fileType,
-    required this.uploadTime,
-  });
-}
-
-/// Lightweight grade summary.
-class GradeSummary {
-  final String id;
-  final String courseId;
-  final String courseName;
-  final String title;
-  final double? grade;
-  final String? gradeLevel;
-  final String? gradeContent;
-
-  const GradeSummary({
-    required this.id,
-    required this.courseId,
-    required this.courseName,
-    required this.title,
-    this.grade,
-    this.gradeLevel,
-    this.gradeContent,
-  });
-}
+// Re-export so consumers only need one import.
+export 'sync_models.dart';
+export 'home_data_provider.dart';
 
 // ---------------------------------------------------------------------------
 // Sync provider
@@ -212,23 +80,22 @@ class SyncNotifier extends StateNotifier<SyncState> {
     state = const SyncState(status: SyncStatus.syncing);
 
     try {
-      final api = _ref.read(apiClientProvider);
+      final apiClient = _ref.read(apiClientProvider);
       final db = _ref.read(databaseProvider);
       final warnings = <String>[];
 
       // 1. Semester + courses (required before content sync)
-      final courses = await _syncSemesterAndCourses(api, db);
+      final courses = await _syncSemesterAndCourses(apiClient, db);
 
       // 2. Stream content by priority: HW → notifications → files
       //    Each type completes for ALL courses before next type starts.
-      //    Within each type, batch 4 courses in parallel.
-      await _syncTypeForAllCourses(api, db, courses, _ContentType.homework, warnings);
+      await _syncTypeForAllCourses(apiClient, db, courses, _ContentType.homework, warnings);
       // ↑ At this point DDL banner can already show fresh data
 
-      await _syncTypeForAllCourses(api, db, courses, _ContentType.notification, warnings);
+      await _syncTypeForAllCourses(apiClient, db, courses, _ContentType.notification, warnings);
       // ↑ Now unread notifications are fresh too
 
-      await _syncTypeForAllCourses(api, db, courses, _ContentType.file, warnings);
+      await _syncTypeForAllCourses(apiClient, db, courses, _ContentType.file, warnings);
       // ↑ Finally, files are up to date
 
       _lastFullSync = DateTime.now();
@@ -271,11 +138,11 @@ class SyncNotifier extends StateNotifier<SyncState> {
 
     state = const SyncState(status: SyncStatus.syncing);
     try {
-      final api = _ref.read(apiClientProvider);
+      final apiClient = _ref.read(apiClientProvider);
       final db = _ref.read(databaseProvider);
       final courses = await _getStoredCourses(db);
       final warnings = <String>[];
-      await _syncTypeForAllCourses(api, db, courses, _ContentType.homework, warnings);
+      await _syncTypeForAllCourses(apiClient, db, courses, _ContentType.homework, warnings);
       _lastHomeworkSync = DateTime.now();
       state = SyncState(
         status: SyncStatus.success,
@@ -307,11 +174,11 @@ class SyncNotifier extends StateNotifier<SyncState> {
 
     state = const SyncState(status: SyncStatus.syncing);
     try {
-      final api = _ref.read(apiClientProvider);
+      final apiClient = _ref.read(apiClientProvider);
       final db = _ref.read(databaseProvider);
       final courses = await _getStoredCourses(db);
       final warnings = <String>[];
-      await _syncTypeForAllCourses(api, db, courses, _ContentType.file, warnings);
+      await _syncTypeForAllCourses(apiClient, db, courses, _ContentType.file, warnings);
       _lastFileSync = DateTime.now();
       state = SyncState(
         status: SyncStatus.success,
@@ -340,16 +207,16 @@ class SyncNotifier extends StateNotifier<SyncState> {
       return;
     }
 
-    final api = _ref.read(apiClientProvider);
+    final apiClient = _ref.read(apiClientProvider);
     final db = _ref.read(databaseProvider);
     final warnings = <String>[];
     final ref = _SyncCourseRef(courseId, '');
 
     // All 3 types in parallel for this one course
     await Future.wait([
-      _syncHomeworks(api, db, ref, warnings),
-      _syncNotifications(api, db, ref, warnings),
-      _syncFiles(api, db, ref, warnings),
+      _syncHomeworks(apiClient, db, ref, warnings),
+      _syncNotifications(apiClient, db, ref, warnings),
+      _syncFiles(apiClient, db, ref, warnings),
     ]);
 
     _courseSyncTimes[courseId] = DateTime.now();
@@ -359,8 +226,8 @@ class SyncNotifier extends StateNotifier<SyncState> {
   // Internal helpers
   // -----------------------------------------------------------------------
 
-  /// Sync semester info and course list. Returns courses.
-  Future<List<dynamic>> _syncSemesterAndCourses(
+  /// Sync semester info and course list. Returns typed course refs.
+  Future<List<_SyncCourseRef>> _syncSemesterAndCourses(
     Learn2018Helper apiClient,
     AppDatabase db,
   ) async {
@@ -391,7 +258,7 @@ class SyncNotifier extends StateNotifier<SyncState> {
         semesterId: semester.id,
       ));
     }
-    return courses;
+    return courses.map((c) => _SyncCourseRef(c.id, c.name)).toList();
   }
 
   /// Get already-stored courses from DB (for type-only syncs).
@@ -406,18 +273,15 @@ class SyncNotifier extends StateNotifier<SyncState> {
   Future<void> _syncTypeForAllCourses(
     Learn2018Helper apiClient,
     AppDatabase db,
-    List<dynamic> courses,
+    List<_SyncCourseRef> courses,
     _ContentType type,
     List<String> warnings,
   ) async {
     await Future.wait(courses.map((course) {
-      final ref = course is _SyncCourseRef
-          ? course
-          : _SyncCourseRef(course.id, course.name);
       return switch (type) {
-        _ContentType.homework => _syncHomeworks(apiClient, db, ref, warnings),
-        _ContentType.notification => _syncNotifications(apiClient, db, ref, warnings),
-        _ContentType.file => _syncFiles(apiClient, db, ref, warnings),
+        _ContentType.homework => _syncHomeworks(apiClient, db, course, warnings),
+        _ContentType.notification => _syncNotifications(apiClient, db, course, warnings),
+        _ContentType.file => _syncFiles(apiClient, db, course, warnings),
       };
     }));
   }
@@ -553,119 +417,3 @@ class _SyncCourseRef {
   final String name;
   const _SyncCourseRef(this.id, this.name);
 }
-
-// ---------------------------------------------------------------------------
-// Home data provider
-// ---------------------------------------------------------------------------
-
-final homeDataProvider = FutureProvider<HomeData>((ref) async {
-  final db = ref.watch(databaseProvider);
-  final semesterId = ref.watch(currentSemesterIdProvider);
-  final thresholdHours = ref.watch(deadlineThresholdHoursProvider);
-
-  if (semesterId == null) return const HomeData();
-
-  final courses = await db.getCoursesBySemester(semesterId);
-  final courseMap = {for (final c in courses) c.id: c.name};
-
-  // Get upcoming homeworks (not submitted)
-  final allHomeworks = await db.getUpcomingHomeworks();
-  final now = DateTime.now();
-
-  final urgentAssignments = <HomeworkSummary>[];
-  int pendingCount = 0;
-
-  for (final hw in allHomeworks) {
-    if (!courseMap.containsKey(hw.courseId)) continue;
-
-    final deadlineMs = int.tryParse(hw.deadline);
-    DateTime? deadlineTime;
-    if (deadlineMs != null) {
-      deadlineTime = DateTime.fromMillisecondsSinceEpoch(deadlineMs);
-    }
-
-    final remaining = deadlineTime?.difference(now) ?? Duration.zero;
-    final isOverdue = remaining.isNegative;
-
-    pendingCount++;
-
-    // Only show assignments within threshold or overdue
-    if (remaining.inHours <= thresholdHours || isOverdue) {
-      urgentAssignments.add(HomeworkSummary(
-        id: hw.id,
-        courseId: hw.courseId,
-        courseName: courseMap[hw.courseId] ?? '',
-        title: hw.title,
-        deadline: hw.deadline,
-        timeRemaining: remaining,
-        isOverdue: isOverdue,
-      ));
-    }
-  }
-
-  // Sort by urgency (most urgent first)
-  urgentAssignments.sort((a, b) => a.timeRemaining.compareTo(b.timeRemaining));
-
-  // Get unread notifications
-  final unreadNotifs = await db.getUnreadNotifications();
-  final unreadNotifications = unreadNotifs
-      .where((n) => courseMap.containsKey(n.courseId))
-      .take(10)
-      .map((n) => NotificationSummary(
-            id: n.id,
-            courseId: n.courseId,
-            courseName: courseMap[n.courseId] ?? '',
-            title: n.title,
-            publisher: n.publisher,
-            publishTime: n.publishTime,
-            markedImportant: n.markedImportant,
-          ))
-      .toList();
-
-  // Get unread files — single efficient query instead of per-course loop
-  final unreadFiles = await db.getUnreadFiles();
-  final newFileSummaries = unreadFiles
-      .where((f) => courseMap.containsKey(f.courseId))
-      .map((f) => FileSummary(
-            id: f.id,
-            courseId: f.courseId,
-            courseName: courseMap[f.courseId] ?? '',
-            title: f.title,
-            size: f.size,
-            fileType: f.fileType,
-            uploadTime: f.uploadTime,
-          ))
-      .toList();
-
-  // Get recent grades (graded homeworks)
-  final recentGradeSummaries = <GradeSummary>[];
-  for (final course in courses) {
-    final homeworks = await db.getHomeworksByCourse(course.id);
-    for (final hw in homeworks) {
-      if (hw.graded && hw.grade != null) {
-        recentGradeSummaries.add(GradeSummary(
-          id: hw.id,
-          courseId: course.id,
-          courseName: course.name,
-          title: hw.title,
-          grade: hw.grade,
-          gradeLevel: hw.gradeLevel,
-          gradeContent: hw.gradeContent,
-        ));
-      }
-    }
-  }
-  recentGradeSummaries.sort((a, b) => b.id.compareTo(a.id));
-
-  return HomeData(
-    urgentAssignments: urgentAssignments.take(5).toList(),
-    unreadNotifications: unreadNotifications,
-    newFiles: newFileSummaries.take(5).toList(),
-    recentGrades: recentGradeSummaries.take(5).toList(),
-    totalCourses: courses.length,
-    pendingAssignments: pendingCount,
-    unreadCount: unreadNotifications.length,
-    totalUnreadFiles: newFileSummaries.length,
-  );
-});
-
