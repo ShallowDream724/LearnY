@@ -22,6 +22,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../core/design/colors.dart';
 import '../../core/providers/providers.dart';
+import '../../core/providers/sync_provider.dart';
 import '../../core/database/database.dart' as db;
 import '../../core/services/file_download_service.dart';
 
@@ -192,6 +193,36 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
     if (fs == null) return [];
     final isReady = fs.status == DownloadStatus.downloaded;
     return [
+      // Mark read / unread toggle
+      if (_file != null)
+        IconButton(
+          icon: Icon(
+            _file!.isNew
+                ? Icons.mark_email_unread_rounded
+                : Icons.mark_email_read_outlined,
+            size: 22,
+          ),
+          tooltip: _file!.isNew ? '标为已读' : '标为未读',
+          onPressed: () async {
+            final database = ref.read(databaseProvider);
+            if (_file!.isNew) {
+              await database.markFileRead(_file!.id);
+            } else {
+              await database.markFileUnread(_file!.id);
+            }
+            ref.invalidate(homeDataProvider);
+            final updated = await database.getFileById(widget.fileId);
+            if (mounted && updated != null) {
+              setState(() => _file = updated);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(updated.isNew ? '已标为未读' : '已标为已读'),
+                  duration: const Duration(seconds: 1),
+                ),
+              );
+            }
+          },
+        ),
       IconButton(
         icon: const Icon(Icons.refresh_rounded, size: 22),
         tooltip: '重新下载',

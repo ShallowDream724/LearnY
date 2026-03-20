@@ -220,12 +220,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 onRead: () {
                                   ref.read(databaseProvider)
                                       .markNotificationReadLocal(e.value.id);
+                                  ref.invalidate(homeDataProvider);
                                 },
                                 child: NotificationCard(
                                   notification: e.value,
                                   onTap: () {
                                     ref.read(databaseProvider)
                                         .markNotificationReadLocal(e.value.id);
+                                    ref.invalidate(homeDataProvider);
                                     context.push(
                                       Routes.notificationDetail(
                                         notificationId: e.value.id,
@@ -255,13 +257,42 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                     const SizedBox(height: 16),
 
-                    // ── New Files ──
+                    // ── Unread Files ──
                     if (data.newFiles.isNotEmpty) ...[
-                      _SectionTitle(
-                        title: '未读文件',
-                        count: data.newFiles.length,
-                        color: const Color(0xFF7B1FA2),
-                        isDark: isDark,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _SectionTitle(
+                              title: '未读文件',
+                              count: data.totalUnreadFiles,
+                              color: const Color(0xFF7B1FA2),
+                              isDark: isDark,
+                            ),
+                          ),
+                          if (data.totalUnreadFiles > 5)
+                            GestureDetector(
+                              onTap: () => context.push(Routes.unreadFiles),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '查看全部(${data.totalUnreadFiles})',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Icon(
+                                    Icons.chevron_right_rounded,
+                                    size: 18,
+                                    color: AppColors.primary,
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
                       ),
                       const SizedBox(height: 12),
                       ...data.newFiles.asMap().entries.map(
@@ -271,6 +302,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 onRead: () {
                                   ref.read(databaseProvider)
                                       .markFileRead(e.value.id);
+                                  ref.invalidate(homeDataProvider);
                                 },
                                 child: _NewFileCard(
                                   file: e.value,
@@ -278,6 +310,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                   onTap: () {
                                     ref.read(databaseProvider)
                                         .markFileRead(e.value.id);
+                                    ref.invalidate(homeDataProvider);
                                     context.push(
                                       Routes.fileDetail(
                                         fileId: e.value.id,

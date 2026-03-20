@@ -301,6 +301,11 @@ class AppDatabase extends _$AppDatabase {
       (update(courseFiles)..where((t) => t.id.equals(id)))
           .write(const CourseFilesCompanion(isNew: Value(false)));
 
+  /// Mark a file as unread (sets isNew back to true).
+  Future<void> markFileUnread(String id) =>
+      (update(courseFiles)..where((t) => t.id.equals(id)))
+          .write(const CourseFilesCompanion(isNew: Value(true)));
+
   /// Watch unread (new) files across all courses.
   Stream<List<CourseFile>> watchUnreadFiles() =>
       (select(courseFiles)

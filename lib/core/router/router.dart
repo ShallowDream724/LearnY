@@ -21,6 +21,7 @@ import '../../features/courses/course_detail_screen.dart';
 
 import '../../features/files/file_detail_screen.dart';
 import '../../features/files/file_manager_screen.dart';
+import '../../features/files/unread_files_screen.dart';
 import '../../features/notifications/notification_detail_screen.dart';
 import '../../features/search/search_screen.dart';
 import '../../features/profile/profile_screen.dart';
@@ -67,6 +68,7 @@ abstract final class Routes {
       '$_fileDetailPath?id=$fileId&courseId=$courseId&courseName=${Uri.encodeComponent(courseName)}';
 
   static const String fileManager = _fileManagerPath;
+  static const String unreadFiles = '/unread-files';
 }
 
 /// Safely decode a URI component — falls back to raw value if decoding fails
@@ -161,6 +163,12 @@ GoRouter buildRouter({required WidgetRef ref}) {
         path: Routes._fileManagerPath,
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const FileManagerScreen(),
+      ),
+
+      GoRoute(
+        path: Routes.unreadFiles,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const UnreadFilesScreen(),
       ),
 
       // ── Main app shell with 4 tabs ──

@@ -50,6 +50,7 @@ class HomeData {
   final int totalCourses;
   final int pendingAssignments;
   final int unreadCount;
+  final int totalUnreadFiles;
 
   const HomeData({
     this.urgentAssignments = const [],
@@ -59,6 +60,7 @@ class HomeData {
     this.totalCourses = 0,
     this.pendingAssignments = 0,
     this.unreadCount = 0,
+    this.totalUnreadFiles = 0,
   });
 }
 
@@ -416,26 +418,20 @@ final homeDataProvider = FutureProvider<HomeData>((ref) async {
           ))
       .toList();
 
-  // Get new files (isNew == true)
-  final newFileSummaries = <FileSummary>[];
-  for (final course in courses) {
-    final files = await db.getFilesByCourse(course.id);
-    for (final f in files) {
-      if (f.isNew) {
-        newFileSummaries.add(FileSummary(
-          id: f.id,
-          courseId: course.id,
-          courseName: course.name,
-          title: f.title,
-          size: f.size,
-          fileType: f.fileType,
-          uploadTime: f.uploadTime,
-        ));
-      }
-    }
-  }
-  // Sort by upload time descending, take top 5
-  newFileSummaries.sort((a, b) => b.uploadTime.compareTo(a.uploadTime));
+  // Get unread files — single efficient query instead of per-course loop
+  final unreadFiles = await db.getUnreadFiles();
+  final newFileSummaries = unreadFiles
+      .where((f) => courseMap.containsKey(f.courseId))
+      .map((f) => FileSummary(
+            id: f.id,
+            courseId: f.courseId,
+            courseName: courseMap[f.courseId] ?? '',
+            title: f.title,
+            size: f.size,
+            fileType: f.fileType,
+            uploadTime: f.uploadTime,
+          ))
+      .toList();
 
   // Get recent grades (graded homeworks)
   final recentGradeSummaries = <GradeSummary>[];
@@ -455,11 +451,7 @@ final homeDataProvider = FutureProvider<HomeData>((ref) async {
       }
     }
   }
-  // Sort by grade time descending if available, take top 5
-  recentGradeSummaries.sort((a, b) {
-    // Fallback: sort by ID descending
-    return b.id.compareTo(a.id);
-  });
+  recentGradeSummaries.sort((a, b) => b.id.compareTo(a.id));
 
   return HomeData(
     urgentAssignments: urgentAssignments.take(5).toList(),
@@ -469,6 +461,7 @@ final homeDataProvider = FutureProvider<HomeData>((ref) async {
     totalCourses: courses.length,
     pendingAssignments: pendingCount,
     unreadCount: unreadNotifications.length,
+    totalUnreadFiles: newFileSummaries.length,
   );
 });
 

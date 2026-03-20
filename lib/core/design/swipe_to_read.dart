@@ -1,9 +1,9 @@
-/// SwipeToRead — a generic left-swipe gesture wrapper.
+/// SwipeToRead — left-swipe gesture to mark items as read.
 ///
-/// Wraps any child widget. When the user swipes left past the threshold
-/// and releases, the [onRead] callback fires.
+/// When swipe passes threshold and is released:
+/// 1. Item slides off-screen to the left with fade-out
+/// 2. [onRead] fires after the exit animation completes
 ///
-/// Visual feedback: a green checkmark background slides in from the right.
 /// NO haptic feedback — purely visual.
 library;
 
@@ -14,10 +14,11 @@ import 'colors.dart';
 class SwipeToRead extends StatefulWidget {
   final Widget child;
 
-  /// Called when the user completes a left-swipe past the threshold.
+  /// Called after exit animation completes.
   final VoidCallback onRead;
 
-  /// Whether this item is already read. When true, swipe is disabled.
+  /// Whether this item is already read. When true, swipe is disabled
+  /// and the widget is not rendered at all (height collapses).
   final bool isRead;
 
   const SwipeToRead({
@@ -32,10 +33,14 @@ class SwipeToRead extends StatefulWidget {
 }
 
 class _SwipeToReadState extends State<SwipeToRead>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   double _dragExtent = 0.0;
   late AnimationController _resetController;
   late Animation<double> _resetAnimation;
+
+  // Exit animation
+  late AnimationController _exitController;
+  bool _exiting = false;
 
   static const double _threshold = 80.0;
   bool _thresholdReached = false;
@@ -51,53 +56,67 @@ class _SwipeToReadState extends State<SwipeToRead>
       CurvedAnimation(parent: _resetController, curve: Curves.easeOut),
     );
     _resetController.addListener(() {
-      setState(() => _dragExtent = _resetAnimation.value);
+      if (!_exiting) {
+        setState(() => _dragExtent = _resetAnimation.value);
+      }
+    });
+
+    _exitController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+    );
+    _exitController.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        widget.onRead();
+      }
     });
   }
 
   @override
   void dispose() {
     _resetController.dispose();
+    _exitController.dispose();
     super.dispose();
   }
 
   void _onHorizontalDragUpdate(DragUpdateDetails details) {
-    if (widget.isRead) return;
+    if (widget.isRead || _exiting) return;
     setState(() {
       _dragExtent += details.delta.dx;
-      // Only allow left swipe (negative values)
       if (_dragExtent > 0) _dragExtent = 0;
-      // Clamp
       if (_dragExtent < -160) _dragExtent = -160;
       _thresholdReached = _dragExtent.abs() >= _threshold;
     });
   }
 
   void _onHorizontalDragEnd(DragEndDetails details) {
-    if (widget.isRead) return;
+    if (widget.isRead || _exiting) return;
     if (_thresholdReached) {
-      widget.onRead();
+      // Trigger exit animation — slide off left + fade out
+      setState(() => _exiting = true);
+      _exitController.forward();
+    } else {
+      // Snap back
+      _resetAnimation = Tween<double>(begin: _dragExtent, end: 0).animate(
+        CurvedAnimation(parent: _resetController, curve: Curves.easeOut),
+      );
+      _resetController
+        ..reset()
+        ..forward();
+      _thresholdReached = false;
     }
-    // Animate back to 0
-    _resetAnimation = Tween<double>(begin: _dragExtent, end: 0).animate(
-      CurvedAnimation(parent: _resetController, curve: Curves.easeOut),
-    );
-    _resetController
-      ..reset()
-      ..forward();
-    _thresholdReached = false;
   }
 
   @override
   Widget build(BuildContext context) {
-    if (widget.isRead) return widget.child;
+    if (widget.isRead) return const SizedBox.shrink();
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final progress = (_dragExtent.abs() / _threshold).clamp(0.0, 1.0);
 
-    return Stack(
+    Widget content = Stack(
       children: [
-        // Background — revealed on swipe
+        // Background — green checkmark
         Positioned.fill(
           child: Container(
             alignment: Alignment.centerRight,
@@ -138,7 +157,7 @@ class _SwipeToReadState extends State<SwipeToRead>
             ),
           ),
         ),
-        // Foreground — the actual child
+        // Foreground
         Transform.translate(
           offset: Offset(_dragExtent, 0),
           child: GestureDetector(
@@ -149,5 +168,30 @@ class _SwipeToReadState extends State<SwipeToRead>
         ),
       ],
     );
+
+    if (_exiting) {
+      return SizeTransition(
+        sizeFactor: Tween<double>(begin: 1, end: 0).animate(
+          CurvedAnimation(parent: _exitController, curve: Curves.easeInOut),
+        ),
+        child: FadeTransition(
+          opacity: Tween<double>(begin: 1, end: 0).animate(
+            CurvedAnimation(parent: _exitController, curve: Curves.easeIn),
+          ),
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: Offset.zero,
+              end: const Offset(-1, 0),
+            ).animate(
+              CurvedAnimation(
+                  parent: _exitController, curve: Curves.easeInOut),
+            ),
+            child: content,
+          ),
+        ),
+      );
+    }
+
+    return content;
   }
 }
