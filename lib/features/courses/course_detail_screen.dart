@@ -566,13 +566,19 @@ class _FilesTabState extends ConsumerState<_FilesTab> {
                             padding: const EdgeInsets.only(bottom: 8),
                             child: SwipeToRead(
                               isRead: !f.isNew,
-                              onRead: () => _markAsRead(f),
+                              onSwipe: () {
+                                if (f.isNew) {
+                                  ref.read(databaseProvider).markFileRead(f.id);
+                                } else {
+                                  ref.read(databaseProvider).markFileUnread(f.id);
+                                }
+                                ref.invalidate(homeDataProvider);
+                              },
                               child: FileCard(
                                 file: f,
                                 courseName: widget.courseName,
                                 hideCourseName: true,
                                 onTap: () {
-                                  _markAsRead(f);
                                   context.push(Routes.fileDetail(
                                     fileId: f.id,
                                     courseId: widget.courseId,

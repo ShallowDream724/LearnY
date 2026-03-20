@@ -42,15 +42,10 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
-
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
-    });
   }
 
   @override
   void dispose() {
-    _countdownTimer?.cancel();
     _pulseController.dispose();
     super.dispose();
   }
@@ -73,22 +68,26 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
   // ── Time formatting ──
 
   String _formatCountdown(HomeworkSummary hw) {
-    final remaining = hw.timeRemaining;
-
     if (hw.isOverdue) return '已截止';
 
+    final deadlineMs = int.tryParse(hw.deadline);
+    if (deadlineMs == null) return '';
+    final deadline = DateTime.fromMillisecondsSinceEpoch(deadlineMs);
+    final now = DateTime.now();
+    final remaining = deadline.difference(now);
+
+    if (remaining.isNegative) return '已截止';
+
     if (remaining.inHours < 24) {
-      // Live HH:MM:SS countdown
       final h = remaining.inHours;
       final m = remaining.inMinutes.remainder(60);
-      final s = remaining.inSeconds.remainder(60);
-      return '${h.toString().padLeft(2, '0')}:'
-          '${m.toString().padLeft(2, '0')}:'
-          '${s.toString().padLeft(2, '0')}';
+      if (h > 0) {
+        return '剩余 ${h}h ${m}m';
+      } else {
+        return '剩余 ${m}分钟';
+      }
     }
 
-    final deadline = DateTime.now().add(remaining);
-    final now = DateTime.now();
     final dayDiff = remaining.inDays;
     final time =
         '${deadline.hour.toString().padLeft(2, '0')}:${deadline.minute.toString().padLeft(2, '0')}';
@@ -101,7 +100,6 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
     final nowWeekday = now.weekday; // 1=Mon 7=Sun
     final deadlineWeekday = deadline.weekday;
     const names = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-    // Same ISO week?
     final nowMonday = now.subtract(Duration(days: nowWeekday - 1));
     final deadlineMonday =
         deadline.subtract(Duration(days: deadlineWeekday - 1));
@@ -119,8 +117,11 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
 
   String _formatDateSub(HomeworkSummary hw) {
     if (hw.isOverdue) return '';
-    final deadline = DateTime.now().add(hw.timeRemaining);
-    if (hw.timeRemaining.inHours < 24) {
+    final deadlineMs = int.tryParse(hw.deadline);
+    if (deadlineMs == null) return '';
+    final deadline = DateTime.fromMillisecondsSinceEpoch(deadlineMs);
+    final remaining = deadline.difference(DateTime.now());
+    if (remaining.inHours < 24) {
       return '今天 ${deadline.hour.toString().padLeft(2, '0')}:${deadline.minute.toString().padLeft(2, '0')}';
     }
     return '${deadline.month}月${deadline.day}日';

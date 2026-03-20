@@ -217,7 +217,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             (e) => Padding(
                               padding: const EdgeInsets.only(bottom: 10),
                               child: SwipeToRead(
-                                onRead: () {
+                                exitOnSwipe: true,
+                                onSwipe: () {
                                   ref.read(databaseProvider)
                                       .markNotificationReadLocal(e.value.id);
                                   ref.invalidate(homeDataProvider);
@@ -264,12 +265,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           Expanded(
                             child: _SectionTitle(
                               title: '未读文件',
-                              count: data.totalUnreadFiles,
+                              count: data.totalUnreadFiles > 5 ? 0 : data.totalUnreadFiles,
                               color: const Color(0xFF7B1FA2),
                               isDark: isDark,
                             ),
                           ),
-                          if (data.totalUnreadFiles > 5)
+                          if (data.totalUnreadFiles > 5) ...[
+                            const SizedBox(width: 12),
                             GestureDetector(
                               onTap: () => context.push(Routes.unreadFiles),
                               child: Row(
@@ -292,6 +294,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 ],
                               ),
                             ),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 12),
@@ -299,7 +302,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             (e) => Padding(
                               padding: const EdgeInsets.only(bottom: 8),
                               child: SwipeToRead(
-                                onRead: () {
+                                exitOnSwipe: true,
+                                onSwipe: () {
                                   ref.read(databaseProvider)
                                       .markFileRead(e.value.id);
                                   ref.invalidate(homeDataProvider);
@@ -308,9 +312,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                   file: e.value,
                                   isDark: isDark,
                                   onTap: () {
-                                    ref.read(databaseProvider)
-                                        .markFileRead(e.value.id);
-                                    ref.invalidate(homeDataProvider);
                                     context.push(
                                       Routes.fileDetail(
                                         fileId: e.value.id,
@@ -417,7 +418,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   String _greeting() {
-    final hour = DateTime.now().hour;
+    // Always use Shanghai time (UTC+8)
+    final hour = DateTime.now().toUtc().add(const Duration(hours: 8)).hour;
     if (hour < 6) return '深夜了';
     if (hour < 9) return '早上好';
     if (hour < 12) return '上午好';
@@ -465,9 +467,10 @@ class _SectionTitle extends StatelessWidget {
         const SizedBox(width: 8),
         Text(title, style: AppTypography.headlineSmall.copyWith(color: textColor)),
         const Spacer(),
-        Text(
-          '$count 项',
-          style: AppTypography.bodySmall.copyWith(color: subColor),
+        if (count > 0)
+          Text(
+            '$count 项',
+            style: AppTypography.bodySmall.copyWith(color: subColor),
         ),
       ],
     );

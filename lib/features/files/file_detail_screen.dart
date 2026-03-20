@@ -119,6 +119,24 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
       _file = file;
       _loading = false;
     });
+
+    // Watch for download completion → mark as read
+    ref.listenManual(fileDownloadProvider, (prev, next) {
+      final prevStatus = prev?[file.id]?.status;
+      final curStatus = next[file.id]?.status;
+      if (prevStatus != DownloadStatus.downloaded &&
+          curStatus == DownloadStatus.downloaded &&
+          _file != null &&
+          _file!.isNew) {
+        database.markFileRead(file.id);
+        ref.invalidate(homeDataProvider);
+        // Refresh local state
+        database.getFileById(widget.fileId).then((updated) {
+          if (mounted && updated != null) setState(() => _file = updated);
+        });
+      }
+    });
+
     _startDownload(file);
   }
 

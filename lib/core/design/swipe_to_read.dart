@@ -1,8 +1,10 @@
-/// SwipeToRead — left-swipe gesture to mark items as read.
+/// SwipeToRead — bidirectional left-swipe gesture.
 ///
-/// When swipe passes threshold and is released:
-/// 1. Item slides off-screen to the left with fade-out
-/// 2. [onRead] fires after the exit animation completes
+/// • Unread items: swipe → green ✓ "标为已读" → [onSwipe] fires
+/// • Read items:   swipe → blue ● "标为未读" → [onSwipe] fires
+///
+/// The parent decides what happens after swipe (mark read/unread,
+/// remove from list, etc.).
 ///
 /// NO haptic feedback — purely visual.
 library;
@@ -14,18 +16,25 @@ import 'colors.dart';
 class SwipeToRead extends StatefulWidget {
   final Widget child;
 
-  /// Called after exit animation completes.
-  final VoidCallback onRead;
+  /// Called after exit animation completes (or immediately if [exitOnSwipe] is false).
+  final VoidCallback onSwipe;
 
-  /// Whether this item is already read. When true, swipe is disabled
-  /// and the widget is not rendered at all (height collapses).
+  /// Whether this item is currently read.
+  /// Controls the visual indicator (green ✓ vs blue ●) and label.
   final bool isRead;
+
+  /// If true, the item plays an exit animation (slide-off + fade + collapse)
+  /// after a successful swipe. Use this on pages where the item should
+  /// disappear after action (e.g. home screen unread list).
+  /// If false, the item snaps back after calling [onSwipe].
+  final bool exitOnSwipe;
 
   const SwipeToRead({
     super.key,
     required this.child,
-    required this.onRead,
+    required this.onSwipe,
     this.isRead = false,
+    this.exitOnSwipe = false,
   });
 
   @override
@@ -67,7 +76,7 @@ class _SwipeToReadState extends State<SwipeToRead>
     );
     _exitController.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
-        widget.onRead();
+        widget.onSwipe();
       }
     });
   }
@@ -80,7 +89,7 @@ class _SwipeToReadState extends State<SwipeToRead>
   }
 
   void _onHorizontalDragUpdate(DragUpdateDetails details) {
-    if (widget.isRead || _exiting) return;
+    if (_exiting) return;
     setState(() {
       _dragExtent += details.delta.dx;
       if (_dragExtent > 0) _dragExtent = 0;
@@ -90,11 +99,23 @@ class _SwipeToReadState extends State<SwipeToRead>
   }
 
   void _onHorizontalDragEnd(DragEndDetails details) {
-    if (widget.isRead || _exiting) return;
+    if (_exiting) return;
     if (_thresholdReached) {
-      // Trigger exit animation — slide off left + fade out
-      setState(() => _exiting = true);
-      _exitController.forward();
+      if (widget.exitOnSwipe) {
+        // Exit animation — slide off left + fade out + height collapse
+        setState(() => _exiting = true);
+        _exitController.forward();
+      } else {
+        // Snap back and fire callback immediately
+        _resetAnimation = Tween<double>(begin: _dragExtent, end: 0).animate(
+          CurvedAnimation(parent: _resetController, curve: Curves.easeOut),
+        );
+        _resetController
+          ..reset()
+          ..forward();
+        _thresholdReached = false;
+        widget.onSwipe();
+      }
     } else {
       // Snap back
       _resetAnimation = Tween<double>(begin: _dragExtent, end: 0).animate(
@@ -109,14 +130,25 @@ class _SwipeToReadState extends State<SwipeToRead>
 
   @override
   Widget build(BuildContext context) {
-    if (widget.isRead) return const SizedBox.shrink();
-
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final progress = (_dragExtent.abs() / _threshold).clamp(0.0, 1.0);
 
+    // Colors & labels based on read state
+    final actionColor = widget.isRead
+        ? const Color(0xFF007AFF) // Blue for "mark unread"
+        : AppColors.success;      // Green for "mark read"
+    final actionIcon = widget.isRead
+        ? (_thresholdReached
+            ? Icons.mark_email_unread_rounded
+            : Icons.mark_email_unread_outlined)
+        : (_thresholdReached
+            ? Icons.check_circle_rounded
+            : Icons.check_circle_outline_rounded);
+    final actionLabel = widget.isRead ? '标为未读' : '标为已读';
+
     Widget content = Stack(
       children: [
-        // Background — green checkmark
+        // Background — action indicator
         Positioned.fill(
           child: Container(
             alignment: Alignment.centerRight,
@@ -124,7 +156,7 @@ class _SwipeToReadState extends State<SwipeToRead>
             decoration: BoxDecoration(
               color: Color.lerp(
                 isDark ? AppColors.darkSurface : AppColors.lightSurface,
-                AppColors.success.withAlpha(isDark ? 40 : 25),
+                actionColor.withAlpha(isDark ? 40 : 25),
                 progress,
               ),
               borderRadius: BorderRadius.circular(14),
@@ -136,20 +168,17 @@ class _SwipeToReadState extends State<SwipeToRead>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    _thresholdReached
-                        ? Icons.check_circle_rounded
-                        : Icons.check_circle_outline_rounded,
-                    color: AppColors.success,
-                    size: 22,
+                    actionIcon,
+                    size: _thresholdReached ? 22 : 18,
+                    color: actionColor,
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 4),
                   Text(
-                    '已读',
+                    actionLabel,
                     style: TextStyle(
-                      color: AppColors.success,
-                      fontSize: 13,
-                      fontWeight:
-                          _thresholdReached ? FontWeight.w700 : FontWeight.w500,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: actionColor,
                     ),
                   ),
                 ],
@@ -157,41 +186,40 @@ class _SwipeToReadState extends State<SwipeToRead>
             ),
           ),
         ),
-        // Foreground
+        // Foreground — the actual card
         Transform.translate(
           offset: Offset(_dragExtent, 0),
-          child: GestureDetector(
-            onHorizontalDragUpdate: _onHorizontalDragUpdate,
-            onHorizontalDragEnd: _onHorizontalDragEnd,
-            child: widget.child,
-          ),
+          child: widget.child,
         ),
       ],
     );
 
+    // Exit animation: slide left + fade out + height collapse
     if (_exiting) {
+      final slide = Tween<Offset>(begin: Offset.zero, end: const Offset(-1, 0))
+          .animate(CurvedAnimation(
+              parent: _exitController, curve: Curves.easeInCubic));
+      final fade = Tween<double>(begin: 1, end: 0).animate(CurvedAnimation(
+          parent: _exitController,
+          curve: const Interval(0.0, 0.8, curve: Curves.easeOut)));
+      final collapse = Tween<double>(begin: 1, end: 0).animate(CurvedAnimation(
+          parent: _exitController,
+          curve: const Interval(0.4, 1.0, curve: Curves.easeInCubic)));
+
       return SizeTransition(
-        sizeFactor: Tween<double>(begin: 1, end: 0).animate(
-          CurvedAnimation(parent: _exitController, curve: Curves.easeInOut),
-        ),
-        child: FadeTransition(
-          opacity: Tween<double>(begin: 1, end: 0).animate(
-            CurvedAnimation(parent: _exitController, curve: Curves.easeIn),
-          ),
-          child: SlideTransition(
-            position: Tween<Offset>(
-              begin: Offset.zero,
-              end: const Offset(-1, 0),
-            ).animate(
-              CurvedAnimation(
-                  parent: _exitController, curve: Curves.easeInOut),
-            ),
-            child: content,
-          ),
+        sizeFactor: collapse,
+        axisAlignment: -1,
+        child: SlideTransition(
+          position: slide,
+          child: FadeTransition(opacity: fade, child: content),
         ),
       );
     }
 
-    return content;
+    return GestureDetector(
+      onHorizontalDragUpdate: _onHorizontalDragUpdate,
+      onHorizontalDragEnd: _onHorizontalDragEnd,
+      child: content,
+    );
   }
 }
