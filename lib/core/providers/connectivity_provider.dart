@@ -29,7 +29,7 @@ class ConnectivityState {
 // ---------------------------------------------------------------------------
 
 class ConnectivityNotifier extends StateNotifier<ConnectivityState> {
-  late final StreamSubscription<List<ConnectivityResult>> _subscription;
+  StreamSubscription<List<ConnectivityResult>>? _subscription;
 
   ConnectivityNotifier() : super(const ConnectivityState()) {
     _init();
@@ -41,8 +41,9 @@ class ConnectivityNotifier extends StateNotifier<ConnectivityState> {
     _updateFromResult(result);
 
     // Listen for changes
-    _subscription =
-        Connectivity().onConnectivityChanged.listen(_updateFromResult);
+    _subscription = Connectivity().onConnectivityChanged.listen(
+      _updateFromResult,
+    );
   }
 
   void _updateFromResult(List<ConnectivityResult> results) {
@@ -55,7 +56,7 @@ class ConnectivityNotifier extends StateNotifier<ConnectivityState> {
 
   @override
   void dispose() {
-    _subscription.cancel();
+    _subscription?.cancel();
     super.dispose();
   }
 }
@@ -66,5 +67,5 @@ class ConnectivityNotifier extends StateNotifier<ConnectivityState> {
 
 final connectivityProvider =
     StateNotifierProvider<ConnectivityNotifier, ConnectivityState>(
-  (ref) => ConnectivityNotifier(),
-);
+      (ref) => ConnectivityNotifier(),
+    );

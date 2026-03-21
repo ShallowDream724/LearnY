@@ -19,8 +19,6 @@
 ///    helping users gauge result distribution at a glance.
 ///
 /// 6. **Navigation**: tapping a result navigates to the appropriate detail page.
-import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -31,36 +29,9 @@ import '../../core/design/app_theme_colors.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/responsive.dart';
 import '../../core/design/typography.dart';
-import '../../core/providers/providers.dart';
 import '../../core/router/router.dart';
-
-// ---------------------------------------------------------------------------
-//  Search result model
-// ---------------------------------------------------------------------------
-
-enum SearchCategory { course, notification, homework, file }
-
-class SearchResult {
-  final SearchCategory category;
-  final String id;
-  final String courseId;
-  final String courseName;
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final Color accentColor;
-
-  const SearchResult({
-    required this.category,
-    required this.id,
-    required this.courseId,
-    required this.courseName,
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.accentColor,
-  });
-}
+import 'providers/search_controller.dart';
+import 'providers/search_models.dart';
 
 // ---------------------------------------------------------------------------
 //  Screen
@@ -76,17 +47,10 @@ class SearchScreen extends ConsumerStatefulWidget {
 class _SearchScreenState extends ConsumerState<SearchScreen> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
-  Timer? _debounce;
-
-  List<SearchResult> _results = [];
-  List<String> _recentSearches = [];
-  bool _isSearching = false;
-  bool _hasSearched = false;
 
   @override
   void initState() {
     super.initState();
-    _loadRecentSearches();
     // Auto-focus the search field
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNode.requestFocus();
@@ -97,162 +61,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   void dispose() {
     _controller.dispose();
     _focusNode.dispose();
-    _debounce?.cancel();
     super.dispose();
   }
 
   void _onSearchChanged(String query) {
-    _debounce?.cancel();
-    if (query.trim().isEmpty) {
-      setState(() {
-        _results = [];
-        _hasSearched = false;
-        _isSearching = false;
-      });
-      return;
-    }
-    setState(() => _isSearching = true);
-    _debounce = Timer(const Duration(milliseconds: 300), () {
-      _performSearch(query.trim());
-    });
-  }
-
-  Future<void> _performSearch(String query) async {
-    final database = ref.read(databaseProvider);
-    final semesterId = ref.read(currentSemesterIdProvider);
-    if (semesterId == null) {
-      setState(() {
-        _isSearching = false;
-        _hasSearched = true;
-      });
-      return;
-    }
-
-    final results = <SearchResult>[];
-    final lowerQuery = query.toLowerCase();
-
-    // Search courses
-    final courses = await database.getCoursesBySemester(semesterId);
-    for (final c in courses) {
-      if (c.name.toLowerCase().contains(lowerQuery) ||
-          (c.teacherName.toLowerCase().contains(lowerQuery))) {
-        results.add(
-          SearchResult(
-            category: SearchCategory.course,
-            id: c.id,
-            courseId: c.id,
-            courseName: c.name,
-            title: c.name,
-            subtitle: c.teacherName,
-            icon: Icons.school_rounded,
-            accentColor: AppColors.primary,
-          ),
-        );
-      }
-    }
-
-    // Search across all courses' content
-    for (final c in courses) {
-      // Notifications
-      final notifications = await database.getNotificationsByCourse(c.id);
-      for (final n in notifications) {
-        if (n.title.toLowerCase().contains(lowerQuery) ||
-            n.content.toLowerCase().contains(lowerQuery)) {
-          results.add(
-            SearchResult(
-              category: SearchCategory.notification,
-              id: n.id,
-              courseId: c.id,
-              courseName: c.name,
-              title: n.title,
-              subtitle: c.name,
-              icon: Icons.notifications_rounded,
-              accentColor: AppColors.info,
-            ),
-          );
-        }
-      }
-
-      // Homework
-      final homeworks = await database.getHomeworksByCourse(c.id);
-      for (final hw in homeworks) {
-        if (hw.title.toLowerCase().contains(lowerQuery) ||
-            (hw.description?.toLowerCase().contains(lowerQuery) ?? false)) {
-          results.add(
-            SearchResult(
-              category: SearchCategory.homework,
-              id: hw.id,
-              courseId: c.id,
-              courseName: c.name,
-              title: hw.title,
-              subtitle: c.name,
-              icon: Icons.assignment_rounded,
-              accentColor: AppColors.warning,
-            ),
-          );
-        }
-      }
-
-      // Files
-      final files = await database.getFilesByCourse(c.id);
-      for (final f in files) {
-        if (f.title.toLowerCase().contains(lowerQuery) ||
-            f.description.toLowerCase().contains(lowerQuery)) {
-          results.add(
-            SearchResult(
-              category: SearchCategory.file,
-              id: f.id,
-              courseId: c.id,
-              courseName: c.name,
-              title: f.title,
-              subtitle: '${c.name} · ${f.size}',
-              icon: Icons.insert_drive_file_rounded,
-              accentColor: const Color(0xFF8B5CF6),
-            ),
-          );
-        }
-      }
-    }
-
-    // Save to recent
-    _addToRecent(query);
-
-    if (mounted) {
-      setState(() {
-        _results = results;
-        _isSearching = false;
-        _hasSearched = true;
-      });
-    }
-  }
-
-  // ── Recent searches ──
-
-  Future<void> _loadRecentSearches() async {
-    final database = ref.read(databaseProvider);
-    final raw = await database.getState('recent_searches');
-    if (raw != null && raw.isNotEmpty) {
-      final list = jsonDecode(raw) as List;
-      setState(() {
-        _recentSearches = list.cast<String>();
-      });
-    }
-  }
-
-  Future<void> _addToRecent(String query) async {
-    final database = ref.read(databaseProvider);
-    _recentSearches.remove(query);
-    _recentSearches.insert(0, query);
-    if (_recentSearches.length > 10) {
-      _recentSearches = _recentSearches.sublist(0, 10);
-    }
-    await database.setState('recent_searches', jsonEncode(_recentSearches));
-  }
-
-  Future<void> _clearRecent() async {
-    final database = ref.read(databaseProvider);
-    setState(() => _recentSearches = []);
-    await database.setState('recent_searches', '[]');
+    ref.read(searchControllerProvider.notifier).onQueryChanged(query);
   }
 
   void _onRecentTap(String query) {
@@ -260,13 +73,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     _controller.selection = TextSelection.fromPosition(
       TextPosition(offset: query.length),
     );
-    _onSearchChanged(query);
+    ref.read(searchControllerProvider.notifier).searchImmediately(query);
   }
 
   void _onResultTap(SearchResult result) {
     switch (result.category) {
       case SearchCategory.course:
         context.go(Routes.courseDetail(result.courseId));
+        break;
       case SearchCategory.notification:
         context.push(
           Routes.notificationDetail(
@@ -275,6 +89,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             courseName: result.courseName,
           ),
         );
+        break;
       case SearchCategory.homework:
         context.push(
           Routes.homeworkDetail(
@@ -283,9 +98,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             courseName: result.courseName,
           ),
         );
+        break;
       case SearchCategory.file:
-        // Navigate to the course detail with files tab
-        context.go(Routes.courseDetail(result.courseId));
+        context.push(
+          Routes.fileDetail(
+            fileId: result.id,
+            courseId: result.courseId,
+            courseName: result.courseName,
+          ),
+        );
+        break;
     }
   }
 
@@ -294,6 +116,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final searchState = ref.watch(searchControllerProvider);
 
     return Scaffold(
       backgroundColor: c.bg,
@@ -310,20 +133,20 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               icon: Icon(Icons.clear_rounded, color: c.subtitle, size: 20),
               onPressed: () {
                 _controller.clear();
-                _onSearchChanged('');
+                ref.read(searchControllerProvider.notifier).onQueryChanged('');
               },
             ),
         ],
       ),
-      body: ResponsiveContent(child: _buildBody()),
+      body: ResponsiveContent(child: _buildBody(searchState)),
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(SearchState searchState) {
     final c = context.colors;
 
     // Loading
-    if (_isSearching) {
+    if (searchState.isSearching) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -347,12 +170,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     }
 
     // No query yet — show recent searches
-    if (!_hasSearched) {
-      return _buildRecentSearches();
+    if (!searchState.hasSearched) {
+      return _buildRecentSearches(searchState);
     }
 
     // No results
-    if (_results.isEmpty) {
+    if (searchState.results.isEmpty) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -374,15 +197,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     }
 
     // Results grouped by category
-    return _buildResults();
+    return _buildResults(searchState);
   }
 
   // ── Recent searches ──
 
-  Widget _buildRecentSearches() {
+  Widget _buildRecentSearches(SearchState searchState) {
     final c = context.colors;
 
-    if (_recentSearches.isEmpty) {
+    if (searchState.recentSearches.isEmpty) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -409,7 +232,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             ),
             const Spacer(),
             InkWell(
-              onTap: _clearRecent,
+              onTap: () => ref
+                  .read(searchControllerProvider.notifier)
+                  .clearRecentSearches(),
               borderRadius: BorderRadius.circular(4),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -427,7 +252,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: _recentSearches.map((q) {
+          children: searchState.recentSearches.map((q) {
             return Material(
               color: c.surface,
               borderRadius: BorderRadius.circular(20),
@@ -458,33 +283,26 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   // ── Search results ──
 
-  Widget _buildResults() {
+  Widget _buildResults(SearchState searchState) {
     final c = context.colors;
 
     // Group by category
     final grouped = <SearchCategory, List<SearchResult>>{};
-    for (final r in _results) {
+    for (final r in searchState.results) {
       grouped.putIfAbsent(r.category, () => []).add(r);
     }
-
-    final categoryOrder = [
-      SearchCategory.course,
-      SearchCategory.notification,
-      SearchCategory.homework,
-      SearchCategory.file,
-    ];
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
       children: [
         // Total results count
         Text(
-          '找到 ${_results.length} 个结果',
+          '找到 ${searchState.results.length} 个结果',
           style: AppTypography.bodySmall.copyWith(color: c.tertiary),
         ).animate().fadeIn(duration: 200.ms),
         const SizedBox(height: 16),
 
-        for (final category in categoryOrder)
+        for (final category in searchCategoryOrder)
           if (grouped.containsKey(category)) ...[
             _CategoryHeader(
               category: category,
@@ -536,6 +354,29 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
+                                if (result.isFavorite &&
+                                    result.category == SearchCategory.file)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4),
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.bookmark_rounded,
+                                          size: 12,
+                                          color: AppColors.warning,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          '已收藏',
+                                          style: AppTypography.labelSmall
+                                              .copyWith(
+                                                color: AppColors.warning,
+                                                fontSize: 10,
+                                              ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 const SizedBox(height: 2),
                                 Text(
                                   result.subtitle,
@@ -623,24 +464,7 @@ class _CategoryHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
 
-    final (label, icon, color) = switch (category) {
-      SearchCategory.course => ('课程', Icons.school_rounded, AppColors.primary),
-      SearchCategory.notification => (
-        '通知',
-        Icons.notifications_rounded,
-        AppColors.info,
-      ),
-      SearchCategory.homework => (
-        '作业',
-        Icons.assignment_rounded,
-        AppColors.warning,
-      ),
-      SearchCategory.file => (
-        '文件',
-        Icons.insert_drive_file_rounded,
-        const Color(0xFF8B5CF6),
-      ),
-    };
+    final (label, icon, color) = searchCategoryPresentation(category);
 
     return Row(
       children: [

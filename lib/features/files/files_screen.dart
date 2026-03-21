@@ -11,94 +11,36 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/design/app_theme_colors.dart';
-import '../../core/design/colors.dart';
 import '../../core/design/shimmer.dart';
-import '../../core/providers/providers.dart';
-import '../../core/database/database.dart' as db;
 import '../../core/router/router.dart';
+import 'providers/file_queries.dart';
 import 'widgets/file_card.dart';
 
 // ---------------------------------------------------------------------------
 //  Filter
 // ---------------------------------------------------------------------------
 
-enum _FileFilter { all, unread, favorite, downloaded }
-
-// ---------------------------------------------------------------------------
-//  Time group
-// ---------------------------------------------------------------------------
-
-enum _TimeGroup { today, thisWeek, earlier }
-
-String _timeGroupLabel(_TimeGroup group) {
+String _timeGroupLabel(FileFeedTimeGroup group) {
   switch (group) {
-    case _TimeGroup.today:
+    case FileFeedTimeGroup.today:
       return '今日新增';
-    case _TimeGroup.thisWeek:
+    case FileFeedTimeGroup.thisWeek:
       return '本周';
-    case _TimeGroup.earlier:
+    case FileFeedTimeGroup.earlier:
       return '更早';
   }
 }
 
-IconData _timeGroupIcon(_TimeGroup group) {
+IconData _timeGroupIcon(FileFeedTimeGroup group) {
   switch (group) {
-    case _TimeGroup.today:
+    case FileFeedTimeGroup.today:
       return Icons.today_rounded;
-    case _TimeGroup.thisWeek:
+    case FileFeedTimeGroup.thisWeek:
       return Icons.date_range_rounded;
-    case _TimeGroup.earlier:
+    case FileFeedTimeGroup.earlier:
       return Icons.history_rounded;
   }
 }
-
-_TimeGroup _classifyByTime(String uploadTime) {
-  try {
-    final dt = DateTime.parse(uploadTime);
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final weekStart = today.subtract(Duration(days: now.weekday - 1));
-
-    if (dt.isAfter(today)) return _TimeGroup.today;
-    if (dt.isAfter(weekStart)) return _TimeGroup.thisWeek;
-    return _TimeGroup.earlier;
-  } catch (_) {
-    return _TimeGroup.earlier;
-  }
-}
-
-// ---------------------------------------------------------------------------
-//  Provider — all files joined with course names
-// ---------------------------------------------------------------------------
-
-class _FileWithCourse {
-  final db.CourseFile file;
-  final String courseName;
-
-  const _FileWithCourse({required this.file, required this.courseName});
-}
-
-final _allFilesWithCourseProvider = StreamProvider<List<_FileWithCourse>>((
-  ref,
-) {
-  final database = ref.watch(databaseProvider);
-  final semesterId = ref.watch(currentSemesterIdProvider);
-  if (semesterId == null) return Stream.value([]);
-
-  // Watch both files and courses
-  return database.watchAllFiles().asyncMap((files) async {
-    final courses = await database.getCoursesBySemester(semesterId);
-    final courseMap = {for (final c in courses) c.id: c.name};
-
-    return files
-        .where((f) => courseMap.containsKey(f.courseId))
-        .map(
-          (f) =>
-              _FileWithCourse(file: f, courseName: courseMap[f.courseId] ?? ''),
-        )
-        .toList();
-  });
-});
 
 // ---------------------------------------------------------------------------
 //  Screen
@@ -112,7 +54,7 @@ class FilesScreen extends ConsumerStatefulWidget {
 }
 
 class _FilesScreenState extends ConsumerState<FilesScreen> {
-  _FileFilter _filter = _FileFilter.all;
+  FileFeedFilter _filter = FileFeedFilter.all;
   String _searchQuery = '';
   final _searchController = TextEditingController();
   final _searchFocusNode = FocusNode();
@@ -124,57 +66,11 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     super.dispose();
   }
 
-  List<_FileWithCourse> _applyFilter(List<_FileWithCourse> files) {
-    var result = files;
-
-    // Search
-    if (_searchQuery.isNotEmpty) {
-      final q = _searchQuery.toLowerCase();
-      result = result
-          .where(
-            (f) =>
-                f.file.title.toLowerCase().contains(q) ||
-                f.courseName.toLowerCase().contains(q),
-          )
-          .toList();
-    }
-
-    // Filter
-    switch (_filter) {
-      case _FileFilter.all:
-        break;
-      case _FileFilter.unread:
-        result = result.where((f) => f.file.isNew).toList();
-        break;
-      case _FileFilter.favorite:
-        result = result.where((f) => f.file.isFavorite == true).toList();
-        break;
-      case _FileFilter.downloaded:
-        result = result
-            .where((f) => f.file.localDownloadState == 'downloaded')
-            .toList();
-        break;
-    }
-
-    return result;
-  }
-
-  Map<_TimeGroup, List<_FileWithCourse>> _groupByTime(
-    List<_FileWithCourse> files,
-  ) {
-    final groups = <_TimeGroup, List<_FileWithCourse>>{};
-    for (final f in files) {
-      final group = _classifyByTime(f.file.uploadTime);
-      groups.putIfAbsent(group, () => []).add(f);
-    }
-    return groups;
-  }
-
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
 
-    final filesAsync = ref.watch(_allFilesWithCourseProvider);
+    final filesAsync = ref.watch(allFileFeedEntriesProvider);
 
     return Scaffold(
       backgroundColor: c.bg,
@@ -249,7 +145,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                     child: ListView(
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                      children: _FileFilter.values.map((f) {
+                      children: FileFeedFilter.values.map((f) {
                         final isActive = _filter == f;
                         return Padding(
                           padding: const EdgeInsets.only(right: 8),
@@ -266,9 +162,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                               color: isActive ? Colors.white : c.subtitle,
                             ),
                             backgroundColor: c.surface,
-                            selectedColor: context.isDark
-                                ? AppColors.info
-                                : const Color(0xFF007AFF),
+                            selectedColor: c.infoAccent,
                             side: BorderSide(
                               color: isActive ? Colors.transparent : c.border,
                               width: 0.5,
@@ -310,7 +204,12 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
               ),
             ),
             data: (allFiles) {
-              final filtered = _applyFilter(allFiles);
+              final presentation = buildFilesPresentation(
+                entries: allFiles,
+                filter: _filter,
+                searchQuery: _searchQuery,
+              );
+              final filtered = presentation.filteredEntries;
 
               if (filtered.isEmpty) {
                 return SliverFillRemaining(
@@ -327,7 +226,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                         Text(
                           _searchQuery.isNotEmpty
                               ? '没有匹配的文件'
-                              : _filter != _FileFilter.all
+                              : _filter != FileFeedFilter.all
                               ? '暂无${_filterLabel(_filter)}文件'
                               : '暂无文件',
                           style: TextStyle(color: c.subtitle, fontSize: 15),
@@ -338,27 +237,21 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                 );
               }
 
-              final groups = _groupByTime(filtered);
-              final orderedGroups = _TimeGroup.values
-                  .where((g) => groups.containsKey(g))
-                  .toList();
+              final sections = presentation.sections;
 
               return SliverList(
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
-                    // Calculate which group and item
                     int cursor = 0;
-                    for (final group in orderedGroups) {
-                      final items = groups[group]!;
-                      // Group header
+                    for (final section in sections) {
+                      final items = section.entries;
                       if (index == cursor) {
                         return _SectionHeader(
-                          group: group,
+                          group: section.group,
                           count: items.length,
                         );
                       }
                       cursor++;
-                      // Items
                       if (index < cursor + items.length) {
                         final itemIndex = index - cursor;
                         final item = items[itemIndex];
@@ -369,8 +262,8 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                           ),
                           child:
                               FileCard(
-                                file: item.file,
-                                courseName: item.courseName,
+                                item: item.item,
+                                isFavorite: item.isFavorite,
                                 onTap: () => _navigateToDetail(item),
                               ).animate().fadeIn(
                                 delay: Duration(milliseconds: itemIndex * 30),
@@ -380,13 +273,12 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                       }
                       cursor += items.length;
                     }
-                    // Bottom padding
                     return const SizedBox(height: 32);
                   },
                   childCount:
-                      orderedGroups.fold<int>(
+                      sections.fold<int>(
                         0,
-                        (sum, g) => sum + groups[g]!.length + 1,
+                        (sum, section) => sum + section.entries.length + 1,
                       ) +
                       1,
                 ),
@@ -398,25 +290,19 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     );
   }
 
-  void _navigateToDetail(_FileWithCourse item) {
-    context.push(
-      Routes.fileDetail(
-        fileId: item.file.id,
-        courseId: item.file.courseId,
-        courseName: item.courseName,
-      ),
-    );
+  void _navigateToDetail(FileFeedEntry entry) {
+    context.push(Routes.fileDetailFromData(entry.item.routeData));
   }
 
-  String _filterLabel(_FileFilter f) {
+  String _filterLabel(FileFeedFilter f) {
     switch (f) {
-      case _FileFilter.all:
+      case FileFeedFilter.all:
         return '全部';
-      case _FileFilter.unread:
+      case FileFeedFilter.unread:
         return '未读';
-      case _FileFilter.favorite:
+      case FileFeedFilter.favorite:
         return '收藏';
-      case _FileFilter.downloaded:
+      case FileFeedFilter.downloaded:
         return '已下载';
     }
   }
@@ -427,7 +313,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
 // ---------------------------------------------------------------------------
 
 class _SectionHeader extends StatelessWidget {
-  final _TimeGroup group;
+  final FileFeedTimeGroup group;
   final int count;
 
   const _SectionHeader({required this.group, required this.count});

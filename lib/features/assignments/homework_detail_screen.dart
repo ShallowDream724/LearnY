@@ -23,17 +23,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/design/app_theme_colors.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/responsive.dart';
 import '../../core/design/shimmer.dart';
 import '../../core/design/typography.dart';
-import '../../core/database/database.dart' as db;
-import '../../core/providers/providers.dart';
+import '../../core/files/file_models.dart';
+import '../../core/files/widgets/file_attachment_card.dart';
+import '../../core/router/router.dart';
 import 'assignment_submission_screen.dart';
+import 'providers/assignments_providers.dart';
+import 'widgets/homework_detail_sections.dart';
 
-class HomeworkDetailScreen extends ConsumerStatefulWidget {
+class HomeworkDetailScreen extends ConsumerWidget {
   final String homeworkId;
   final String courseId;
   final String courseName;
@@ -45,825 +49,305 @@ class HomeworkDetailScreen extends ConsumerStatefulWidget {
     required this.courseName,
   });
 
-  @override
-  ConsumerState<HomeworkDetailScreen> createState() =>
-      _HomeworkDetailScreenState();
-}
-
-class _HomeworkDetailScreenState extends ConsumerState<HomeworkDetailScreen> {
-  db.Homework? _homework;
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadData();
+  FileAttachmentEntry _attachmentEntry({
+    required String label,
+    required String? rawJson,
+  }) {
+    return FileAttachmentEntry.fromJson(
+      label: label,
+      rawJson: rawJson,
+      courseId: courseId,
+      courseName: courseName,
+    );
   }
 
-  Future<void> _loadData() async {
-    final database = ref.read(databaseProvider);
-    final homeworks = await database.getHomeworksByCourse(widget.courseId);
-    final hw = homeworks.where((h) => h.id == widget.homeworkId).firstOrNull;
-
-    if (mounted) {
-      setState(() {
-        _homework = hw;
-        _loading = false;
-      });
+  void _openAttachment(BuildContext context, FileAttachmentEntry entry) {
+    final routeData = entry.routeData;
+    if (routeData == null) {
+      return;
     }
+
+    context.push(Routes.fileDetailFromData(routeData));
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final c = context.colors;
+    final homeworkAsync = ref.watch(homeworkDetailProvider(homeworkId));
 
-    if (_loading) {
-      return Scaffold(
+    return homeworkAsync.when(
+      loading: () => Scaffold(
         backgroundColor: c.bg,
         appBar: AppBar(),
         body: const ListSkeleton(),
-      );
-    }
-
-    final hw = _homework;
-    if (hw == null) {
-      return Scaffold(
+      ),
+      error: (_, _) => Scaffold(
         backgroundColor: c.bg,
         appBar: AppBar(),
         body: Center(
           child: Text(
-            '作业未找到',
+            '作业加载失败',
             style: AppTypography.titleMedium.copyWith(color: c.subtitle),
           ),
         ),
-      );
-    }
-
-    // Can submit: not graded, and deadline hasn't fully passed
-    // (or late submission still possible)
-    final canSubmit = !hw.graded;
-
-    return Scaffold(
-      backgroundColor: c.bg,
-      floatingActionButton: canSubmit
-          ? FloatingActionButton.extended(
-              onPressed: () async {
-                final result = await Navigator.of(context).push<bool>(
-                  MaterialPageRoute(
-                    fullscreenDialog: true,
-                    builder: (_) => AssignmentSubmissionScreen(
-                      homework: hw,
-                      courseName: widget.courseName,
-                    ),
-                  ),
-                );
-                if (result == true) {
-                  _loadData(); // Refresh to show updated submission
-                }
-              },
-              backgroundColor: AppColors.primary,
-              icon: Icon(
-                hw.submitted ? Icons.edit_rounded : Icons.upload_rounded,
-                color: Colors.white,
-              ),
-              label: Text(
-                hw.submitted ? '重新提交' : '提交作业',
-                style: AppTypography.labelMedium.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            )
-          : null,
-      body: CustomScrollView(
-        slivers: [
-          // ── App Bar ──
-          SliverAppBar(
-            pinned: true,
-            title: Text(
-              widget.courseName,
-              style: AppTypography.titleMedium.copyWith(color: c.subtitle),
-            ),
-          ),
-
-          // ── Content ──
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                ResponsiveContent(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // ── Status Header ──
-                      _StatusHeader(
-                        homework: hw,
-                      ).animate().fadeIn(duration: 300.ms),
-
-                      const SizedBox(height: 20),
-
-                      // ── Deadline Info ──
-                      _DeadlineCard(homework: hw)
-                          .animate(delay: 100.ms)
-                          .fadeIn(duration: 250.ms)
-                          .slideY(begin: 0.03, end: 0),
-
-                      // ── Assignment Description ──
-                      if (hw.description != null &&
-                          hw.description!.isNotEmpty) ...[
-                        const SizedBox(height: 16),
-                        _SectionCard(
-                              title: '作业要求',
-                              icon: Icons.description_rounded,
-                              iconColor: AppColors.info,
-                              child: _HtmlText(html: hw.description!),
-                            )
-                            .animate(delay: 150.ms)
-                            .fadeIn(duration: 250.ms)
-                            .slideY(begin: 0.03, end: 0),
-                      ],
-
-                      // ── Assignment Attachment ──
-                      if (hw.attachmentJson != null &&
-                          hw.attachmentJson!.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        _AttachmentCard(
-                          label: '作业附件',
-                        ).animate(delay: 200.ms).fadeIn(duration: 250.ms),
-                      ],
-
-                      // ── Submission Section ──
-                      if (hw.submitted) ...[
-                        const SizedBox(height: 16),
-                        _SectionCard(
-                              title: '我的提交',
-                              icon: Icons.upload_file_rounded,
-                              iconColor: AppColors.success,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (hw.submittedContent != null &&
-                                      hw.submittedContent!.isNotEmpty)
-                                    _HtmlText(html: hw.submittedContent!),
-                                  if (hw.submitTime != null) ...[
-                                    const SizedBox(height: 8),
-                                    _MetaChip(
-                                      icon: Icons.schedule_rounded,
-                                      label:
-                                          '提交于 ${_formatFullTime(hw.submitTime!)}',
-                                    ),
-                                  ],
-                                  if (hw.isLateSubmission) ...[
-                                    const SizedBox(height: 6),
-                                    _MetaChip(
-                                      icon: Icons.warning_amber_rounded,
-                                      label: '迟交',
-                                      color: AppColors.warning,
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            )
-                            .animate(delay: 250.ms)
-                            .fadeIn(duration: 250.ms)
-                            .slideY(begin: 0.03, end: 0),
-                      ],
-
-                      // ── Submitted Attachment ──
-                      if (hw.submittedAttachmentJson != null &&
-                          hw.submittedAttachmentJson!.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        _AttachmentCard(
-                          label: '提交附件',
-                        ).animate(delay: 280.ms).fadeIn(duration: 250.ms),
-                      ],
-
-                      // ── Grade Section ──
-                      if (hw.graded) ...[
-                        const SizedBox(height: 16),
-                        _GradeSection(homework: hw)
-                            .animate(delay: 300.ms)
-                            .fadeIn(duration: 300.ms)
-                            .slideY(begin: 0.03, end: 0),
-                      ],
-
-                      // ── Answer / Reference ──
-                      if (hw.answerContent != null &&
-                          hw.answerContent!.isNotEmpty) ...[
-                        const SizedBox(height: 16),
-                        _SectionCard(
-                              title: '参考答案',
-                              icon: Icons.auto_stories_rounded,
-                              iconColor: const Color(0xFF8B5CF6),
-                              child: _HtmlText(html: hw.answerContent!),
-                            )
-                            .animate(delay: 350.ms)
-                            .fadeIn(duration: 250.ms)
-                            .slideY(begin: 0.03, end: 0),
-                      ],
-
-                      // ── Comment ──
-                      if (hw.comment != null && hw.comment!.isNotEmpty) ...[
-                        const SizedBox(height: 16),
-                        _SectionCard(
-                          title: '我的备注',
-                          icon: Icons.sticky_note_2_rounded,
-                          iconColor: AppColors.primary,
-                          child: Text(
-                            hw.comment!,
-                            style: AppTypography.bodyMedium.copyWith(
-                              color: c.text,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ]),
-            ),
-          ),
-        ],
       ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────
-//  Status Header
-// ─────────────────────────────────────────────
-
-/// Color-coded status header showing the assignment lifecycle state.
-class _StatusHeader extends StatelessWidget {
-  final db.Homework homework;
-
-  const _StatusHeader({required this.homework});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final (statusText, statusColor, statusIcon) = _statusInfo();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Status badge
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: statusColor.withAlpha(20),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: statusColor.withAlpha(60)),
+      data: (hw) {
+        if (hw == null) {
+          return Scaffold(
+            backgroundColor: c.bg,
+            appBar: AppBar(),
+            body: Center(
+              child: Text(
+                '作业未找到',
+                style: AppTypography.titleMedium.copyWith(color: c.subtitle),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(statusIcon, size: 14, color: statusColor),
-                  const SizedBox(width: 5),
-                  Text(
-                    statusText,
+            ),
+          );
+        }
+
+        final canSubmit = !hw.graded;
+        final hasHomeworkAttachment =
+            hw.attachmentJson != null && hw.attachmentJson!.isNotEmpty;
+        final hasSubmittedAttachment =
+            hw.submittedAttachmentJson != null &&
+            hw.submittedAttachmentJson!.isNotEmpty;
+        final hasAnswerAttachment =
+            hw.answerAttachmentJson != null &&
+            hw.answerAttachmentJson!.isNotEmpty;
+        final showRequirementSection =
+            (hw.description != null && hw.description!.isNotEmpty) ||
+            hasHomeworkAttachment;
+        final showSubmittedContent = hasMeaningfulHomeworkHtml(
+          hw.submittedContent,
+        );
+        final showSubmissionSection =
+            hw.submitted &&
+            (showSubmittedContent ||
+                hw.submitTime != null ||
+                hw.isLateSubmission ||
+                hasSubmittedAttachment);
+        final showAnswerSection =
+            (hw.answerContent != null && hw.answerContent!.isNotEmpty) ||
+            hasAnswerAttachment;
+        final homeworkAttachmentEntry = _attachmentEntry(
+          label: '作业附件',
+          rawJson: hw.attachmentJson,
+        );
+        final submittedAttachmentEntry = _attachmentEntry(
+          label: '提交附件',
+          rawJson: hw.submittedAttachmentJson,
+        );
+        final answerAttachmentEntry = _attachmentEntry(
+          label: '答案附件',
+          rawJson: hw.answerAttachmentJson,
+        );
+
+        return Scaffold(
+          backgroundColor: c.bg,
+          floatingActionButton: canSubmit
+              ? FloatingActionButton.extended(
+                  onPressed: () async {
+                    await Navigator.of(context).push<bool>(
+                      MaterialPageRoute(
+                        fullscreenDialog: true,
+                        builder: (_) => AssignmentSubmissionScreen(
+                          homework: hw,
+                          courseName: courseName,
+                        ),
+                      ),
+                    );
+                  },
+                  backgroundColor: AppColors.primary,
+                  icon: Icon(
+                    hw.submitted ? Icons.edit_rounded : Icons.upload_rounded,
+                    color: Colors.white,
+                  ),
+                  label: Text(
+                    hw.submitted ? '重新提交' : '提交作业',
                     style: AppTypography.labelMedium.copyWith(
-                      color: statusColor,
+                      color: Colors.white,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                ],
-              ),
-            ),
-            if (homework.isFavorite) ...[
-              const SizedBox(width: 8),
-              Icon(Icons.bookmark_rounded, size: 18, color: AppColors.warning),
-            ],
-          ],
-        ),
-
-        const SizedBox(height: 12),
-
-        // Title
-        Text(
-          homework.title,
-          style: AppTypography.headlineSmall.copyWith(color: c.text),
-        ),
-      ],
-    );
-  }
-
-  (String, Color, IconData) _statusInfo() {
-    if (homework.graded) {
-      return ('已批改', AppColors.success, Icons.check_circle_rounded);
-    }
-    if (homework.submitted) {
-      return ('已提交', AppColors.info, Icons.cloud_done_rounded);
-    }
-    final ms = int.tryParse(homework.deadline);
-    if (ms != null &&
-        DateTime.fromMillisecondsSinceEpoch(ms).isBefore(DateTime.now())) {
-      return ('已超期', AppColors.error, Icons.error_rounded);
-    }
-    return ('待提交', AppColors.warning, Icons.pending_rounded);
-  }
-}
-
-// ─────────────────────────────────────────────
-//  Deadline Card
-// ─────────────────────────────────────────────
-
-/// Shows deadline with countdown for pending assignments.
-class _DeadlineCard extends StatelessWidget {
-  final db.Homework homework;
-
-  const _DeadlineCard({required this.homework});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-
-    final deadlineMs = int.tryParse(homework.deadline);
-    final deadline = deadlineMs != null
-        ? DateTime.fromMillisecondsSinceEpoch(deadlineMs)
-        : null;
-    final now = DateTime.now();
-    final isOverdue = deadline != null && deadline.isBefore(now);
-    final isPending = !homework.submitted && !homework.graded;
-
-    // Countdown for pending assignments
-    String? countdown;
-    Color countdownColor = AppColors.success;
-    if (deadline != null && isPending && !isOverdue) {
-      final diff = deadline.difference(now);
-      if (diff.inDays > 3) {
-        countdown = '剩余 ${diff.inDays} 天';
-        countdownColor = AppColors.success;
-      } else if (diff.inDays > 1) {
-        countdown = '剩余 ${diff.inDays} 天 ${diff.inHours % 24} 小时';
-        countdownColor = AppColors.warning;
-      } else if (diff.inHours > 0) {
-        countdown = '剩余 ${diff.inHours} 小时 ${diff.inMinutes % 60} 分';
-        countdownColor = AppColors.error;
-      } else {
-        countdown = '剩余 ${diff.inMinutes} 分钟';
-        countdownColor = AppColors.error;
-      }
-    } else if (deadline != null && isOverdue && isPending) {
-      final diff = now.difference(deadline);
-      countdown =
-          '已超期 ${diff.inDays > 0 ? '${diff.inDays} 天' : '${diff.inHours} 小时'}';
-      countdownColor = AppColors.error;
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: c.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: c.border, width: 0.5),
-      ),
-      child: Column(
-        children: [
-          // Deadline row
-          Row(
-            children: [
-              Icon(Icons.event_rounded, size: 18, color: c.subtitle),
-              const SizedBox(width: 8),
-              Text(
-                '截止时间',
-                style: AppTypography.labelMedium.copyWith(color: c.subtitle),
-              ),
-              const Spacer(),
-              Text(
-                deadline != null
-                    ? '${deadline.year}/${deadline.month}/${deadline.day} '
-                          '${deadline.hour.toString().padLeft(2, '0')}:'
-                          '${deadline.minute.toString().padLeft(2, '0')}'
-                    : '未知',
-                style: AppTypography.titleSmall.copyWith(color: c.text),
-              ),
-            ],
-          ),
-
-          // Late submission deadline
-          if (homework.lateSubmissionDeadline != null) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(Icons.schedule_rounded, size: 18, color: c.subtitle),
-                const SizedBox(width: 8),
-                Text(
-                  '补交截止',
-                  style: AppTypography.labelMedium.copyWith(color: c.subtitle),
-                ),
-                const Spacer(),
-                Text(
-                  _formatFullTime(homework.lateSubmissionDeadline!),
-                  style: AppTypography.bodySmall.copyWith(color: c.subtitle),
-                ),
-              ],
-            ),
-          ],
-
-          // Countdown
-          if (countdown != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              decoration: BoxDecoration(
-                color: countdownColor.withAlpha(12),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Center(
-                child: Text(
-                  countdown,
-                  style: AppTypography.titleSmall.copyWith(
-                    color: countdownColor,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────
-//  Grade Section
-// ─────────────────────────────────────────────
-
-/// Grade display with circular progress ring and feedback.
-///
-/// Scoring logic:
-/// - Tsinghua's `cj` (成绩) field is typically 百分制 (0-100).
-/// - When `grade` is 0-100, we show a circular ring with percentage fill.
-/// - When `grade` > 100 (rare: custom scales), we show the number without ring.
-/// - When only `gradeLevel` exists (no numeric grade), we show the level text.
-class _GradeSection extends StatelessWidget {
-  final db.Homework homework;
-
-  const _GradeSection({required this.homework});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-
-    final grade = homework.grade;
-    final gradeColor = _gradeColor(grade);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: c.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: c.border, width: 0.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Section title
-          Row(
-            children: [
-              Icon(Icons.grading_rounded, size: 18, color: AppColors.success),
-              const SizedBox(width: 8),
-              Text(
-                '批改结果',
-                style: AppTypography.titleMedium.copyWith(color: c.text),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 16),
-
-          // Grade display + info
-          Row(
-            children: [
-              // Score circle — shows the number or level, NO ring/progress
-              // because we don't know the max score (could be 5, 10, 100, etc.)
-              if (grade != null)
-                Container(
-                  width: 72,
-                  height: 72,
-                  decoration: BoxDecoration(
-                    color: gradeColor.withAlpha(15),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: gradeColor.withAlpha(50),
-                      width: 2,
-                    ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      grade.toStringAsFixed(
-                        grade == grade.roundToDouble() ? 0 : 1,
-                      ),
-                      style: AppTypography.statMedium.copyWith(
-                        color: gradeColor,
-                        fontWeight: FontWeight.w800,
-                        fontSize: grade >= 100 ? 18 : 22,
-                      ),
-                    ),
-                  ),
                 )
-              else
-                // Level-only grading (no numeric score)
-                Container(
-                  width: 72,
-                  height: 72,
-                  decoration: BoxDecoration(
-                    color: gradeColor.withAlpha(15),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: gradeColor.withAlpha(50),
-                      width: 2,
-                    ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      _gradeLevelDisplay(homework.gradeLevel),
-                      style: AppTypography.titleMedium.copyWith(
-                        color: gradeColor,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
+              : null,
+          body: CustomScrollView(
+            slivers: [
+              SliverAppBar(
+                pinned: true,
+                title: Text(
+                  courseName,
+                  style: AppTypography.titleMedium.copyWith(color: c.subtitle),
                 ),
-
-              const SizedBox(width: 20),
-
-              // Grade details
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (homework.graderName != null) ...[
-                      Text(
-                        '批改人: ${homework.graderName}',
-                        style: AppTypography.bodyMedium.copyWith(
-                          color: c.subtitle,
-                        ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate([
+                    ResponsiveContent(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          HomeworkStatusHeader(
+                            homework: hw,
+                          ).animate().fadeIn(duration: 300.ms),
+                          const SizedBox(height: 20),
+                          HomeworkDeadlineCard(homework: hw)
+                              .animate(delay: 100.ms)
+                              .fadeIn(duration: 250.ms)
+                              .slideY(begin: 0.03, end: 0),
+                          if (showRequirementSection) ...[
+                            const SizedBox(height: 16),
+                            HomeworkSectionCard(
+                                  title: '作业要求',
+                                  icon: Icons.description_rounded,
+                                  iconColor: AppColors.info,
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      if (hw.description != null &&
+                                          hw.description!.isNotEmpty)
+                                        HomeworkHtmlText(html: hw.description!),
+                                      if (hasHomeworkAttachment) ...[
+                                        if (hw.description != null &&
+                                            hw.description!.isNotEmpty)
+                                          const SizedBox(height: 12),
+                                        FileAttachmentCard(
+                                          entry: homeworkAttachmentEntry,
+                                          onTap: () => _openAttachment(
+                                            context,
+                                            homeworkAttachmentEntry,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                )
+                                .animate(delay: 150.ms)
+                                .fadeIn(duration: 250.ms)
+                                .slideY(begin: 0.03, end: 0),
+                          ],
+                          if (showSubmissionSection) ...[
+                            const SizedBox(height: 16),
+                            HomeworkSectionCard(
+                                  title: '我的提交',
+                                  icon: Icons.upload_file_rounded,
+                                  iconColor: AppColors.success,
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      if (showSubmittedContent)
+                                        HomeworkHtmlText(
+                                          html: hw.submittedContent!,
+                                        ),
+                                      if (hw.submitTime != null) ...[
+                                        if (showSubmittedContent)
+                                          const SizedBox(height: 8),
+                                        HomeworkMetaChip(
+                                          icon: Icons.schedule_rounded,
+                                          label:
+                                              '提交于 ${formatHomeworkFullTime(hw.submitTime!)}',
+                                        ),
+                                      ],
+                                      if (hw.isLateSubmission) ...[
+                                        const SizedBox(height: 6),
+                                        const HomeworkMetaChip(
+                                          icon: Icons.warning_amber_rounded,
+                                          label: '迟交',
+                                          color: AppColors.warning,
+                                        ),
+                                      ],
+                                      if (hasSubmittedAttachment) ...[
+                                        if (showSubmittedContent ||
+                                            hw.submitTime != null ||
+                                            hw.isLateSubmission)
+                                          const SizedBox(height: 12),
+                                        FileAttachmentCard(
+                                          entry: submittedAttachmentEntry,
+                                          onTap: () => _openAttachment(
+                                            context,
+                                            submittedAttachmentEntry,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                )
+                                .animate(delay: 250.ms)
+                                .fadeIn(duration: 250.ms)
+                                .slideY(begin: 0.03, end: 0),
+                          ],
+                          if (hw.graded) ...[
+                            const SizedBox(height: 16),
+                            HomeworkGradeSection(
+                                  homework: hw,
+                                  courseId: courseId,
+                                  courseName: courseName,
+                                )
+                                .animate(delay: 300.ms)
+                                .fadeIn(duration: 300.ms)
+                                .slideY(begin: 0.03, end: 0),
+                          ],
+                          if (showAnswerSection) ...[
+                            const SizedBox(height: 16),
+                            HomeworkSectionCard(
+                                  title: '参考答案',
+                                  icon: Icons.auto_stories_rounded,
+                                  iconColor: const Color(0xFF8B5CF6),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      if (hw.answerContent != null &&
+                                          hw.answerContent!.isNotEmpty)
+                                        HomeworkHtmlText(
+                                          html: hw.answerContent!,
+                                        ),
+                                      if (hasAnswerAttachment) ...[
+                                        if (hw.answerContent != null &&
+                                            hw.answerContent!.isNotEmpty)
+                                          const SizedBox(height: 12),
+                                        FileAttachmentCard(
+                                          entry: answerAttachmentEntry,
+                                          onTap: () => _openAttachment(
+                                            context,
+                                            answerAttachmentEntry,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                )
+                                .animate(delay: 350.ms)
+                                .fadeIn(duration: 250.ms)
+                                .slideY(begin: 0.03, end: 0),
+                          ],
+                          if (hw.comment != null && hw.comment!.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            HomeworkSectionCard(
+                              title: '我的备注',
+                              icon: Icons.sticky_note_2_rounded,
+                              iconColor: AppColors.primary,
+                              child: Text(
+                                hw.comment!,
+                                style: AppTypography.bodyMedium.copyWith(
+                                  color: c.text,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                      const SizedBox(height: 4),
-                    ],
-                    if (homework.gradeTime != null)
-                      Text(
-                        '批改于 ${_formatFullTime(homework.gradeTime!)}',
-                        style: AppTypography.bodySmall.copyWith(
-                          color: c.tertiary,
-                        ),
-                      ),
-                    if (homework.gradeLevel != null) ...[
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: gradeColor.withAlpha(15),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          _gradeLevelDisplay(homework.gradeLevel),
-                          style: AppTypography.labelSmall.copyWith(
-                            color: gradeColor,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
+                    ),
+                  ]),
                 ),
               ),
             ],
           ),
-
-          // Grade content (teacher feedback)
-          if (homework.gradeContent != null &&
-              homework.gradeContent!.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Divider(color: c.border, height: 1),
-            const SizedBox(height: 12),
-            Text(
-              '批改评语',
-              style: AppTypography.labelMedium.copyWith(color: c.subtitle),
-            ),
-            const SizedBox(height: 8),
-            _HtmlText(html: homework.gradeContent!),
-          ],
-
-          // Grade attachment
-          if (homework.gradeAttachmentJson != null &&
-              homework.gradeAttachmentJson!.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            _AttachmentCard(label: '批改附件'),
-          ],
-        ],
-      ),
+        );
+      },
     );
   }
-
-  /// Convert grade level enum string to user-friendly Chinese display.
-  String _gradeLevelDisplay(String? level) {
-    if (level == null) return '—';
-    return switch (level) {
-      'checked' => '已阅',
-      'distinction' => '优秀',
-      'pass' => '通过',
-      'failure' => '不及格',
-      'exempted course' => '免课',
-      'exemption' => '免修',
-      'incomplete' => '缓考',
-      _ => level.toUpperCase(), // A+, B, C- etc.
-    };
-  }
-
-  Color _gradeColor(double? grade) {
-    if (grade == null) return AppColors.info;
-    if (grade >= 90) return AppColors.gradeExcellent;
-    if (grade >= 80) return AppColors.gradeGood;
-    if (grade >= 70) return AppColors.gradeAverage;
-    if (grade >= 60) return AppColors.gradePoor;
-    return AppColors.gradeFail;
-  }
-}
-
-// ─────────────────────────────────────────────
-//  Reusable components
-// ─────────────────────────────────────────────
-
-/// Expandable section card with colored icon header.
-class _SectionCard extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final Color iconColor;
-  final Widget child;
-
-  const _SectionCard({
-    required this.title,
-    required this.icon,
-    required this.iconColor,
-    required this.child,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: c.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: c.border, width: 0.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 18, color: iconColor),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: AppTypography.titleMedium.copyWith(color: c.text),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          child,
-        ],
-      ),
-    );
-  }
-}
-
-/// Attachment card (consistent design for all attachment types).
-class _AttachmentCard extends StatelessWidget {
-  final String label;
-
-  const _AttachmentCard({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: c.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: c.border, width: 0.5),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: AppColors.info.withAlpha(20),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(
-              Icons.attach_file_rounded,
-              size: 18,
-              color: AppColors.info,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              label,
-              style: AppTypography.titleSmall.copyWith(color: c.text),
-            ),
-          ),
-          Icon(Icons.download_rounded, size: 20, color: c.subtitle),
-        ],
-      ),
-    );
-  }
-}
-
-/// Small metadata chip with icon and label.
-class _MetaChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color? color;
-
-  const _MetaChip({required this.icon, required this.label, this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    final chipColor = color ?? context.colors.tertiary;
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 13, color: chipColor),
-        const SizedBox(width: 4),
-        Text(
-          label,
-          style: AppTypography.bodySmall.copyWith(
-            color: chipColor,
-            fontSize: 11,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Renders HTML as stripped text (same approach as notification detail).
-class _HtmlText extends StatelessWidget {
-  final String html;
-
-  const _HtmlText({required this.html});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-
-    return SelectableText(
-      _stripHtml(html),
-      style: AppTypography.bodyMedium.copyWith(color: c.text, height: 1.7),
-    );
-  }
-
-  String _stripHtml(String html) {
-    var text = html
-        .replaceAll(RegExp(r'<br\s*/?>'), '\n')
-        .replaceAll(RegExp(r'</p>'), '\n\n')
-        .replaceAll(RegExp(r'</div>'), '\n')
-        .replaceAll(RegExp(r'</li>'), '\n')
-        .replaceAll(RegExp(r'<li[^>]*>'), '  \u2022 ');
-
-    text = text.replaceAll(RegExp(r'<[^>]+>'), '');
-
-    text = text
-        .replaceAll('&amp;', '&')
-        .replaceAll('&lt;', '<')
-        .replaceAll('&gt;', '>')
-        .replaceAll('&quot;', '"')
-        .replaceAll('&#39;', "'")
-        .replaceAll('&nbsp;', ' ');
-
-    text = text.replaceAll(RegExp(r'\n{3,}'), '\n\n');
-    return text.trim();
-  }
-}
-
-// ─────────────────────────────────────────────
-//  Helpers
-// ─────────────────────────────────────────────
-
-String _formatFullTime(String time) {
-  final ms = int.tryParse(time);
-  if (ms == null) return time;
-  final d = DateTime.fromMillisecondsSinceEpoch(ms);
-  return '${d.year}/${d.month}/${d.day} '
-      '${d.hour.toString().padLeft(2, '0')}:'
-      '${d.minute.toString().padLeft(2, '0')}';
 }

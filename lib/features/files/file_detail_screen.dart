@@ -1,4 +1,4 @@
-/// File detail screen — preview + info panel for a course file.
+/// File detail screen — preview + info panel for a course file or attachment.
 ///
 /// Preview strategy (per architecture):
 /// - PDF → flutter_pdfview inline
@@ -17,253 +17,245 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:open_filex/open_filex.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/design/app_toast.dart';
 import '../../core/design/app_theme_colors.dart';
 import '../../core/design/colors.dart';
-import '../../core/providers/providers.dart';
-import '../../core/providers/sync_provider.dart';
-import '../../core/database/database.dart' as db;
+import '../../core/design/file_type_utils.dart';
+import '../../core/files/file_asset_actions.dart';
+import '../../core/files/file_asset_runtime.dart';
+import '../../core/files/file_models.dart';
+import '../../core/files/file_preview_registry.dart';
 import '../../core/services/file_download_service.dart';
-
-// ---------------------------------------------------------------------------
-//  File type classification
-// ---------------------------------------------------------------------------
-
-enum _PreviewType { pdf, image, text, none }
-
-_PreviewType _classifyFile(db.CourseFile file) {
-  final ext = _extractExtension(file.title, file.fileType);
-  switch (ext) {
-    case 'pdf':
-      return _PreviewType.pdf;
-    case 'jpg':
-    case 'jpeg':
-    case 'png':
-    case 'gif':
-    case 'bmp':
-    case 'webp':
-      return _PreviewType.image;
-    case 'txt':
-    case 'md':
-    case 'csv':
-    case 'json':
-    case 'xml':
-    case 'log':
-    case 'py':
-    case 'java':
-    case 'c':
-    case 'cpp':
-    case 'h':
-    case 'js':
-    case 'html':
-    case 'css':
-    case 'dart':
-      return _PreviewType.text;
-    default:
-      return _PreviewType.none;
-  }
-}
-
-String _extractExtension(String title, String fileType) {
-  // Prefer file type from API
-  if (fileType.isNotEmpty) return fileType.toLowerCase();
-  // Fallback: extract from filename
-  final dot = title.lastIndexOf('.');
-  if (dot != -1 && dot < title.length - 1) {
-    return title.substring(dot + 1).toLowerCase();
-  }
-  return '';
-}
+import 'providers/file_bookmark_providers.dart';
+import 'providers/file_queries.dart';
 
 // ---------------------------------------------------------------------------
 //  Screen
 // ---------------------------------------------------------------------------
 
 class FileDetailScreen extends ConsumerStatefulWidget {
-  final String fileId;
-  final String courseId;
-  final String courseName;
+  final FileDetailRouteData routeData;
 
-  const FileDetailScreen({
-    super.key,
-    required this.fileId,
-    required this.courseId,
-    required this.courseName,
-  });
+  const FileDetailScreen({super.key, required this.routeData});
 
   @override
   ConsumerState<FileDetailScreen> createState() => _FileDetailScreenState();
 }
 
 class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
-  db.CourseFile? _file;
   bool _showInfo = false;
-  bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadFileAndDownload();
+    Future.microtask(_startInitialDownload);
   }
 
-  Future<void> _loadFileAndDownload() async {
-    final database = ref.read(databaseProvider);
-    final file = await database.getFileById(widget.fileId);
-    if (!mounted) return;
-    if (file == null) {
-      setState(() => _loading = false);
-      return;
-    }
-    setState(() {
-      _file = file;
-      _loading = false;
-    });
-
-    // Watch for download completion → mark as read
-    ref.listenManual(fileDownloadProvider, (prev, next) {
-      final prevStatus = prev?[file.id]?.status;
-      final curStatus = next[file.id]?.status;
-      if (prevStatus != DownloadStatus.downloaded &&
-          curStatus == DownloadStatus.downloaded &&
-          _file != null &&
-          _file!.isNew) {
-        database.markFileRead(file.id);
-        ref.invalidate(homeDataProvider);
-        // Refresh local state
-        database.getFileById(widget.fileId).then((updated) {
-          if (mounted && updated != null) setState(() => _file = updated);
-        });
-      }
-    });
-
-    _startDownload(file);
-  }
-
-  void _startDownload(db.CourseFile file) {
-    final notifier = ref.read(fileDownloadProvider.notifier);
-    notifier.downloadFile(
-      fileId: file.id,
-      courseId: widget.courseId,
-      downloadUrl: file.downloadUrl,
-      fileName: file.title,
+  Future<void> _startInitialDownload() async {
+    final file = await ref.read(
+      fileDetailItemProvider(widget.routeData).future,
     );
+    if (!mounted || file == null) return;
+
+    await ref.read(fileAssetActionsProvider).ensureAvailable(file);
   }
 
-  _PreviewType get _previewType =>
-      _file != null ? _classifyFile(_file!) : _PreviewType.none;
+  Future<void> _startDownload(FileDetailItem file) {
+    return ref.read(fileAssetActionsProvider).download(file);
+  }
 
-  bool get _canPreview => _previewType != _PreviewType.none;
+  FilePreviewDescriptor _previewOf(FileDetailItem file) {
+    return ref.read(filePreviewRegistryProvider).describeItem(file);
+  }
+
+  bool _canPreview(FileDetailItem file) => _previewOf(file).canInlinePreview;
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final downloadStates = ref.watch(fileDownloadProvider);
-    final fileState = _file != null
-        ? (downloadStates[_file!.id] ??
-              FileDownloadState(fileId: _file!.id, status: DownloadStatus.none))
-        : null;
+    final fileAsync = ref.watch(fileDetailItemProvider(widget.routeData));
+    final trackedDownloadStates = ref.watch(fileDownloadProvider);
+    final file = fileAsync.valueOrNull;
+    final runtimeResolver = ref.read(fileAssetRuntimeResolverProvider);
+    final fileState = file == null
+        ? null
+        : runtimeResolver.resolveDetailItem(file, trackedDownloadStates);
+    final isFavorite = file == null
+        ? false
+        : (ref.watch(fileBookmarkStateProvider(file.cacheKey)).valueOrNull ??
+              false);
+
+    if (file != null &&
+        file.supportsReadState &&
+        file.persistedFileId != null) {
+      ref.listen<Map<String, FileDownloadState>>(fileDownloadProvider, (
+        previous,
+        next,
+      ) {
+        final previousStatus = previous?[file.cacheKey]?.status;
+        final currentStatus = next[file.cacheKey]?.status;
+        if (previousStatus != DownloadStatus.downloaded &&
+            currentStatus == DownloadStatus.downloaded &&
+            file.isNew) {
+          ref.read(fileAssetActionsProvider).setReadState(file, isRead: true);
+        }
+      });
+    }
 
     return Scaffold(
       backgroundColor: c.bg,
       appBar: AppBar(
         title: Text(
-          widget.courseName,
+          widget.routeData.courseName,
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
-        actions: _buildActions(fileState),
+        actions: file == null || fileState == null
+            ? const []
+            : _buildActions(file, fileState, isFavorite),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator.adaptive())
-          : _file == null
-          ? _ErrorView(message: '文件不存在', onRetry: null)
-          : Stack(
-              children: [
-                _buildBody(fileState!),
-                if (fileState.status == DownloadStatus.downloading)
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: LinearProgressIndicator(
-                      value: fileState.progress > 0 ? fileState.progress : null,
-                      minHeight: 3,
-                      backgroundColor: Colors.transparent,
-                      valueColor: AlwaysStoppedAnimation(
-                        context.isDark
-                            ? AppColors.info
-                            : const Color(0xFF007AFF),
-                      ),
-                    ),
+      body: fileAsync.when(
+        loading: () =>
+            const Center(child: CircularProgressIndicator.adaptive()),
+        error: (error, _) => _ErrorView(message: '加载失败', onRetry: null),
+        data: (file) {
+          if (file == null) {
+            return _ErrorView(message: '文件不存在', onRetry: null);
+          }
+          final resolvedState = runtimeResolver.resolveDetailItem(
+            file,
+            trackedDownloadStates,
+          );
+
+          return Stack(
+            children: [
+              _buildBody(file, resolvedState),
+              if (resolvedState.status == DownloadStatus.downloading)
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: LinearProgressIndicator(
+                    value: resolvedState.progress > 0
+                        ? resolvedState.progress
+                        : null,
+                    minHeight: 3,
+                    backgroundColor: Colors.transparent,
+                    valueColor: AlwaysStoppedAnimation(c.infoAccent),
                   ),
-              ],
-            ),
+                ),
+            ],
+          );
+        },
+      ),
     );
   }
 
-  List<Widget> _buildActions(FileDownloadState? fs) {
-    if (fs == null) return [];
-    final isReady = fs.status == DownloadStatus.downloaded;
+  List<Widget> _buildActions(
+    FileDetailItem file,
+    FileAssetRuntime fs,
+    bool isFavorite,
+  ) {
+    final isReady = fs.isDownloaded;
     return [
-      // Mark read / unread toggle
-      if (_file != null)
+      if (file.supportsReadState && file.persistedFileId != null)
         IconButton(
           icon: Icon(
-            _file!.isNew
+            file.isNew
                 ? Icons.mark_email_unread_rounded
                 : Icons.mark_email_read_outlined,
             size: 22,
           ),
-          tooltip: _file!.isNew ? '标为已读' : '标为未读',
+          tooltip: file.isNew ? '标为已读' : '标为未读',
           onPressed: () async {
-            final database = ref.read(databaseProvider);
-            if (_file!.isNew) {
-              await database.markFileRead(_file!.id);
-            } else {
-              await database.markFileUnread(_file!.id);
-            }
-            ref.invalidate(homeDataProvider);
-            final updated = await database.getFileById(widget.fileId);
-            if (mounted && updated != null) {
-              setState(() => _file = updated);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(updated.isNew ? '已标为未读' : '已标为已读'),
-                  duration: const Duration(seconds: 1),
-                ),
-              );
-            }
+            await ref
+                .read(fileAssetActionsProvider)
+                .setReadState(file, isRead: file.isNew);
+
+            if (!mounted) return;
+            AppToast.showSuccess(
+              context,
+              message: file.isNew ? '已标为已读' : '已标为未读',
+              duration: const Duration(milliseconds: 1800),
+            );
           },
         ),
       IconButton(
-        icon: const Icon(Icons.refresh_rounded, size: 22),
-        tooltip: '重新下载',
-        onPressed: _file != null ? () => _startDownload(_file!) : null,
-      ),
-      IconButton(
-        icon: const Icon(Icons.ios_share_rounded, size: 22),
-        tooltip: '分享',
-        onPressed: isReady ? () => _shareFile(fs) : null,
-      ),
-      IconButton(
-        icon: const Icon(Icons.open_in_new_rounded, size: 22),
-        tooltip: '外部打开',
-        onPressed: isReady ? () => _openExternal(fs) : null,
-      ),
-      if (_canPreview && isReady)
-        IconButton(
-          icon: Icon(
-            _showInfo ? Icons.preview_rounded : Icons.info_outline_rounded,
-            size: 22,
-          ),
-          tooltip: _showInfo ? '预览' : '文件信息',
-          onPressed: () => setState(() => _showInfo = !_showInfo),
+        icon: Icon(
+          isFavorite ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+          size: 22,
+          color: isFavorite ? AppColors.warning : null,
         ),
+        tooltip: isFavorite ? '取消收藏' : '收藏文件',
+        onPressed: !isReady
+            ? null
+            : () async {
+                await ref
+                    .read(fileFavoriteActionsProvider)
+                    .setFavorite(item: file, isFavorite: !isFavorite);
+                if (!mounted) return;
+                AppToast.showSuccess(
+                  context,
+                  message: isFavorite ? '已取消收藏' : '已加入收藏',
+                  duration: const Duration(milliseconds: 1800),
+                );
+              },
+      ),
+      PopupMenuButton<_FileAction>(
+        icon: const Icon(Icons.more_horiz_rounded, size: 22),
+        onSelected: (action) async {
+          switch (action) {
+            case _FileAction.redownload:
+              await _startDownload(file);
+              break;
+            case _FileAction.share:
+              await _shareFile(fs);
+              break;
+            case _FileAction.openExternal:
+              await _openExternal(file);
+              break;
+            case _FileAction.toggleInfo:
+              setState(() => _showInfo = !_showInfo);
+              break;
+          }
+        },
+        itemBuilder: (context) {
+          final items = <PopupMenuEntry<_FileAction>>[
+            const PopupMenuItem<_FileAction>(
+              value: _FileAction.redownload,
+              child: Text('重新下载'),
+            ),
+          ];
+          if (isReady) {
+            items.add(
+              const PopupMenuItem<_FileAction>(
+                value: _FileAction.share,
+                child: Text('分享'),
+              ),
+            );
+            items.add(
+              const PopupMenuItem<_FileAction>(
+                value: _FileAction.openExternal,
+                child: Text('外部打开'),
+              ),
+            );
+          }
+          if (_canPreview(file) && isReady) {
+            items.add(
+              PopupMenuItem<_FileAction>(
+                value: _FileAction.toggleInfo,
+                child: Text(_showInfo ? '返回预览' : '查看信息'),
+              ),
+            );
+          }
+          return items;
+        },
+      ),
     ];
   }
 
-  Widget _buildBody(FileDownloadState fs) {
+  Widget _buildBody(FileDetailItem file, FileAssetRuntime fs) {
     switch (fs.status) {
       case DownloadStatus.downloading:
       case DownloadStatus.none:
@@ -271,75 +263,66 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
       case DownloadStatus.failed:
         return _ErrorView(
           message: fs.errorMessage ?? '下载失败',
-          onRetry: _file != null ? () => _startDownload(_file!) : null,
+          onRetry: () => _startDownload(file),
         );
       case DownloadStatus.downloaded:
-        if (!_showInfo && _canPreview && fs.localPath != null) {
+        if (!_showInfo && _canPreview(file) && fs.localPath != null) {
           return _PreviewBody(
-            file: _file!,
-            previewType: _previewType,
+            preview: _previewOf(file),
             localPath: fs.localPath!,
           );
         }
         return _FileInfoPanel(
-          file: _file!,
-          courseName: widget.courseName,
+          file: file,
+          courseName: widget.routeData.courseName,
           isDownloaded: true,
-          onOpen: () => _openExternal(fs),
+          onOpen: () => _openExternal(file),
           onShare: () => _shareFile(fs),
         );
     }
   }
 
-  Future<void> _shareFile(FileDownloadState fs) async {
+  Future<void> _shareFile(FileAssetRuntime fs) async {
     if (fs.localPath == null) return;
     try {
       await Share.shareXFiles([XFile(fs.localPath!)]);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('分享失败: $e')));
+        AppToast.showError(context, message: '分享失败: $e');
       }
     }
   }
 
-  Future<void> _openExternal(FileDownloadState fs) async {
-    if (fs.localPath == null) return;
-    final result = await OpenFilex.open(fs.localPath!);
-    if (result.type != ResultType.done && mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('无法打开文件')));
+  Future<void> _openExternal(FileDetailItem file) async {
+    final opened = await ref.read(fileAssetActionsProvider).open(file);
+    if (!opened && mounted) {
+      AppToast.showWarning(context, message: '无法打开文件');
     }
   }
 }
+
+enum _FileAction { redownload, share, openExternal, toggleInfo }
 
 // ---------------------------------------------------------------------------
 //  Preview body — dispatches to appropriate preview widget
 // ---------------------------------------------------------------------------
 
 class _PreviewBody extends StatelessWidget {
-  final db.CourseFile file;
-  final _PreviewType previewType;
+  final FilePreviewDescriptor preview;
   final String localPath;
 
-  const _PreviewBody({
-    required this.file,
-    required this.previewType,
-    required this.localPath,
-  });
+  const _PreviewBody({required this.preview, required this.localPath});
 
   @override
   Widget build(BuildContext context) {
-    switch (previewType) {
-      case _PreviewType.pdf:
+    switch (preview.capability) {
+      case FilePreviewCapability.pdf:
         return _PdfPreview(filePath: localPath);
-      case _PreviewType.image:
+      case FilePreviewCapability.image:
         return _ImagePreview(filePath: localPath);
-      case _PreviewType.text:
+      case FilePreviewCapability.text:
         return _TextPreview(filePath: localPath);
-      case _PreviewType.none:
+      case FilePreviewCapability.none:
         return const SizedBox.shrink();
     }
   }
@@ -363,7 +346,6 @@ class _PdfPreviewState extends State<_PdfPreview> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Stack(
       children: [
         PDFView(
@@ -373,7 +355,7 @@ class _PdfPreviewState extends State<_PdfPreview> {
           autoSpacing: true,
           pageFling: true,
           fitPolicy: FitPolicy.BOTH,
-          nightMode: isDark,
+          nightMode: context.isDark,
           onRender: (pages) {
             if (pages != null) setState(() => _totalPages = pages);
           },
@@ -433,7 +415,7 @@ class _ImagePreview extends StatelessWidget {
         child: Image.file(
           File(filePath),
           fit: BoxFit.contain,
-          errorBuilder: (_, error, __) => Center(
+          errorBuilder: (_, error, stackTrace) => Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -609,7 +591,7 @@ class _ErrorView extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _FileInfoPanel extends StatelessWidget {
-  final db.CourseFile file;
+  final FileDetailItem file;
   final String courseName;
   final bool isDownloaded;
   final VoidCallback? onOpen;
@@ -626,7 +608,7 @@ class _FileInfoPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final ext = _extractExtension(file.title, file.fileType);
+    final ext = FileTypeUtils.extractExt(file.title, file.fileType);
 
     return Column(
       children: [
@@ -642,12 +624,12 @@ class _FileInfoPanel extends StatelessWidget {
                         width: 72,
                         height: 72,
                         decoration: BoxDecoration(
-                          color: fileColor(ext).withAlpha(25),
+                          color: FileTypeUtils.color(ext).withAlpha(25),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Icon(
-                          fileIcon(ext),
-                          color: fileColor(ext),
+                          FileTypeUtils.icon(ext),
+                          color: FileTypeUtils.color(ext),
                           size: 36,
                         ),
                       ),
@@ -823,6 +805,9 @@ class _FileInfoPanel extends StatelessWidget {
   }
 
   String _formatUploadTime(String raw) {
+    if (raw.isEmpty) {
+      return '未知';
+    }
     try {
       final dt = DateTime.parse(raw);
       return '${dt.year}年${dt.month}月${dt.day}日 '
@@ -876,103 +861,5 @@ class _MetaRow extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-// ---------------------------------------------------------------------------
-//  File type helpers — exported for reuse in other screens
-// ---------------------------------------------------------------------------
-
-IconData fileIcon(String type) {
-  switch (type.toLowerCase()) {
-    case 'pdf':
-      return Icons.picture_as_pdf_rounded;
-    case 'doc':
-    case 'docx':
-      return Icons.description_rounded;
-    case 'ppt':
-    case 'pptx':
-      return Icons.slideshow_rounded;
-    case 'xls':
-    case 'xlsx':
-      return Icons.table_chart_rounded;
-    case 'zip':
-    case 'rar':
-    case '7z':
-      return Icons.folder_zip_rounded;
-    case 'jpg':
-    case 'jpeg':
-    case 'png':
-    case 'gif':
-    case 'bmp':
-    case 'webp':
-      return Icons.image_rounded;
-    case 'mp4':
-    case 'avi':
-    case 'mov':
-      return Icons.videocam_rounded;
-    case 'txt':
-    case 'md':
-    case 'csv':
-    case 'log':
-      return Icons.text_snippet_rounded;
-    case 'py':
-    case 'java':
-    case 'c':
-    case 'cpp':
-    case 'js':
-    case 'dart':
-    case 'html':
-    case 'css':
-      return Icons.code_rounded;
-    default:
-      return Icons.insert_drive_file_rounded;
-  }
-}
-
-Color fileColor(String type) {
-  switch (type.toLowerCase()) {
-    case 'pdf':
-      return const Color(0xFFE53935);
-    case 'doc':
-    case 'docx':
-      return const Color(0xFF1976D2);
-    case 'ppt':
-    case 'pptx':
-      return const Color(0xFFE65100);
-    case 'xls':
-    case 'xlsx':
-      return const Color(0xFF2E7D32);
-    case 'zip':
-    case 'rar':
-    case '7z':
-      return const Color(0xFF757575);
-    case 'jpg':
-    case 'jpeg':
-    case 'png':
-    case 'gif':
-    case 'bmp':
-    case 'webp':
-      return const Color(0xFF7B1FA2);
-    case 'mp4':
-    case 'avi':
-    case 'mov':
-      return const Color(0xFFD81B60);
-    case 'txt':
-    case 'md':
-    case 'csv':
-    case 'log':
-      return const Color(0xFF546E7A);
-    case 'py':
-    case 'java':
-    case 'c':
-    case 'cpp':
-    case 'js':
-    case 'dart':
-    case 'html':
-    case 'css':
-      return const Color(0xFF00897B);
-    default:
-      return const Color(0xFF546E7A);
   }
 }

@@ -5,11 +5,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../core/design/app_toast.dart';
 import '../../core/design/app_theme_colors.dart';
 import '../../core/design/colors.dart';
+import '../../core/design/file_type_utils.dart';
+import '../../core/files/file_cache_actions.dart';
+import '../../core/files/file_models.dart';
+import '../../core/providers/preferences_providers.dart';
+import '../../core/router/router.dart';
 import '../../core/services/file_cache_service.dart';
-import 'file_detail_screen.dart' show fileIcon, fileColor;
 
 // ---------------------------------------------------------------------------
 //  Screen
@@ -23,9 +29,12 @@ class FileManagerScreen extends ConsumerStatefulWidget {
 }
 
 class _FileManagerScreenState extends ConsumerState<FileManagerScreen> {
-  List<CachedFileInfo>? _cachedFiles;
+  static const List<int?> _cacheLimitOptions = [200, 500, 1024, null];
+
+  List<CachedAssetListItem>? _cachedFiles;
   int _totalSize = 0;
   bool _loading = true;
+  bool _updatingLimit = false;
 
   @override
   void initState() {
@@ -34,21 +43,22 @@ class _FileManagerScreenState extends ConsumerState<FileManagerScreen> {
   }
 
   Future<void> _loadData() async {
-    final service = ref.read(fileCacheServiceProvider);
-    final files = await service.getCachedFiles();
-    final size = await service.getTotalCacheSize();
+    final snapshot = await ref.read(fileCacheActionsProvider).loadSnapshot();
     if (mounted) {
       setState(() {
-        _cachedFiles = files;
-        _totalSize = size;
+        _cachedFiles = snapshot.files;
+        _totalSize = snapshot.totalSizeBytes;
         _loading = false;
       });
+
+      _showPolicyResult(snapshot, userInitiated: false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final selectedLimitMb = ref.watch(fileCacheLimitMbProvider);
 
     return Scaffold(
       backgroundColor: c.bg,
@@ -70,13 +80,13 @@ class _FileManagerScreenState extends ConsumerState<FileManagerScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator.adaptive())
-          : _buildContent(),
+          : _buildContent(selectedLimitMb),
     );
   }
 
-  Widget _buildContent() {
+  Widget _buildContent(int? selectedLimitMb) {
     final c = context.colors;
-    final infoColor = context.isDark ? AppColors.info : const Color(0xFF007AFF);
+    final infoColor = c.infoAccent;
 
     return CustomScrollView(
       slivers: [
@@ -142,6 +152,16 @@ class _FileManagerScreenState extends ConsumerState<FileManagerScreen> {
           ),
         ),
 
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: _buildCachePolicyCard(
+              accentColor: infoColor,
+              selectedLimitMb: selectedLimitMb,
+            ).animate().fadeIn(delay: 60.ms, duration: 300.ms),
+          ),
+        ),
+
         // File list
         if (_cachedFiles == null || _cachedFiles!.isEmpty)
           SliverFillRemaining(
@@ -177,71 +197,83 @@ class _FileManagerScreenState extends ConsumerState<FileManagerScreen> {
             sliver: SliverList(
               delegate: SliverChildBuilderDelegate((context, index) {
                 final file = _cachedFiles![index];
-                final ext = file.fileType.isNotEmpty
-                    ? file.fileType.toLowerCase()
-                    : '';
-                final color = fileColor(ext);
+                final ext = FileTypeUtils.extractExt(file.title, file.fileType);
+                final color = FileTypeUtils.color(ext);
 
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child:
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: c.surface,
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: c.border, width: 0.5),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 36,
-                              height: 36,
-                              decoration: BoxDecoration(
-                                color: color.withAlpha(20),
-                                borderRadius: BorderRadius.circular(9),
-                              ),
-                              child: Icon(
-                                fileIcon(ext),
-                                color: color,
-                                size: 18,
-                              ),
+                          onTap: file.canOpenDetail
+                              ? () => context.push(
+                                  Routes.fileDetailFromData(file.routeData!),
+                                )
+                              : null,
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: c.surface,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: c.border, width: 0.5),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    file.title,
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      color: c.text,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: color.withAlpha(20),
+                                    borderRadius: BorderRadius.circular(9),
                                   ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    _formatSize(file.diskSizeBytes),
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: c.subtitle,
-                                    ),
+                                  child: Icon(
+                                    FileTypeUtils.icon(ext),
+                                    color: color,
+                                    size: 18,
                                   ),
-                                ],
-                              ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        file.title,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: c.text,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        _metadataLabel(file),
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: c.subtitle,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.delete_outline_rounded,
+                                    size: 20,
+                                  ),
+                                  color: c.subtitle,
+                                  onPressed: () => _confirmDeleteFile(file),
+                                ),
+                              ],
                             ),
-                            IconButton(
-                              icon: const Icon(
-                                Icons.delete_outline_rounded,
-                                size: 20,
-                              ),
-                              color: c.subtitle,
-                              onPressed: () => _confirmDeleteFile(file),
-                            ),
-                          ],
+                          ),
                         ),
                       ).animate().fadeIn(
                         delay: Duration(milliseconds: index * 30),
@@ -253,6 +285,202 @@ class _FileManagerScreenState extends ConsumerState<FileManagerScreen> {
           ),
       ],
     );
+  }
+
+  Widget _buildCachePolicyCard({
+    required Color accentColor,
+    required int? selectedLimitMb,
+  }) {
+    final c = context.colors;
+    final description = _updatingLimit
+        ? '正在整理缓存...'
+        : selectedLimitMb == null
+        ? '当前不限制缓存容量，已下载内容会保留到你手动清理。'
+        : '超过 ${_formatLimitLabel(selectedLimitMb)} 时，会自动清理最久未访问的旧文件。';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: c.border, width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: accentColor.withAlpha(18),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.auto_delete_rounded,
+                  color: accentColor,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '自动缓存清理',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: c.text,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '限制总缓存容量，保持文件系统轻量可控',
+                      style: TextStyle(fontSize: 12, color: c.subtitle),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          IgnorePointer(
+            ignoring: _updatingLimit,
+            child: Opacity(
+              opacity: _updatingLimit ? 0.7 : 1,
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final option in _cacheLimitOptions)
+                    _buildLimitChip(
+                      value: option,
+                      isSelected: option == selectedLimitMb,
+                      accentColor: accentColor,
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          AnimatedSwitcher(
+            duration: 180.ms,
+            child: Text(
+              description,
+              key: ValueKey(description),
+              style: TextStyle(fontSize: 12, color: c.subtitle),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLimitChip({
+    required int? value,
+    required bool isSelected,
+    required Color accentColor,
+  }) {
+    final c = context.colors;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: () => _updateCacheLimit(value),
+        child: AnimatedContainer(
+          duration: 160.ms,
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? accentColor.withAlpha(18) : c.bg,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: isSelected ? accentColor.withAlpha(120) : c.border,
+              width: 0.8,
+            ),
+          ),
+          child: Text(
+            _formatLimitLabel(value),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+              color: isSelected ? accentColor : c.text,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _updateCacheLimit(int? limitMb) async {
+    if (_updatingLimit || ref.read(fileCacheLimitMbProvider) == limitMb) {
+      return;
+    }
+
+    setState(() => _updatingLimit = true);
+
+    try {
+      final snapshot = await ref
+          .read(fileCacheActionsProvider)
+          .updateLimit(limitMb);
+      if (!mounted) return;
+
+      setState(() {
+        _cachedFiles = snapshot.files;
+        _totalSize = snapshot.totalSizeBytes;
+        _loading = false;
+        _updatingLimit = false;
+      });
+
+      _showPolicyResult(
+        snapshot,
+        userInitiated: true,
+        selectedLimitMb: limitMb,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _updatingLimit = false);
+      AppToast.showError(context, message: '缓存策略更新失败');
+    }
+  }
+
+  void _showPolicyResult(
+    FileCacheSnapshot snapshot, {
+    required bool userInitiated,
+    int? selectedLimitMb,
+  }) {
+    final result = snapshot.policyResult;
+    if (result == null) {
+      return;
+    }
+
+    final evictedCount = result.evictedAssetKeys.length;
+    if (evictedCount > 0) {
+      final limitLabel = _formatLimitLabel(
+        selectedLimitMb ?? _limitMbFromBytes(result.limitBytes),
+      );
+      final releasedText = result.evictedBytes > 0
+          ? '，释放 ${_formatSize(result.evictedBytes)}'
+          : '';
+      AppToast.showInfo(
+        context,
+        message: '已按 $limitLabel 上限自动清理 $evictedCount 个旧文件$releasedText',
+      );
+      return;
+    }
+
+    if (!userInitiated) {
+      return;
+    }
+
+    final message = selectedLimitMb == null
+        ? '缓存上限已设为无限制'
+        : '缓存上限已设为 ${_formatLimitLabel(selectedLimitMb)}';
+    AppToast.showSuccess(context, message: message);
   }
 
   void _confirmClearAll() {
@@ -272,13 +500,10 @@ class _FileManagerScreenState extends ConsumerState<FileManagerScreen> {
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              final service = ref.read(fileCacheServiceProvider);
-              await service.clearAllCache();
+              await ref.read(fileCacheActionsProvider).clearAll();
               await _loadData();
               if (mounted) {
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(const SnackBar(content: Text('缓存已清除')));
+                AppToast.showSuccess(context, message: '缓存已清除');
               }
             },
             child: const Text('清除', style: TextStyle(color: AppColors.error)),
@@ -288,7 +513,7 @@ class _FileManagerScreenState extends ConsumerState<FileManagerScreen> {
     );
   }
 
-  void _confirmDeleteFile(CachedFileInfo file) {
+  void _confirmDeleteFile(CachedAssetListItem file) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -305,9 +530,13 @@ class _FileManagerScreenState extends ConsumerState<FileManagerScreen> {
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              final service = ref.read(fileCacheServiceProvider);
-              await service.clearFile(file.fileId);
+              await ref
+                  .read(fileCacheActionsProvider)
+                  .clearAsset(file.assetKey);
               await _loadData();
+              if (mounted) {
+                AppToast.showSuccess(context, message: '文件缓存已删除');
+              }
             },
             child: const Text('删除', style: TextStyle(color: AppColors.error)),
           ),
@@ -323,5 +552,33 @@ class _FileManagerScreenState extends ConsumerState<FileManagerScreen> {
       return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
     }
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+  }
+
+  static String _formatLimitLabel(int? limitMb) {
+    if (limitMb == null) {
+      return '无限制';
+    }
+    if (limitMb >= 1024) {
+      final gb = limitMb / 1024;
+      return gb == gb.roundToDouble()
+          ? '${gb.toStringAsFixed(0)} GB'
+          : '${gb.toStringAsFixed(1)} GB';
+    }
+    return '$limitMb MB';
+  }
+
+  static int? _limitMbFromBytes(int? bytes) {
+    if (bytes == null || bytes <= 0) {
+      return null;
+    }
+    return bytes ~/ (1024 * 1024);
+  }
+
+  static String _metadataLabel(CachedAssetListItem file) {
+    final parts = <String>[
+      if (file.courseName.isNotEmpty) file.courseName,
+      _formatSize(file.diskSizeBytes),
+    ];
+    return parts.join(' · ');
   }
 }

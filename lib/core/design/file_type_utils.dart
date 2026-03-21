@@ -26,14 +26,28 @@ abstract final class FileTypeUtils {
   static Color color(String ext) {
     return switch (ext) {
       'pdf' => const Color(0xFFE53935),
-      'doc' || 'docx' => const Color(0xFF1565C0),
-      'xls' || 'xlsx' => const Color(0xFF2E7D32),
+      'doc' || 'docx' => const Color(0xFF1976D2),
       'ppt' || 'pptx' => const Color(0xFFE65100),
-      'zip' || 'rar' || '7z' => const Color(0xFF6A1B9A),
-      'png' || 'jpg' || 'jpeg' || 'gif' || 'svg' => const Color(0xFF00838F),
-      'mp4' || 'mov' || 'avi' => const Color(0xFFAD1457),
-      'txt' || 'md' => const Color(0xFF546E7A),
-      _ => const Color(0xFF757575),
+      'xls' || 'xlsx' => const Color(0xFF2E7D32),
+      'zip' || 'rar' || '7z' => const Color(0xFF757575),
+      'png' ||
+      'jpg' ||
+      'jpeg' ||
+      'gif' ||
+      'svg' ||
+      'bmp' ||
+      'webp' => const Color(0xFF7B1FA2),
+      'mp4' || 'mov' || 'avi' => const Color(0xFFD81B60),
+      'txt' || 'md' || 'csv' || 'log' => const Color(0xFF546E7A),
+      'py' ||
+      'java' ||
+      'c' ||
+      'cpp' ||
+      'js' ||
+      'dart' ||
+      'html' ||
+      'css' => const Color(0xFF00897B),
+      _ => const Color(0xFF546E7A),
     };
   }
 
@@ -42,12 +56,26 @@ abstract final class FileTypeUtils {
     return switch (ext) {
       'pdf' => Icons.picture_as_pdf_rounded,
       'doc' || 'docx' => Icons.description_rounded,
-      'xls' || 'xlsx' => Icons.table_chart_rounded,
       'ppt' || 'pptx' => Icons.slideshow_rounded,
+      'xls' || 'xlsx' => Icons.table_chart_rounded,
       'zip' || 'rar' || '7z' => Icons.folder_zip_rounded,
-      'png' || 'jpg' || 'jpeg' || 'gif' || 'svg' => Icons.image_rounded,
+      'png' ||
+      'jpg' ||
+      'jpeg' ||
+      'gif' ||
+      'svg' ||
+      'bmp' ||
+      'webp' => Icons.image_rounded,
       'mp4' || 'mov' || 'avi' => Icons.videocam_rounded,
-      'txt' || 'md' => Icons.text_snippet_rounded,
+      'txt' || 'md' || 'csv' || 'log' => Icons.text_snippet_rounded,
+      'py' ||
+      'java' ||
+      'c' ||
+      'cpp' ||
+      'js' ||
+      'dart' ||
+      'html' ||
+      'css' => Icons.code_rounded,
       _ => Icons.insert_drive_file_rounded,
     };
   }

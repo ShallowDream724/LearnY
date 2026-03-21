@@ -11,6 +11,7 @@ import 'package:go_router/go_router.dart';
 
 export 'package:go_router/go_router.dart' show GoRouter;
 
+import '../files/file_models.dart';
 import '../providers/providers.dart';
 
 import '../../features/home/home_screen.dart';
@@ -18,8 +19,10 @@ import '../../features/assignments/assignments_screen.dart';
 import '../../features/assignments/homework_detail_screen.dart';
 import '../../features/courses/courses_screen.dart';
 import '../../features/courses/course_detail_screen.dart';
+import '../../features/courses/course_search_screen.dart';
 
 import '../../features/files/file_detail_screen.dart';
+import '../../features/files/favorite_files_screen.dart';
 import '../../features/files/file_manager_screen.dart';
 import '../../features/files/unread_files_screen.dart';
 import '../../features/notifications/notification_detail_screen.dart';
@@ -39,12 +42,20 @@ abstract final class Routes {
   static const String search = '/search';
 
   // Detail routes (full screen, above shell)
+  static String loginWithReturnTo(String? location) {
+    if (location == null || location.isEmpty) return login;
+    final encoded = Uri.encodeComponent(location);
+    return '$login?from=$encoded';
+  }
+
   static String courseDetail(String courseId) => '/courses/$courseId';
 
   static const String _notificationDetailPath = '/notification-detail';
   static const String _homeworkDetailPath = '/homework-detail';
   static const String _fileDetailPath = '/file-detail';
   static const String _fileManagerPath = '/file-manager';
+  static const String _courseSearchPath = '/course-search';
+  static const String _favoriteFilesPath = '/favorite-files';
 
   static String notificationDetail({
     required String notificationId,
@@ -61,14 +72,40 @@ abstract final class Routes {
       '$_homeworkDetailPath?id=$homeworkId&courseId=$courseId&courseName=${Uri.encodeComponent(courseName)}';
 
   static String fileDetail({
-    required String fileId,
+    String? fileId,
+    required String courseId,
+    required String courseName,
+    FileAttachment? attachment,
+  }) {
+    final routeData = attachment != null
+        ? FileDetailRouteData.attachment(
+            attachment: attachment,
+            courseId: courseId,
+            courseName: courseName,
+          )
+        : FileDetailRouteData.courseFile(
+            fileId: fileId ?? '',
+            courseId: courseId,
+            courseName: courseName,
+          );
+
+    return fileDetailFromData(routeData);
+  }
+
+  static String fileDetailFromData(FileDetailRouteData routeData) {
+    final query = Uri(queryParameters: routeData.toQueryParameters()).query;
+    return '$_fileDetailPath?$query';
+  }
+
+  static const String fileManager = _fileManagerPath;
+  static const String favoriteFiles = _favoriteFilesPath;
+  static const String unreadFiles = '/unread-files';
+
+  static String courseSearch({
     required String courseId,
     required String courseName,
   }) =>
-      '$_fileDetailPath?id=$fileId&courseId=$courseId&courseName=${Uri.encodeComponent(courseName)}';
-
-  static const String fileManager = _fileManagerPath;
-  static const String unreadFiles = '/unread-files';
+      '$_courseSearchPath?courseId=$courseId&courseName=${Uri.encodeComponent(courseName)}';
 }
 
 /// Safely decode a URI component — falls back to raw value if decoding fails
@@ -83,7 +120,16 @@ String _safeDecode(String value) {
 
 /// Navigation key for the shell.
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
-final _shellNavigatorKey = GlobalKey<NavigatorState>();
+final _homeNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'homeBranch');
+final _assignmentsNavigatorKey = GlobalKey<NavigatorState>(
+  debugLabel: 'assignmentsBranch',
+);
+final _coursesNavigatorKey = GlobalKey<NavigatorState>(
+  debugLabel: 'coursesBranch',
+);
+final _profileNavigatorKey = GlobalKey<NavigatorState>(
+  debugLabel: 'profileBranch',
+);
 
 /// Build the app router.
 ///
@@ -93,21 +139,33 @@ GoRouter buildRouter({required WidgetRef ref}) {
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: Routes.home,
+    refreshListenable: ref.read(authRouterRefreshNotifierProvider),
     redirect: (context, state) {
       final auth = ref.read(authProvider);
       final isOnLogin = state.matchedLocation == Routes.login;
+      final returnTo = state.uri.queryParameters['from'];
 
       // Still loading auth state from DB — don't redirect yet.
       // initialLocation is home, so user sees home screen while loading.
-      if (auth.status == AuthStatus.unknown) return null;
+      if (auth.isRestoring) return null;
 
-      if (!auth.isLoggedIn && !isOnLogin) return Routes.login;
-      if (auth.isLoggedIn && isOnLogin) return Routes.home;
+      if (auth.isSignedOut && !isOnLogin) {
+        return Routes.login;
+      }
+      if (isOnLogin &&
+          auth.canAccessCachedData &&
+          !auth.requiresReauthentication) {
+        if (returnTo != null &&
+            returnTo.isNotEmpty &&
+            returnTo != Routes.login) {
+          return returnTo;
+        }
+        return Routes.home;
+      }
       return null;
     },
     routes: [
       // ── Full-screen routes (above shell) ──
-
       GoRoute(
         path: Routes.login,
         parentNavigatorKey: _rootNavigatorKey,
@@ -150,12 +208,11 @@ GoRouter buildRouter({required WidgetRef ref}) {
         path: Routes._fileDetailPath,
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) {
-          final q = state.uri.queryParameters;
-          return FileDetailScreen(
-            fileId: q['id'] ?? '',
-            courseId: q['courseId'] ?? '',
-            courseName: _safeDecode(q['courseName'] ?? ''),
+          final q = state.uri.queryParameters.map(
+            (key, value) => MapEntry(key, _safeDecode(value)),
           );
+          final routeData = FileDetailRouteData.fromQueryParameters(q);
+          return FileDetailScreen(routeData: routeData);
         },
       ),
 
@@ -166,53 +223,85 @@ GoRouter buildRouter({required WidgetRef ref}) {
       ),
 
       GoRoute(
+        path: Routes._favoriteFilesPath,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const FavoriteFilesScreen(),
+      ),
+
+      GoRoute(
         path: Routes.unreadFiles,
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const UnreadFilesScreen(),
       ),
 
+      GoRoute(
+        path: Routes._courseSearchPath,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final q = state.uri.queryParameters;
+          return CourseSearchScreen(
+            courseId: q['courseId'] ?? '',
+            courseName: _safeDecode(q['courseName'] ?? ''),
+          );
+        },
+      ),
+
       // ── Main app shell with 4 tabs ──
-
-      ShellRoute(
-        navigatorKey: _shellNavigatorKey,
-        builder: (context, state, child) => AppShell(child: child),
-        routes: [
-          GoRoute(
-            path: Routes.home,
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: HomeScreen(),
-            ),
-          ),
-          GoRoute(
-            path: Routes.assignments,
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: AssignmentsScreen(),
-            ),
-          ),
-
-          GoRoute(
-            path: Routes.courses,
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: CoursesScreen(),
-            ),
+      StatefulShellRoute(
+        builder: (context, state, navigationShell) =>
+            AppShell(navigationShell: navigationShell),
+        navigatorContainerBuilder: buildAppShellBranchContainer,
+        branches: [
+          StatefulShellBranch(
+            navigatorKey: _homeNavigatorKey,
             routes: [
               GoRoute(
-                path: ':courseId',
-                builder: (context, state) => CourseDetailScreen(
-                  courseId: state.pathParameters['courseId']!,
-                ),
+                path: Routes.home,
+                pageBuilder: (context, state) =>
+                    const NoTransitionPage(child: HomeScreen()),
               ),
             ],
           ),
-          GoRoute(
-            path: Routes.profile,
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: ProfileScreen(),
-            ),
+          StatefulShellBranch(
+            navigatorKey: _assignmentsNavigatorKey,
+            routes: [
+              GoRoute(
+                path: Routes.assignments,
+                pageBuilder: (context, state) =>
+                    const NoTransitionPage(child: AssignmentsScreen()),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            navigatorKey: _coursesNavigatorKey,
+            routes: [
+              GoRoute(
+                path: Routes.courses,
+                pageBuilder: (context, state) =>
+                    const NoTransitionPage(child: CoursesScreen()),
+                routes: [
+                  GoRoute(
+                    path: ':courseId',
+                    builder: (context, state) => CourseDetailScreen(
+                      courseId: state.pathParameters['courseId']!,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            navigatorKey: _profileNavigatorKey,
+            routes: [
+              GoRoute(
+                path: Routes.profile,
+                pageBuilder: (context, state) =>
+                    const NoTransitionPage(child: ProfileScreen()),
+              ),
+            ],
           ),
         ],
       ),
     ],
   );
 }
-

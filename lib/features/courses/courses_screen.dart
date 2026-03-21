@@ -13,66 +13,10 @@ import '../../core/design/cooldown_toast.dart';
 import '../../core/design/shimmer.dart';
 import '../../core/design/responsive.dart';
 import '../../core/design/typography.dart';
-import '../../core/providers/providers.dart';
-import '../../core/providers/sync_provider.dart';
-import '../../core/database/database.dart';
+import '../../core/providers/sync_models.dart';
 import '../../core/router/router.dart';
-
-// ---------------------------------------------------------------------------
-//  Course stats
-// ---------------------------------------------------------------------------
-
-class CourseStats {
-  final Course course;
-  final int unreadNotifications;
-  final int pendingHomeworks;
-  final int totalFiles;
-
-  const CourseStats({
-    required this.course,
-    this.unreadNotifications = 0,
-    this.pendingHomeworks = 0,
-    this.totalFiles = 0,
-  });
-}
-
-final _courseStatsProvider = FutureProvider<List<CourseStats>>((ref) async {
-  final db = ref.watch(databaseProvider);
-  final semesterId = ref.watch(currentSemesterIdProvider);
-  if (semesterId == null) return [];
-
-  final courses = await db.getCoursesBySemester(semesterId);
-  final stats = <CourseStats>[];
-
-  for (final c in courses) {
-    final notifications = await db.getNotificationsByCourse(c.id);
-    final homeworks = await db.getHomeworksByCourse(c.id);
-    final files = await db.getFilesByCourse(c.id);
-
-    final unread = notifications
-        .where((n) => !n.hasRead && !n.hasReadLocal)
-        .length;
-    final pending = homeworks.where((h) => !h.submitted && !h.graded).length;
-
-    stats.add(
-      CourseStats(
-        course: c,
-        unreadNotifications: unread,
-        pendingHomeworks: pending,
-        totalFiles: files.length,
-      ),
-    );
-  }
-
-  // Sort: put courses with pending items first
-  stats.sort((a, b) {
-    final aScore = a.unreadNotifications + a.pendingHomeworks * 2;
-    final bScore = b.unreadNotifications + b.pendingHomeworks * 2;
-    return bScore.compareTo(aScore);
-  });
-
-  return stats;
-});
+import '../../core/sync/sync_actions.dart';
+import 'providers/course_queries.dart';
 
 // ---------------------------------------------------------------------------
 //  Screen
@@ -84,17 +28,15 @@ class CoursesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.colors;
-    final statsAsync = ref.watch(_courseStatsProvider);
+    final statsAsync = ref.watch(courseStatsProvider);
 
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: () async {
-          await ref.read(syncStateProvider.notifier).syncAll();
-          final ss = ref.read(syncStateProvider);
+          final ss = (await ref.read(syncActionsProvider).refreshAll()).state;
           if (ss.status == SyncStatus.cooldown && context.mounted) {
             CooldownToast.show(context, seconds: ss.cooldownSeconds);
           }
-          ref.invalidate(_courseStatsProvider);
         },
         color: AppColors.primary,
         child: CustomScrollView(
@@ -111,6 +53,8 @@ class CoursesScreen extends ConsumerWidget {
 
             // ── Content ──
             statsAsync.when(
+              skipLoadingOnReload: true,
+              skipLoadingOnRefresh: true,
               loading: () => const SliverFillRemaining(child: ListSkeleton()),
               error: (e, _) => SliverFillRemaining(
                 child: Center(
@@ -332,7 +276,7 @@ class _CourseCard extends StatelessWidget {
 
               // Teacher
               Text(
-                course.teacherName ?? '',
+                course.teacherName,
                 style: AppTypography.bodySmall.copyWith(color: c.subtitle),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,

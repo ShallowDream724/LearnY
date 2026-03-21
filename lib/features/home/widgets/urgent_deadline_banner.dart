@@ -14,6 +14,7 @@ import '../../../core/design/app_theme_colors.dart';
 import '../../../core/design/typography.dart';
 import '../../../core/providers/providers.dart';
 import '../../../core/providers/sync_provider.dart';
+import '../../../core/utils/deadline_time.dart';
 
 class UrgentDeadlineBanner extends ConsumerStatefulWidget {
   final List<HomeworkSummary> assignments;
@@ -70,10 +71,9 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
   String _formatCountdown(HomeworkSummary hw) {
     if (hw.isOverdue) return '已截止';
 
-    final deadlineMs = int.tryParse(hw.deadline);
-    if (deadlineMs == null) return '';
-    final deadline = DateTime.fromMillisecondsSinceEpoch(deadlineMs);
-    final now = DateTime.now();
+    final deadline = tryParseEpochMillisToLocal(hw.deadline);
+    if (deadline == null) return '';
+    final now = nowInShanghai();
     final remaining = deadline.difference(now);
 
     if (remaining.isNegative) return '已截止';
@@ -88,43 +88,16 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
       }
     }
 
-    final dayDiff = remaining.inDays;
-    final time =
-        '${deadline.hour.toString().padLeft(2, '0')}:${deadline.minute.toString().padLeft(2, '0')}';
-
-    if (dayDiff == 0) return '今天 $time';
-    if (dayDiff == 1) return '明天 $time';
-    if (dayDiff == 2) return '后天 $time';
-
-    // 本周 vs 下周
-    final nowWeekday = now.weekday; // 1=Mon 7=Sun
-    final deadlineWeekday = deadline.weekday;
-    const names = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-    final nowMonday = now.subtract(Duration(days: nowWeekday - 1));
-    final deadlineMonday = deadline.subtract(
-      Duration(days: deadlineWeekday - 1),
-    );
-    final sameWeek =
-        nowMonday.year == deadlineMonday.year &&
-        nowMonday.month == deadlineMonday.month &&
-        nowMonday.day == deadlineMonday.day;
-
-    if (sameWeek) {
-      return '本${names[deadlineWeekday]} $time';
-    } else if (dayDiff < 14) {
-      return '下${names[deadlineWeekday]} $time';
-    }
-    return '${deadline.month}/${deadline.day} $time';
+    return formatRelativeDeadlineLabel(deadline, now: now);
   }
 
   String _formatDateSub(HomeworkSummary hw) {
     if (hw.isOverdue) return '';
-    final deadlineMs = int.tryParse(hw.deadline);
-    if (deadlineMs == null) return '';
-    final deadline = DateTime.fromMillisecondsSinceEpoch(deadlineMs);
-    final remaining = deadline.difference(DateTime.now());
+    final deadline = tryParseEpochMillisToLocal(hw.deadline);
+    if (deadline == null) return '';
+    final remaining = deadline.difference(nowInShanghai());
     if (remaining.inHours < 24) {
-      return '今天 ${deadline.hour.toString().padLeft(2, '0')}:${deadline.minute.toString().padLeft(2, '0')}';
+      return '今天 ${formatHourMinuteLabel(deadline)}';
     }
     return '${deadline.month}月${deadline.day}日';
   }
@@ -180,32 +153,54 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final c = context.colors;
     final assignments = widget.assignments;
     if (assignments.isEmpty) return const SizedBox.shrink();
 
     final thresholdHours = ref.watch(deadlineThresholdHoursProvider);
+    final backgroundColors = isDark
+        ? const [Color(0xFF1E2430), Color(0xFF1A1F28)]
+        : const [Color(0xFFFFF7EE), Color(0xFFFFF3E4)];
+    final panelBorderColor = isDark
+        ? const Color(0xFF3A4250).withAlpha(180)
+        : const Color(0xFFC8A064).withAlpha(30);
+    final dividerColor = isDark
+        ? Colors.white.withAlpha(14)
+        : const Color(0xFFB4783C).withAlpha(15);
+    final titleColor = isDark
+        ? const Color(0xFFFFC56F)
+        : const Color(0xFFB5710D);
+    final secondaryTextColor = isDark
+        ? const Color(0xFF98A3B5)
+        : const Color(0xFFA08060);
+    final tertiaryTextColor = isDark
+        ? const Color(0xFF8B95A5)
+        : const Color(0xFFB09880);
+    final controlFillColor = isDark
+        ? Colors.white.withAlpha(10)
+        : const Color(0xFFB4783C).withAlpha(18);
+    final controlIconColor = isDark
+        ? const Color(0xFFE5B779)
+        : const Color(0xFFB5710D);
 
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: isDark
-              ? [const Color(0xFF2A2218), const Color(0xFF2C2116)]
-              : [const Color(0xFFFFF7EE), const Color(0xFFFFF3E4)],
+          colors: backgroundColors,
         ),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFC8A064).withAlpha(isDark ? 0 : 8),
-            blurRadius: 3,
-            offset: const Offset(0, 1),
+            color: isDark
+                ? Colors.black.withAlpha(24)
+                : const Color(0xFFC8A064).withAlpha(8),
+            blurRadius: isDark ? 18 : 3,
+            offset: isDark ? const Offset(0, 6) : const Offset(0, 1),
           ),
         ],
-        border: Border.all(
-          color: const Color(0xFFC8A064).withAlpha(isDark ? 25 : 30),
-          width: 0.5,
-        ),
+        border: Border.all(color: panelBorderColor, width: 0.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -238,9 +233,7 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
                 Text(
                   '${assignments.length} 个作业即将截止',
                   style: AppTypography.labelMedium.copyWith(
-                    color: isDark
-                        ? const Color(0xFFFFBB5C)
-                        : const Color(0xFFB5710D),
+                    color: titleColor,
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
                   ),
@@ -253,7 +246,7 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFB4783C).withAlpha(18),
+                    color: controlFillColor,
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
@@ -261,9 +254,7 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w500,
-                      color: isDark
-                          ? const Color(0xFFD0A878)
-                          : const Color(0xFFC09060),
+                      color: controlIconColor,
                     ),
                   ),
                 ),
@@ -275,15 +266,13 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
                     width: 28,
                     height: 28,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFB4783C).withAlpha(18),
+                      color: controlFillColor,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
                       Icons.tune_rounded,
                       size: 14,
-                      color: isDark
-                          ? const Color(0xFFD0A878)
-                          : const Color(0xFFB5710D),
+                      color: controlIconColor,
                     ),
                   ),
                 ),
@@ -307,11 +296,7 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
                 decoration: BoxDecoration(
                   border: isLast
                       ? null
-                      : Border(
-                          bottom: BorderSide(
-                            color: const Color(0xFFB4783C).withAlpha(15),
-                          ),
-                        ),
+                      : Border(bottom: BorderSide(color: dividerColor)),
                 ),
                 child: Row(
                   children: [
@@ -345,9 +330,7 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
                           Text(
                             hw.courseName,
                             style: AppTypography.bodySmall.copyWith(
-                              color: isDark
-                                  ? const Color(0xFF98989D)
-                                  : const Color(0xFFA08060),
+                              color: secondaryTextColor,
                               fontSize: 11,
                               fontWeight: FontWeight.w500,
                               letterSpacing: 0.2,
@@ -359,9 +342,7 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
                           Text(
                             hw.title,
                             style: AppTypography.bodyMedium.copyWith(
-                              color: isDark
-                                  ? context.colors.text
-                                  : const Color(0xFF1C1C1E),
+                              color: isDark ? c.text : const Color(0xFF1C1C1E),
                               fontWeight: FontWeight.w600,
                               fontSize: 15,
                             ),
@@ -394,9 +375,7 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w500,
-                              color: isDark
-                                  ? const Color(0xFF98989D)
-                                  : const Color(0xFFB09880),
+                              color: tertiaryTextColor,
                             ),
                           ),
                         ],

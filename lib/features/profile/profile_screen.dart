@@ -7,11 +7,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/design/app_toast.dart';
 import '../../core/design/app_theme_colors.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/typography.dart';
 import '../../core/providers/providers.dart';
 import '../../core/router/router.dart';
+import '../files/providers/file_bookmark_providers.dart';
+import 'providers/profile_identity_provider.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -21,6 +24,11 @@ class ProfileScreen extends ConsumerWidget {
     final c = context.colors;
     final authState = ref.watch(authProvider);
     final themeMode = ref.watch(themeModeProvider);
+    final favoriteCount =
+        ref.watch(bookmarkedFileCountProvider).valueOrNull ?? 0;
+    final profileIdentity = ref.watch(profileIdentityProvider).valueOrNull;
+    final buildInfo = ref.watch(appBuildInfoProvider).valueOrNull;
+    final updateInfo = ref.watch(appUpdateInfoProvider).valueOrNull;
 
     return Scaffold(
       body: CustomScrollView(
@@ -90,7 +98,7 @@ class ProfileScreen extends ConsumerWidget {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  '清华大学',
+                                  _buildHeaderSubtitle(profileIdentity),
                                   style: AppTypography.bodySmall.copyWith(
                                     color: Colors.white.withAlpha(180),
                                   ),
@@ -150,6 +158,17 @@ class ProfileScreen extends ConsumerWidget {
                   border: c.border,
                   children: [
                     _SettingsTile(
+                      icon: Icons.bookmark_outline_rounded,
+                      title: '收藏文件',
+                      subtitle: favoriteCount == 0
+                          ? '查看你收藏的文件'
+                          : '$favoriteCount 个收藏文件',
+                      textColor: c.text,
+                      subColor: c.subtitle,
+                      onTap: () => context.push(Routes.favoriteFiles),
+                    ),
+                    Divider(color: c.border, height: 0),
+                    _SettingsTile(
                       icon: Icons.folder_rounded,
                       title: '文件管理',
                       subtitle: '管理已下载的文件',
@@ -173,9 +192,23 @@ class ProfileScreen extends ConsumerWidget {
                     _SettingsTile(
                       icon: Icons.info_outlined,
                       title: '版本',
-                      subtitle: 'v0.1.0',
+                      subtitle: buildInfo?.shortLabel ?? '读取中...',
                       textColor: c.text,
                       subColor: c.subtitle,
+                    ),
+                    Divider(color: c.border, height: 0),
+                    _SettingsTile(
+                      icon: updateInfo?.hasUpdate == true
+                          ? Icons.system_update_rounded
+                          : Icons.update_rounded,
+                      title: '检查更新',
+                      subtitle: _buildUpdateSubtitle(updateInfo),
+                      textColor: c.text,
+                      subColor: c.subtitle,
+                      trailingColor: updateInfo?.hasUpdate == true
+                          ? AppColors.warning
+                          : null,
+                      onTap: () => _handleUpdateTap(context, ref),
                     ),
                     Divider(color: c.border, height: 0),
                     _SettingsTile(
@@ -187,9 +220,8 @@ class ProfileScreen extends ConsumerWidget {
                       onTap: () {
                         // Open GitHub repo
                         launchUrl(
-                          Uri.parse(
-                            'https://github.com/ShallowDream724/LearnY',
-                          ),
+                          Uri.parse(appRepositoryUrl),
+                          mode: LaunchMode.externalApplication,
                         );
                       },
                     ),
@@ -205,8 +237,6 @@ class ProfileScreen extends ConsumerWidget {
                   child: OutlinedButton(
                     onPressed: () async {
                       await ref.read(authProvider.notifier).logout();
-                      if (!context.mounted) return;
-                      context.go(Routes.login);
                     },
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.error,
@@ -238,6 +268,64 @@ class ProfileScreen extends ConsumerWidget {
       return String.fromCharCode(chars[0]);
     }
     return name.substring(0, name.length >= 2 ? 2 : 1).toUpperCase();
+  }
+
+  String _buildHeaderSubtitle(ProfileIdentity? identity) {
+    final department = identity?.department.trim() ?? '';
+    if (department.isEmpty) {
+      return '清华大学';
+    }
+    return '清华大学 · $department';
+  }
+
+  String _buildUpdateSubtitle(AppUpdateInfo? updateInfo) {
+    if (updateInfo == null) {
+      return '检查中...';
+    }
+    if (updateInfo.hasUpdate && updateInfo.displayLatestVersion != null) {
+      return '发现 ${updateInfo.displayLatestVersion}';
+    }
+    if (updateInfo.hasNoPublishedRelease) {
+      return '暂无发布';
+    }
+    if (updateInfo.isUnavailable) {
+      return 'GitHub 不可达';
+    }
+    return '当前 ${updateInfo.currentBuild.shortLabel}';
+  }
+
+  Future<void> _handleUpdateTap(BuildContext context, WidgetRef ref) async {
+    final info = await ref.refresh(appUpdateInfoProvider.future);
+    if (!context.mounted) {
+      return;
+    }
+
+    if (info.hasUpdate && info.releaseUrl != null) {
+      AppToast.showInfo(
+        context,
+        message: '发现新版本 ${info.displayLatestVersion ?? info.latestVersion}',
+        actionLabel: '打开',
+        onAction: () {
+          launchUrl(
+            Uri.parse(info.releaseUrl!),
+            mode: LaunchMode.externalApplication,
+          );
+        },
+      );
+      return;
+    }
+
+    if (info.isUnavailable) {
+      AppToast.showWarning(context, message: info.errorMessage ?? 'GitHub 不可达');
+      return;
+    }
+
+    if (info.hasNoPublishedRelease) {
+      AppToast.showInfo(context, message: 'GitHub 已连接，但当前还没有发布版本');
+      return;
+    }
+
+    AppToast.showSuccess(context, message: '已是最新版本');
   }
 }
 
@@ -293,6 +381,7 @@ class _SettingsTile extends StatelessWidget {
   final String subtitle;
   final Color textColor;
   final Color subColor;
+  final Color? trailingColor;
   final VoidCallback? onTap;
 
   const _SettingsTile({
@@ -301,6 +390,7 @@ class _SettingsTile extends StatelessWidget {
     required this.subtitle,
     required this.textColor,
     required this.subColor,
+    this.trailingColor,
     this.onTap,
   });
 
@@ -323,11 +413,17 @@ class _SettingsTile extends StatelessWidget {
             ),
             Text(
               subtitle,
-              style: AppTypography.bodySmall.copyWith(color: subColor),
+              style: AppTypography.bodySmall.copyWith(
+                color: trailingColor ?? subColor,
+              ),
             ),
             if (onTap != null) ...[
               const SizedBox(width: 6),
-              Icon(Icons.chevron_right_rounded, size: 18, color: subColor),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 18,
+                color: trailingColor ?? subColor,
+              ),
             ],
           ],
         ),

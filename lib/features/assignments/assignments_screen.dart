@@ -21,48 +21,12 @@ import '../../core/design/colors.dart';
 import '../../core/design/cooldown_toast.dart';
 import '../../core/design/shimmer.dart';
 import '../../core/design/typography.dart';
-import '../../core/providers/providers.dart';
-import '../../core/providers/sync_provider.dart';
 import '../../core/database/database.dart';
+import '../../core/providers/sync_models.dart';
 import '../../core/router/router.dart';
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  Providers
-// ═══════════════════════════════════════════════════════════════════════════
-
-enum HomeworkFilter { all, pending, submitted, graded }
-
-final _homeworkFilterProvider = StateProvider<HomeworkFilter>(
-  (ref) => HomeworkFilter.all,
-);
-
-final _homeworkListProvider = FutureProvider<List<Homework>>((ref) async {
-  final db = ref.watch(databaseProvider);
-  final semesterId = ref.watch(currentSemesterIdProvider);
-  if (semesterId == null) return [];
-
-  final courses = await db.getCoursesBySemester(semesterId);
-  final all = <Homework>[];
-  for (final c in courses) {
-    all.addAll(await db.getHomeworksByCourse(c.id));
-  }
-  return all;
-});
-
-final _courseNameMapProvider = FutureProvider<Map<String, String>>((ref) async {
-  final db = ref.watch(databaseProvider);
-  final semesterId = ref.watch(currentSemesterIdProvider);
-  if (semesterId == null) return {};
-
-  final courses = await db.getCoursesBySemester(semesterId);
-  return {for (final c in courses) c.id: c.name};
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  Time-based grouping
-// ═══════════════════════════════════════════════════════════════════════════
-
-enum _TimeGroup { thisWeek, nextWeek, later, done }
+import '../../core/sync/sync_actions.dart';
+import '../../core/utils/deadline_time.dart';
+import 'providers/assignments_providers.dart';
 
 class _GroupMeta {
   final String label;
@@ -70,65 +34,18 @@ class _GroupMeta {
   _GroupMeta(this.label, this.color);
 }
 
-_GroupMeta _groupMeta(_TimeGroup g) => switch (g) {
-  _TimeGroup.thisWeek => _GroupMeta('本周截止', const Color(0xFFFF3B30)),
-  _TimeGroup.nextWeek => _GroupMeta('下周截止', const Color(0xFFFF9500)),
-  _TimeGroup.later => _GroupMeta('更远', const Color(0xFF007AFF)),
-  _TimeGroup.done => _GroupMeta('已完成', const Color(0xFF34C759)),
+_GroupMeta _groupMeta(AssignmentTimelineGroup g) => switch (g) {
+  AssignmentTimelineGroup.thisWeek => _GroupMeta(
+    '本周截止',
+    const Color(0xFFFF3B30),
+  ),
+  AssignmentTimelineGroup.nextWeek => _GroupMeta(
+    '下周截止',
+    const Color(0xFFFF9500),
+  ),
+  AssignmentTimelineGroup.later => _GroupMeta('更远', const Color(0xFF007AFF)),
+  AssignmentTimelineGroup.done => _GroupMeta('已完成', const Color(0xFF34C759)),
 };
-
-_TimeGroup _classify(Homework hw) {
-  if (hw.submitted || hw.graded) return _TimeGroup.done;
-
-  final ms = int.tryParse(hw.deadline);
-  if (ms == null) return _TimeGroup.later;
-
-  final deadline = DateTime.fromMillisecondsSinceEpoch(ms);
-  final now = DateTime.now();
-  final remaining = deadline.difference(now);
-
-  if (remaining.isNegative) return _TimeGroup.thisWeek; // overdue → urgent
-
-  // Same ISO week?
-  final nowMonday = now.subtract(Duration(days: now.weekday - 1));
-  final dlMonday = deadline.subtract(Duration(days: deadline.weekday - 1));
-  final sameWeek =
-      nowMonday.year == dlMonday.year &&
-      nowMonday.month == dlMonday.month &&
-      nowMonday.day == dlMonday.day;
-
-  if (sameWeek) return _TimeGroup.thisWeek;
-
-  // Next week?
-  final nextMonday = nowMonday.add(const Duration(days: 7));
-  final nextSunday = nextMonday.add(const Duration(days: 6));
-  if (!deadline.isBefore(nextMonday) &&
-      deadline.isBefore(nextSunday.add(const Duration(days: 1)))) {
-    return _TimeGroup.nextWeek;
-  }
-
-  return _TimeGroup.later;
-}
-
-/// Groups and sorts homework into timeline sections.
-Map<_TimeGroup, List<Homework>> _groupHomeworks(List<Homework> homeworks) {
-  final groups = <_TimeGroup, List<Homework>>{};
-  for (final hw in homeworks) {
-    final g = _classify(hw);
-    (groups[g] ??= []).add(hw);
-  }
-
-  // Sort each group by deadline ascending (nearest first)
-  for (final list in groups.values) {
-    list.sort((a, b) {
-      final aMs = int.tryParse(a.deadline) ?? 0;
-      final bMs = int.tryParse(b.deadline) ?? 0;
-      return aMs - bMs;
-    });
-  }
-
-  return groups;
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Screen
@@ -140,20 +57,19 @@ class AssignmentsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.colors;
-    final filter = ref.watch(_homeworkFilterProvider);
-    final homeworkAsync = ref.watch(_homeworkListProvider);
-    final courseNameAsync = ref.watch(_courseNameMapProvider);
+    final filter = ref.watch(homeworkFilterProvider);
+    final homeworkAsync = ref.watch(assignmentHomeworksProvider);
+    final courseNameAsync = ref.watch(assignmentCourseNameMapProvider);
 
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: () async {
-          await ref.read(syncStateProvider.notifier).syncHomeworksOnly();
-          final ss = ref.read(syncStateProvider);
+          final ss =
+              (await ref.read(syncActionsProvider).refreshHomeworksOnly())
+                  .state;
           if (ss.status == SyncStatus.cooldown && context.mounted) {
             CooldownToast.show(context, seconds: ss.cooldownSeconds);
           }
-          ref.invalidate(_homeworkListProvider);
-          ref.invalidate(_courseNameMapProvider);
         },
         color: AppColors.primary,
         child: CustomScrollView(
@@ -170,34 +86,23 @@ class AssignmentsScreen extends ConsumerWidget {
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
               sliver: homeworkAsync.when(
+                skipLoadingOnReload: true,
+                skipLoadingOnRefresh: true,
                 loading: () => const SliverFillRemaining(child: ListSkeleton()),
                 error: (e, _) => _buildError(context),
                 data: (allHomeworks) {
                   final courseNames =
                       courseNameAsync.valueOrNull ?? <String, String>{};
-
-                  // Stats
-                  final stats = _computeStats(allHomeworks);
-
-                  // Filter
-                  final filtered = _applyFilter(allHomeworks, filter);
-
-                  // Group into timeline
-                  final groups = _groupHomeworks(filtered);
-
-                  // Ordered display
-                  const order = [
-                    _TimeGroup.thisWeek,
-                    _TimeGroup.nextWeek,
-                    _TimeGroup.later,
-                    _TimeGroup.done,
-                  ];
+                  final presentation = buildAssignmentsPresentation(
+                    homeworks: allHomeworks,
+                    filter: filter,
+                  );
 
                   return SliverList(
                     delegate: SliverChildListDelegate([
                       // Stats strip
                       _StatsStrip(
-                        stats: stats,
+                        stats: presentation.stats,
                       ).animate().fadeIn(duration: 300.ms),
                       const SizedBox(height: 16),
 
@@ -205,34 +110,31 @@ class AssignmentsScreen extends ConsumerWidget {
                       _FilterRow(
                         current: filter,
                         onChanged: (f) =>
-                            ref.read(_homeworkFilterProvider.notifier).state =
-                                f,
+                            ref.read(homeworkFilterProvider.notifier).state = f,
                       ),
                       const SizedBox(height: 20),
 
                       // Timeline groups
-                      if (filtered.isEmpty)
+                      if (presentation.isEmpty)
                         _buildEmpty(context)
                       else
-                        ...order
-                            .where((g) => groups.containsKey(g))
-                            .map(
-                              (g) => _TimelineSection(
-                                group: g,
-                                homeworks: groups[g]!,
-                                courseNames: courseNames,
-                                onTapItem: (hw) {
-                                  final name = courseNames[hw.courseId] ?? '';
-                                  context.push(
-                                    Routes.homeworkDetail(
-                                      homeworkId: hw.id,
-                                      courseId: hw.courseId,
-                                      courseName: name,
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
+                        ...presentation.sections.map(
+                          (section) => _TimelineSection(
+                            group: section.group,
+                            homeworks: section.homeworks,
+                            courseNames: courseNames,
+                            onTapItem: (hw) {
+                              final name = courseNames[hw.courseId] ?? '';
+                              context.push(
+                                Routes.homeworkDetail(
+                                  homeworkId: hw.id,
+                                  courseId: hw.courseId,
+                                  courseName: name,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
                     ]),
                   );
                 },
@@ -242,41 +144,6 @@ class AssignmentsScreen extends ConsumerWidget {
         ),
       ),
     );
-  }
-
-  // ── Helpers ──
-
-  _Stats _computeStats(List<Homework> all) {
-    int pending = 0, submitted = 0, graded = 0, overdue = 0;
-    final now = DateTime.now();
-    for (final hw in all) {
-      if (hw.graded) {
-        graded++;
-      } else if (hw.submitted) {
-        submitted++;
-      } else {
-        pending++;
-        final ms = int.tryParse(hw.deadline);
-        if (ms != null &&
-            DateTime.fromMillisecondsSinceEpoch(ms).isBefore(now)) {
-          overdue++;
-        }
-      }
-    }
-    return _Stats(pending, submitted, graded, overdue);
-  }
-
-  List<Homework> _applyFilter(List<Homework> all, HomeworkFilter f) {
-    return all
-        .where(
-          (hw) => switch (f) {
-            HomeworkFilter.pending => !hw.submitted && !hw.graded,
-            HomeworkFilter.submitted => hw.submitted && !hw.graded,
-            HomeworkFilter.graded => hw.graded,
-            HomeworkFilter.all => true,
-          },
-        )
-        .toList();
   }
 
   SliverFillRemaining _buildError(BuildContext context) {
@@ -324,20 +191,11 @@ class AssignmentsScreen extends ConsumerWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  Stats model
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _Stats {
-  final int pending, submitted, graded, overdue;
-  const _Stats(this.pending, this.submitted, this.graded, this.overdue);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
 //  Stats Strip — compact inline stats
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _StatsStrip extends StatelessWidget {
-  final _Stats stats;
+  final AssignmentStats stats;
 
   const _StatsStrip({required this.stats});
 
@@ -508,7 +366,7 @@ class _FilterRow extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _TimelineSection extends StatelessWidget {
-  final _TimeGroup group;
+  final AssignmentTimelineGroup group;
   final List<Homework> homeworks;
   final Map<String, String> courseNames;
   final void Function(Homework hw) onTapItem;
@@ -524,7 +382,7 @@ class _TimelineSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final meta = _groupMeta(group);
-    final isDone = group == _TimeGroup.done;
+    final isDone = group == AssignmentTimelineGroup.done;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 24),
@@ -759,11 +617,9 @@ class _HomeworkItem extends StatelessWidget {
   // ── Deadline formatting ──
 
   Color _deadlineColor() {
-    final ms = int.tryParse(hw.deadline);
-    if (ms == null) return const Color(0xFF007AFF);
-    final remaining = DateTime.fromMillisecondsSinceEpoch(
-      ms,
-    ).difference(DateTime.now());
+    final deadline = tryParseEpochMillisToLocal(hw.deadline);
+    if (deadline == null) return const Color(0xFF007AFF);
+    final remaining = deadline.difference(nowInShanghai());
     if (remaining.isNegative) return const Color(0xFFFF3B30);
     if (remaining.inHours < 24) return const Color(0xFFFF3B30);
     if (remaining.inHours < 72) return const Color(0xFFE8590C);
@@ -771,10 +627,9 @@ class _HomeworkItem extends StatelessWidget {
   }
 
   String _formatDeadline() {
-    final ms = int.tryParse(hw.deadline);
-    if (ms == null) return hw.deadline;
-    final d = DateTime.fromMillisecondsSinceEpoch(ms);
-    final now = DateTime.now();
+    final d = tryParseEpochMillisToLocal(hw.deadline);
+    if (d == null) return hw.deadline;
+    final now = nowInShanghai();
     final remaining = d.difference(now);
 
     if (remaining.isNegative) {
@@ -788,28 +643,7 @@ class _HomeworkItem extends StatelessWidget {
       return '还剩${remaining.inHours}h${remaining.inMinutes.remainder(60)}m';
     }
 
-    final timeStr =
-        '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
-    final dayDiff = remaining.inDays;
-
-    if (dayDiff == 0) return '今天 $timeStr';
-    if (dayDiff == 1) return '明天 $timeStr';
-    if (dayDiff == 2) return '后天 $timeStr';
-
-    const weekdays = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-    final nowMonday = now.subtract(Duration(days: now.weekday - 1));
-    final dMonday = d.subtract(Duration(days: d.weekday - 1));
-    final sameWeek =
-        nowMonday.year == dMonday.year &&
-        nowMonday.month == dMonday.month &&
-        nowMonday.day == dMonday.day;
-
-    if (dayDiff < 14) {
-      final prefix = sameWeek ? '本' : '下';
-      return '$prefix${weekdays[d.weekday]} $timeStr';
-    }
-
-    return '${d.month}/${d.day} $timeStr';
+    return formatRelativeDeadlineLabel(d, now: now);
   }
 }
 
@@ -846,9 +680,8 @@ class _StatusBadge extends StatelessWidget {
   (String, Color) _data() {
     if (hw.graded) return ('已批改', const Color(0xFF34C759));
     if (hw.submitted) return ('已提交', const Color(0xFF007AFF));
-    final ms = int.tryParse(hw.deadline);
-    if (ms != null &&
-        DateTime.fromMillisecondsSinceEpoch(ms).isBefore(DateTime.now())) {
+    final deadline = tryParseEpochMillisToLocal(hw.deadline);
+    if (deadline != null && deadline.isBefore(nowInShanghai())) {
       return ('已超期', const Color(0xFFFF3B30));
     }
     return ('待提交', const Color(0xFFFF9500));

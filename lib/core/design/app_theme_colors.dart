@@ -28,11 +28,13 @@ class AppThemeColors {
   Color get border => isDark ? AppColors.darkBorder : AppColors.lightBorder;
 
   // Text
-  Color get text => isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
+  Color get text =>
+      isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
   Color get subtitle =>
       isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
   Color get tertiary =>
       isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
+  Color get infoAccent => isDark ? AppColors.info : const Color(0xFF007AFF);
 }
 
 /// Convenience extension for quick access to semantic colors.

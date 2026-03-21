@@ -7,21 +7,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/design/app_theme_colors.dart';
 import '../../../core/design/colors.dart';
-import '../../../core/database/database.dart' as db;
+import '../../../core/design/file_type_utils.dart';
+import '../../../core/files/file_asset_runtime.dart';
+import '../../../core/files/file_models.dart';
 import '../../../core/services/file_download_service.dart';
-import '../file_detail_screen.dart' show fileIcon, fileColor;
 
 class FileCard extends ConsumerWidget {
-  final db.CourseFile file;
-  final String courseName;
+  final FileDetailItem item;
   final bool hideCourseName;
+  final bool isFavorite;
+  final bool forceDownloaded;
   final VoidCallback? onTap;
 
   const FileCard({
     super.key,
-    required this.file,
-    required this.courseName,
+    required this.item,
     this.hideCourseName = false,
+    this.isFavorite = false,
+    this.forceDownloaded = false,
     this.onTap,
   });
 
@@ -29,17 +32,15 @@ class FileCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.colors;
 
-    final ext = _extractExt(file.title, file.fileType);
-    final color = fileColor(ext);
+    final ext = FileTypeUtils.extractExt(item.title, item.fileType);
+    final color = FileTypeUtils.color(ext);
 
-    // Download state
     final downloadStates = ref.watch(fileDownloadProvider);
-    final downloadState = downloadStates[file.id];
-    final isDownloaded =
-        downloadState?.status == DownloadStatus.downloaded ||
-            file.localDownloadState == 'downloaded';
-    final isDownloading =
-        downloadState?.status == DownloadStatus.downloading;
+    final runtime = ref
+        .read(fileAssetRuntimeResolverProvider)
+        .resolveDetailItem(item, downloadStates);
+    final isDownloaded = forceDownloaded || runtime.isDownloaded;
+    final isDownloading = runtime.isDownloading;
 
     return GestureDetector(
       onTap: onTap,
@@ -63,7 +64,11 @@ class FileCard extends ConsumerWidget {
               child: Stack(
                 children: [
                   Center(
-                    child: Icon(fileIcon(ext), color: color, size: 21),
+                    child: Icon(
+                      FileTypeUtils.icon(ext),
+                      color: color,
+                      size: 21,
+                    ),
                   ),
                   // Download status indicator
                   if (isDownloaded)
@@ -78,8 +83,11 @@ class FileCard extends ConsumerWidget {
                           shape: BoxShape.circle,
                           border: Border.all(color: c.surface, width: 1.5),
                         ),
-                        child: const Icon(Icons.check,
-                            size: 7, color: Colors.white),
+                        child: const Icon(
+                          Icons.check,
+                          size: 7,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   if (isDownloading)
@@ -91,7 +99,7 @@ class FileCard extends ConsumerWidget {
                         height: 12,
                         child: CircularProgressIndicator(
                           strokeWidth: 1.5,
-                          value: downloadState?.progress,
+                          value: runtime.progress,
                           color: color,
                         ),
                       ),
@@ -111,7 +119,7 @@ class FileCard extends ConsumerWidget {
                     Padding(
                       padding: const EdgeInsets.only(bottom: 2),
                       child: Text(
-                        courseName,
+                        item.courseName,
                         style: TextStyle(
                           fontSize: 11,
                           color: c.tertiary,
@@ -127,7 +135,7 @@ class FileCard extends ConsumerWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          file.title,
+                          item.title,
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
@@ -137,11 +145,13 @@ class FileCard extends ConsumerWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      if (file.isNew)
+                      if (item.isNew)
                         Container(
                           margin: const EdgeInsets.only(left: 6),
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 5, vertical: 1),
+                            horizontal: 5,
+                            vertical: 1,
+                          ),
                           decoration: BoxDecoration(
                             color: AppColors.info.withAlpha(20),
                             borderRadius: BorderRadius.circular(4),
@@ -155,11 +165,23 @@ class FileCard extends ConsumerWidget {
                             ),
                           ),
                         ),
-                      if (file.markedImportant)
+                      if (item.markedImportant)
                         const Padding(
                           padding: EdgeInsets.only(left: 4),
-                          child: Icon(Icons.star_rounded,
-                              size: 14, color: AppColors.warning),
+                          child: Icon(
+                            Icons.star_rounded,
+                            size: 14,
+                            color: AppColors.warning,
+                          ),
+                        ),
+                      if (isFavorite)
+                        const Padding(
+                          padding: EdgeInsets.only(left: 4),
+                          child: Icon(
+                            Icons.bookmark_rounded,
+                            size: 14,
+                            color: AppColors.warning,
+                          ),
                         ),
                     ],
                   ),
@@ -178,14 +200,12 @@ class FileCard extends ConsumerWidget {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        file.size.isNotEmpty
-                            ? file.size
-                            : '${file.rawSize} B',
+                        item.size.isNotEmpty ? item.size : '${item.rawSize} B',
                         style: TextStyle(fontSize: 11, color: c.tertiary),
                       ),
                       const Spacer(),
                       Text(
-                        _formatTimeAgo(file.uploadTime),
+                        _formatTimeAgo(item.uploadTime),
                         style: TextStyle(fontSize: 11, color: c.tertiary),
                       ),
                     ],
@@ -197,22 +217,16 @@ class FileCard extends ConsumerWidget {
             // Chevron
             Padding(
               padding: const EdgeInsets.only(left: 6),
-              child: Icon(Icons.chevron_right_rounded,
-                  size: 18, color: c.tertiary),
+              child: Icon(
+                Icons.chevron_right_rounded,
+                size: 18,
+                color: c.tertiary,
+              ),
             ),
           ],
         ),
       ),
     );
-  }
-
-  static String _extractExt(String title, String fileType) {
-    if (fileType.isNotEmpty) return fileType.toLowerCase();
-    final dot = title.lastIndexOf('.');
-    if (dot != -1 && dot < title.length - 1) {
-      return title.substring(dot + 1).toLowerCase();
-    }
-    return '';
   }
 
   static String _formatTimeAgo(String raw) {

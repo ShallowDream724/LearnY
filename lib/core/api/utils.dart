@@ -175,16 +175,60 @@ const String jsonpExtractorName = 'thu_learn_lib_jsonp_extractor';
 /// Expected format: `thu_learn_lib_jsonp_extractor([...])`.
 /// The original JS uses `eval()` — we do simple string extraction + JSON parse.
 dynamic extractJSONPResult(String jsonp) {
-  if (!jsonp.startsWith(jsonpExtractorName)) {
+  final raw = jsonp.trim().replaceFirst('\uFEFF', '');
+  if (raw.isEmpty) {
     throw const ApiError(reason: FailReason.invalidResponse);
   }
-  // Extract the content between the first '(' and the last ')'
-  final start = jsonp.indexOf('(');
-  final end = jsonp.lastIndexOf(')');
+
+  if (raw.startsWith('[') || raw.startsWith('{')) {
+    return jsonDecode(raw);
+  }
+
+  final callbackIndex = raw.indexOf(jsonpExtractorName);
+  if (callbackIndex == -1) {
+    throw const ApiError(reason: FailReason.invalidResponse);
+  }
+
+  final arrayPayload = _extractWrappedJsonPayload(
+    raw,
+    fromIndex: callbackIndex,
+    startToken: '[',
+    endToken: ']',
+  );
+  if (arrayPayload != null) {
+    return jsonDecode(arrayPayload);
+  }
+
+  final objectPayload = _extractWrappedJsonPayload(
+    raw,
+    fromIndex: callbackIndex,
+    startToken: '{',
+    endToken: '}',
+  );
+  if (objectPayload != null) {
+    return jsonDecode(objectPayload);
+  }
+
+  final start = raw.indexOf('(', callbackIndex + jsonpExtractorName.length);
+  final end = raw.lastIndexOf(')');
   if (start == -1 || end == -1 || start >= end) {
     throw const ApiError(reason: FailReason.invalidResponse);
   }
-  return jsonDecode(jsonp.substring(start + 1, end));
+  return jsonDecode(raw.substring(start + 1, end).trim());
+}
+
+String? _extractWrappedJsonPayload(
+  String raw, {
+  required int fromIndex,
+  required String startToken,
+  required String endToken,
+}) {
+  final start = raw.indexOf(startToken, fromIndex);
+  final end = raw.lastIndexOf(endToken);
+  if (start == -1 || end == -1 || start >= end) {
+    return null;
+  }
+  return raw.substring(start, end + 1).trim();
 }
 
 // ---------------------------------------------------------------------------

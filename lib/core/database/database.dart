@@ -4,7 +4,19 @@
 /// Run `dart run build_runner build` to generate `database.g.dart`.
 import 'package:drift/drift.dart';
 
+import 'app_state_keys.dart';
+
 part 'database.g.dart';
+part 'daos/app_state_dao.dart';
+part 'daos/cached_asset_dao.dart';
+part 'daos/course_dao.dart';
+part 'daos/file_dao.dart';
+part 'daos/file_bookmark_dao.dart';
+part 'daos/homework_dao.dart';
+part 'daos/maintenance_dao.dart';
+part 'daos/notification_dao.dart';
+part 'daos/search_dao.dart';
+part 'daos/semester_dao.dart';
 
 // ---------------------------------------------------------------------------
 // Tables
@@ -35,7 +47,8 @@ class Courses extends Table {
   IntColumn get courseIndex => integer().withDefault(const Constant(0))();
   TextColumn get courseType => text()(); // student, teacher
   TextColumn get semesterId => text()();
-  TextColumn get timeAndLocationJson => text().withDefault(const Constant('[]'))();
+  TextColumn get timeAndLocationJson =>
+      text().withDefault(const Constant('[]'))();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
   DateTimeColumn get lastSynced => dateTime().nullable()();
 
@@ -54,7 +67,8 @@ class Notifications extends Table {
   TextColumn get expireTime => text().nullable()();
   BoolColumn get hasRead => boolean().withDefault(const Constant(false))();
   BoolColumn get hasReadLocal => boolean().withDefault(const Constant(false))();
-  BoolColumn get markedImportant => boolean().withDefault(const Constant(false))();
+  BoolColumn get markedImportant =>
+      boolean().withDefault(const Constant(false))();
   BoolColumn get isFavorite => boolean().withDefault(const Constant(false))();
   TextColumn get comment => text().nullable()();
   TextColumn get attachmentJson => text().nullable()();
@@ -77,7 +91,8 @@ class CourseFiles extends Table {
   TextColumn get downloadUrl => text()();
   TextColumn get previewUrl => text()();
   BoolColumn get isNew => boolean().withDefault(const Constant(false))();
-  BoolColumn get markedImportant => boolean().withDefault(const Constant(false))();
+  BoolColumn get markedImportant =>
+      boolean().withDefault(const Constant(false))();
   IntColumn get visitCount => integer().withDefault(const Constant(0))();
   IntColumn get downloadCount => integer().withDefault(const Constant(0))();
   TextColumn get categoryId => text().nullable()();
@@ -92,6 +107,34 @@ class CourseFiles extends Table {
 
   @override
   Set<Column> get primaryKey => {id};
+}
+
+/// Persistent cache registry for both course files and non-course attachments.
+class CachedAssets extends Table {
+  TextColumn get assetKey => text()();
+  TextColumn get courseId => text()();
+  TextColumn get title => text()();
+  TextColumn get fileType => text().withDefault(const Constant(''))();
+  TextColumn get localPath => text()();
+  IntColumn get fileSizeBytes => integer().withDefault(const Constant(0))();
+  TextColumn get lastAccessedAt => text().nullable()();
+  TextColumn get updatedAt => text()();
+  TextColumn get persistedFileId => text().nullable()();
+  TextColumn get sourceKind => text().withDefault(const Constant('generic'))();
+  TextColumn get routeDataJson => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {assetKey};
+}
+
+/// Locally bookmarked downloadable files.
+class FileBookmarks extends Table {
+  TextColumn get assetKey => text()();
+  TextColumn get courseName => text().withDefault(const Constant(''))();
+  TextColumn get createdAt => text()();
+
+  @override
+  Set<Column> get primaryKey => {assetKey};
 }
 
 /// Cached homework assignments.
@@ -111,7 +154,8 @@ class Homeworks extends Table {
   TextColumn get graderName => text().nullable()();
   TextColumn get gradeContent => text().nullable()();
   TextColumn get gradeTime => text().nullable()();
-  BoolColumn get isLateSubmission => boolean().withDefault(const Constant(false))();
+  BoolColumn get isLateSubmission =>
+      boolean().withDefault(const Constant(false))();
   IntColumn get completionType => integer().nullable()();
   IntColumn get submissionType => integer().nullable()();
   BoolColumn get isFavorite => boolean().withDefault(const Constant(false))();
@@ -140,183 +184,74 @@ class AppState extends Table {
 // Database
 // ---------------------------------------------------------------------------
 
-@DriftDatabase(tables: [
-  Semesters,
-  Courses,
-  Notifications,
-  CourseFiles,
-  Homeworks,
-  AppState,
-])
+@DriftDatabase(
+  tables: [
+    Semesters,
+    Courses,
+    Notifications,
+    CourseFiles,
+    CachedAssets,
+    FileBookmarks,
+    Homeworks,
+    AppState,
+  ],
+)
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 5;
 
-  // ─── App State DAO ───
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onCreate: (m) async {
+      await m.createAll();
+    },
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        await m.createTable(cachedAssets);
+        await customStatement('''
+          INSERT OR REPLACE INTO cached_assets (
+            asset_key,
+            course_id,
+            title,
+            file_type,
+            local_path,
+            file_size_bytes,
+            updated_at,
+            persisted_file_id,
+            source_kind
+          )
+          SELECT
+            id,
+            course_id,
+            title,
+            file_type,
+            local_file_path,
+            raw_size,
+            CURRENT_TIMESTAMP,
+            id,
+            'courseFile'
+          FROM course_files
+          WHERE local_download_state = 'downloaded'
+            AND local_file_path IS NOT NULL
+        ''');
+      }
+      if (from < 3 &&
+          !await _tableHasColumn('cached_assets', 'route_data_json')) {
+        await m.addColumn(cachedAssets, cachedAssets.routeDataJson);
+      }
+      if (from < 4) {
+        await m.createTable(fileBookmarks);
+      }
+      if (from < 5 && !await _tableHasColumn('file_bookmarks', 'course_name')) {
+        await m.addColumn(fileBookmarks, fileBookmarks.courseName);
+      }
+    },
+  );
 
-  Future<String?> getState(String key) async {
-    final row = await (select(appState)..where((t) => t.key.equals(key)))
-        .getSingleOrNull();
-    return row?.value;
+  Future<bool> _tableHasColumn(String tableName, String columnName) async {
+    final rows = await customSelect('PRAGMA table_info($tableName)').get();
+    return rows.any((row) => row.data['name'] == columnName);
   }
-
-  Future<void> setState(String key, String value) async {
-    await into(appState).insertOnConflictUpdate(
-      AppStateCompanion(
-        key: Value(key),
-        value: Value(value),
-      ),
-    );
-  }
-
-  // ─── Semester DAO ───
-
-  Future<List<Semester>> getAllSemesters() => select(semesters).get();
-
-  Future<void> upsertSemester(SemestersCompanion entry) =>
-      into(semesters).insertOnConflictUpdate(entry);
-
-  // ─── Course DAO ───
-
-  Future<List<Course>> getCoursesBySemester(String semesterId) =>
-      (select(courses)..where((t) => t.semesterId.equals(semesterId))).get();
-
-  Future<void> upsertCourse(CoursesCompanion entry) =>
-      into(courses).insertOnConflictUpdate(entry);
-
-  // ─── Notification DAO ───
-
-  Future<List<Notification>> getNotificationsByCourse(String courseId) =>
-      (select(notifications)..where((t) => t.courseId.equals(courseId))).get();
-
-  Future<List<Notification>> getUnreadNotifications() =>
-      (select(notifications)..where((t) => t.hasRead.equals(false) & t.hasReadLocal.equals(false))).get();
-
-  Future<void> upsertNotification(NotificationsCompanion entry) =>
-      into(notifications).insertOnConflictUpdate(entry);
-
-  Future<void> markNotificationReadLocal(String id) =>
-      (update(notifications)..where((t) => t.id.equals(id)))
-          .write(const NotificationsCompanion(hasReadLocal: Value(true)));
-
-  // ─── File DAO ───
-
-  Future<List<CourseFile>> getFilesByCourse(String courseId) =>
-      (select(courseFiles)..where((t) => t.courseId.equals(courseId))).get();
-
-  Future<void> upsertFile(CourseFilesCompanion entry) =>
-      into(courseFiles).insertOnConflictUpdate(entry);
-
-  Future<void> updateFileDownloadState(
-    String id,
-    String state,
-    String? localPath,
-  ) =>
-      (update(courseFiles)..where((t) => t.id.equals(id))).write(
-        CourseFilesCompanion(
-          localDownloadState: Value(state),
-          localFilePath: Value(localPath),
-        ),
-      );
-
-  // ─── Homework DAO ───
-
-  Future<List<Homework>> getHomeworksByCourse(String courseId) =>
-      (select(homeworks)..where((t) => t.courseId.equals(courseId))).get();
-
-  Future<List<Homework>> getUpcomingHomeworks() =>
-      (select(homeworks)
-            ..where((t) => t.submitted.equals(false))
-            ..orderBy([(t) => OrderingTerm.asc(t.deadline)]))
-          .get();
-
-  Future<void> upsertHomework(HomeworksCompanion entry) =>
-      into(homeworks).insertOnConflictUpdate(entry);
-
-  // ─── Bulk operations ───
-
-  Future<void> clearCourseDependentData(String courseId) async {
-    await (delete(notifications)..where((t) => t.courseId.equals(courseId))).go();
-    await (delete(courseFiles)..where((t) => t.courseId.equals(courseId))).go();
-    await (delete(homeworks)..where((t) => t.courseId.equals(courseId))).go();
-  }
-
-  Future<void> clearAllData() async {
-    await delete(semesters).go();
-    await delete(courses).go();
-    await delete(notifications).go();
-    await delete(courseFiles).go();
-    await delete(homeworks).go();
-    await delete(appState).go();
-  }
-
-  // ─── Reactive watch queries (Drift Streams) ───
-  // These emit new data automatically when the underlying table changes.
-  // Used with StreamProvider for real-time UI updates.
-
-  Stream<List<Notification>> watchNotificationsByCourse(String courseId) =>
-      (select(notifications)..where((t) => t.courseId.equals(courseId))).watch();
-
-  Stream<List<Notification>> watchUnreadNotifications() =>
-      (select(notifications)..where((t) => t.hasRead.equals(false) & t.hasReadLocal.equals(false))).watch();
-
-  Stream<List<CourseFile>> watchFilesByCourse(String courseId) =>
-      (select(courseFiles)..where((t) => t.courseId.equals(courseId))).watch();
-
-  Stream<List<Homework>> watchHomeworksByCourse(String courseId) =>
-      (select(homeworks)..where((t) => t.courseId.equals(courseId))).watch();
-
-  Stream<List<Course>> watchCoursesBySemester(String semesterId) =>
-      (select(courses)..where((t) => t.semesterId.equals(semesterId))).watch();
-
-  Stream<List<Homework>> watchUpcomingHomeworks() =>
-      (select(homeworks)
-            ..where((t) => t.submitted.equals(false))
-            ..orderBy([(t) => OrderingTerm.asc(t.deadline)]))
-          .watch();
-
-  // ─── Global File Queries ───
-
-  Stream<List<CourseFile>> watchAllFiles() =>
-      (select(courseFiles)
-            ..orderBy([(t) => OrderingTerm.desc(t.uploadTime)]))
-          .watch();
-
-  Future<List<CourseFile>> getAllFiles() =>
-      (select(courseFiles)
-            ..orderBy([(t) => OrderingTerm.desc(t.uploadTime)]))
-          .get();
-
-  Future<CourseFile?> getFileById(String id) =>
-      (select(courseFiles)..where((t) => t.id.equals(id))).getSingleOrNull();
-
-  Future<void> toggleFileFavorite(String id, bool value) =>
-      (update(courseFiles)..where((t) => t.id.equals(id)))
-          .write(CourseFilesCompanion(isFavorite: Value(value)));
-
-  /// Mark a file as read (sets isNew to false).
-  Future<void> markFileRead(String id) =>
-      (update(courseFiles)..where((t) => t.id.equals(id)))
-          .write(const CourseFilesCompanion(isNew: Value(false)));
-
-  /// Mark a file as unread (sets isNew back to true).
-  Future<void> markFileUnread(String id) =>
-      (update(courseFiles)..where((t) => t.id.equals(id)))
-          .write(const CourseFilesCompanion(isNew: Value(true)));
-
-  /// Watch unread (new) files across all courses.
-  Stream<List<CourseFile>> watchUnreadFiles() =>
-      (select(courseFiles)
-            ..where((t) => t.isNew.equals(true))
-            ..orderBy([(t) => OrderingTerm.desc(t.uploadTime)]))
-          .watch();
-
-  /// Get unread (new) files across all courses.
-  Future<List<CourseFile>> getUnreadFiles() =>
-      (select(courseFiles)
-            ..where((t) => t.isNew.equals(true))
-            ..orderBy([(t) => OrderingTerm.desc(t.uploadTime)]))
-          .get();
 }

@@ -18,8 +18,8 @@ import '../../core/design/app_theme_colors.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/typography.dart';
 import '../../core/database/database.dart' as db;
-import '../../core/providers/providers.dart';
-import '../../core/providers/sync_provider.dart';
+import 'submission/homework_submission_controller.dart';
+import 'submission/homework_submission_models.dart';
 
 class AssignmentSubmissionScreen extends ConsumerStatefulWidget {
   final db.Homework homework;
@@ -40,60 +40,59 @@ class _AssignmentSubmissionScreenState
     extends ConsumerState<AssignmentSubmissionScreen> {
   final _contentController = TextEditingController();
   final _contentFocus = FocusNode();
-
-  PlatformFile? _attachment;
-  bool _removeExistingAttachment = false;
-
-  bool _submitting = false;
-  String? _errorMessage;
+  late final HomeworkSubmissionSeed _submissionSeed;
 
   @override
   void initState() {
     super.initState();
-    // Pre-fill with existing submission content if resubmitting
-    if (widget.homework.submittedContent != null &&
-        widget.homework.submittedContent!.isNotEmpty) {
-      _contentController.text = _stripHtml(widget.homework.submittedContent!);
-    }
+    _submissionSeed = HomeworkSubmissionSeed.fromHomework(widget.homework);
+    _contentController.text = _submissionSeed.initialContent;
+    _contentController.addListener(_handleContentChanged);
   }
 
   @override
   void dispose() {
+    _contentController.removeListener(_handleContentChanged);
     _contentController.dispose();
     _contentFocus.dispose();
     super.dispose();
   }
 
-  bool get _hasContent =>
-      _contentController.text.trim().isNotEmpty ||
-      _attachment != null ||
-      _removeExistingAttachment;
+  AutoDisposeStateNotifierProvider<
+    HomeworkSubmissionController,
+    HomeworkSubmissionState
+  >
+  get _submissionProvider =>
+      homeworkSubmissionControllerProvider(_submissionSeed);
 
-  bool get _hasExistingAttachment =>
-      widget.homework.submittedAttachmentJson != null &&
-      widget.homework.submittedAttachmentJson!.isNotEmpty &&
-      !_removeExistingAttachment;
+  void _handleContentChanged() {
+    ref
+        .read(_submissionProvider.notifier)
+        .updateContent(_contentController.text);
+  }
 
   Future<void> _pickFile() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.any,
       allowMultiple: false,
     );
-    if (result != null && result.files.isNotEmpty) {
-      setState(() {
-        _attachment = result.files.first;
-        _removeExistingAttachment = true; // replace existing
-      });
+    if (result == null || result.files.isEmpty) {
+      return;
     }
-  }
-
-  void _removeAttachment() {
-    setState(() {
-      _attachment = null;
-      if (widget.homework.submittedAttachmentJson != null) {
-        _removeExistingAttachment = true;
-      }
-    });
+    final file = result.files.first;
+    final path = file.path;
+    if (path == null || path.isEmpty) {
+      return;
+    }
+    ref
+        .read(_submissionProvider.notifier)
+        .selectAttachment(
+          HomeworkSubmissionAttachment(
+            path: path,
+            name: file.name,
+            sizeBytes: file.size,
+          ),
+        );
   }
 
   Future<void> _submit() async {
@@ -104,44 +103,15 @@ class _AssignmentSubmissionScreenState
       builder: (ctx) => _ConfirmSheet(isResubmit: widget.homework.submitted),
     );
     if (confirmed != true || !mounted) return;
+    final success = await ref.read(_submissionProvider.notifier).submit();
+    if (!mounted || !success) return;
 
-    setState(() {
-      _submitting = true;
-      _errorMessage = null;
-    });
-
-    try {
-      final api = ref.read(apiClientProvider);
-      await api.submitHomework(
-        widget.homework.id,
-        content: _contentController.text.trim(),
-        attachmentPath: _attachment?.path,
-        attachmentName: _attachment?.name,
-        removeAttachment: _removeExistingAttachment && _attachment == null,
-      );
-
-      // Sync homework data to reflect new submission
-      ref.read(syncStateProvider.notifier).syncHomeworksOnly();
-
-      if (!mounted) return;
-
-      // Haptic feedback
-      HapticFeedback.mediumImpact();
-
-      // Show success and dismiss
-      await _showSuccess();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _submitting = false;
-        _errorMessage = '提交失败: $e';
-      });
-    }
+    HapticFeedback.mediumImpact();
+    await _showSuccess();
   }
 
   Future<void> _showSuccess() async {
     // Brief success overlay, then pop
-    setState(() => _submitting = false);
     await showDialog(
       context: context,
       barrierDismissible: false,
@@ -153,6 +123,8 @@ class _AssignmentSubmissionScreenState
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final submissionState = ref.watch(_submissionProvider);
+    final attachment = submissionState.attachment;
 
     return Scaffold(
       backgroundColor: c.bg,
@@ -171,7 +143,7 @@ class _AssignmentSubmissionScreenState
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: FilledButton(
-              onPressed: _submitting ? null : _submit,
+              onPressed: submissionState.isSubmitting ? null : _submit,
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 disabledBackgroundColor: AppColors.primary.withAlpha(100),
@@ -184,7 +156,7 @@ class _AssignmentSubmissionScreenState
                 ),
               ),
               child: Text(
-                _submitting ? '提交中…' : '提交',
+                submissionState.isSubmitting ? '提交中…' : '提交',
                 style: AppTypography.labelMedium.copyWith(
                   color: Colors.white,
                   fontWeight: FontWeight.w600,
@@ -288,14 +260,13 @@ class _AssignmentSubmissionScreenState
                             border: InputBorder.none,
                             contentPadding: const EdgeInsets.all(16),
                           ),
-                          onChanged: (_) => setState(() {}),
                         ),
                         // Character count
                         Container(
                           padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
                           alignment: Alignment.centerRight,
                           child: Text(
-                            '${_contentController.text.length} 字',
+                            '${submissionState.characterCount} 字',
                             style: AppTypography.bodySmall.copyWith(
                               color: c.tertiary,
                               fontSize: 11,
@@ -317,19 +288,22 @@ class _AssignmentSubmissionScreenState
                   ),
                   const SizedBox(height: 8),
 
-                  if (_attachment != null)
+                  if (attachment != null)
                     _FileCard(
-                          name: _attachment!.name,
-                          size: _attachment!.size,
-                          onRemove: _removeAttachment,
+                          name: attachment.name,
+                          size: attachment.sizeBytes,
+                          onRemove: () => ref
+                              .read(_submissionProvider.notifier)
+                              .removeAttachment(),
                         )
                         .animate()
                         .fadeIn(duration: 200.ms)
                         .slideY(begin: 0.05, end: 0)
-                  else if (_hasExistingAttachment)
+                  else if (submissionState.hasExistingAttachment)
                     _ExistingAttachmentCard(
-                      onRemove: () =>
-                          setState(() => _removeExistingAttachment = true),
+                      onRemove: () => ref
+                          .read(_submissionProvider.notifier)
+                          .removeAttachment(),
                     ).animate().fadeIn(duration: 200.ms)
                   else
                     _AddFileButton(
@@ -337,7 +311,7 @@ class _AssignmentSubmissionScreenState
                     ).animate(delay: 150.ms).fadeIn(duration: 200.ms),
 
                   // Error message
-                  if (_errorMessage != null) ...[
+                  if (submissionState.errorMessage != null) ...[
                     const SizedBox(height: 16),
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -358,7 +332,7 @@ class _AssignmentSubmissionScreenState
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              _errorMessage!,
+                              submissionState.errorMessage!,
                               style: AppTypography.bodySmall.copyWith(
                                 color: AppColors.error,
                               ),
@@ -374,7 +348,7 @@ class _AssignmentSubmissionScreenState
           ),
 
           // ── Submitting overlay ──
-          if (_submitting)
+          if (submissionState.isSubmitting)
             Container(
               color: Colors.black.withAlpha(80),
               child: Center(
@@ -417,9 +391,8 @@ class _AssignmentSubmissionScreenState
   }
 
   void _confirmDiscard() {
-    if (!_hasContent ||
-        _contentController.text.trim() ==
-            _stripHtml(widget.homework.submittedContent ?? '')) {
+    final submissionState = ref.read(_submissionProvider);
+    if (!submissionState.hasUnsavedChanges) {
       Navigator.of(context).pop();
       return;
     }
@@ -509,17 +482,6 @@ class _AssignmentSubmissionScreenState
         );
       },
     );
-  }
-
-  String _stripHtml(String html) {
-    return html
-        .replaceAll(RegExp(r'<[^>]*>'), '')
-        .replaceAll('&nbsp;', ' ')
-        .replaceAll('&amp;', '&')
-        .replaceAll('&lt;', '<')
-        .replaceAll('&gt;', '>')
-        .replaceAll('&quot;', '"')
-        .trim();
   }
 }
 

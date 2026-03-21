@@ -3150,6 +3150,959 @@ class CourseFilesCompanion extends UpdateCompanion<CourseFile> {
   }
 }
 
+class $CachedAssetsTable extends CachedAssets
+    with TableInfo<$CachedAssetsTable, CachedAsset> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CachedAssetsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _assetKeyMeta = const VerificationMeta(
+    'assetKey',
+  );
+  @override
+  late final GeneratedColumn<String> assetKey = GeneratedColumn<String>(
+    'asset_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _courseIdMeta = const VerificationMeta(
+    'courseId',
+  );
+  @override
+  late final GeneratedColumn<String> courseId = GeneratedColumn<String>(
+    'course_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _fileTypeMeta = const VerificationMeta(
+    'fileType',
+  );
+  @override
+  late final GeneratedColumn<String> fileType = GeneratedColumn<String>(
+    'file_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _localPathMeta = const VerificationMeta(
+    'localPath',
+  );
+  @override
+  late final GeneratedColumn<String> localPath = GeneratedColumn<String>(
+    'local_path',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _fileSizeBytesMeta = const VerificationMeta(
+    'fileSizeBytes',
+  );
+  @override
+  late final GeneratedColumn<int> fileSizeBytes = GeneratedColumn<int>(
+    'file_size_bytes',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _lastAccessedAtMeta = const VerificationMeta(
+    'lastAccessedAt',
+  );
+  @override
+  late final GeneratedColumn<String> lastAccessedAt = GeneratedColumn<String>(
+    'last_accessed_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<String> updatedAt = GeneratedColumn<String>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _persistedFileIdMeta = const VerificationMeta(
+    'persistedFileId',
+  );
+  @override
+  late final GeneratedColumn<String> persistedFileId = GeneratedColumn<String>(
+    'persisted_file_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sourceKindMeta = const VerificationMeta(
+    'sourceKind',
+  );
+  @override
+  late final GeneratedColumn<String> sourceKind = GeneratedColumn<String>(
+    'source_kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('generic'),
+  );
+  static const VerificationMeta _routeDataJsonMeta = const VerificationMeta(
+    'routeDataJson',
+  );
+  @override
+  late final GeneratedColumn<String> routeDataJson = GeneratedColumn<String>(
+    'route_data_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    assetKey,
+    courseId,
+    title,
+    fileType,
+    localPath,
+    fileSizeBytes,
+    lastAccessedAt,
+    updatedAt,
+    persistedFileId,
+    sourceKind,
+    routeDataJson,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'cached_assets';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CachedAsset> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('asset_key')) {
+      context.handle(
+        _assetKeyMeta,
+        assetKey.isAcceptableOrUnknown(data['asset_key']!, _assetKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_assetKeyMeta);
+    }
+    if (data.containsKey('course_id')) {
+      context.handle(
+        _courseIdMeta,
+        courseId.isAcceptableOrUnknown(data['course_id']!, _courseIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_courseIdMeta);
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_titleMeta);
+    }
+    if (data.containsKey('file_type')) {
+      context.handle(
+        _fileTypeMeta,
+        fileType.isAcceptableOrUnknown(data['file_type']!, _fileTypeMeta),
+      );
+    }
+    if (data.containsKey('local_path')) {
+      context.handle(
+        _localPathMeta,
+        localPath.isAcceptableOrUnknown(data['local_path']!, _localPathMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_localPathMeta);
+    }
+    if (data.containsKey('file_size_bytes')) {
+      context.handle(
+        _fileSizeBytesMeta,
+        fileSizeBytes.isAcceptableOrUnknown(
+          data['file_size_bytes']!,
+          _fileSizeBytesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_accessed_at')) {
+      context.handle(
+        _lastAccessedAtMeta,
+        lastAccessedAt.isAcceptableOrUnknown(
+          data['last_accessed_at']!,
+          _lastAccessedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('persisted_file_id')) {
+      context.handle(
+        _persistedFileIdMeta,
+        persistedFileId.isAcceptableOrUnknown(
+          data['persisted_file_id']!,
+          _persistedFileIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('source_kind')) {
+      context.handle(
+        _sourceKindMeta,
+        sourceKind.isAcceptableOrUnknown(data['source_kind']!, _sourceKindMeta),
+      );
+    }
+    if (data.containsKey('route_data_json')) {
+      context.handle(
+        _routeDataJsonMeta,
+        routeDataJson.isAcceptableOrUnknown(
+          data['route_data_json']!,
+          _routeDataJsonMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {assetKey};
+  @override
+  CachedAsset map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CachedAsset(
+      assetKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}asset_key'],
+      )!,
+      courseId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}course_id'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      fileType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}file_type'],
+      )!,
+      localPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_path'],
+      )!,
+      fileSizeBytes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}file_size_bytes'],
+      )!,
+      lastAccessedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_accessed_at'],
+      ),
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      persistedFileId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}persisted_file_id'],
+      ),
+      sourceKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_kind'],
+      )!,
+      routeDataJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}route_data_json'],
+      ),
+    );
+  }
+
+  @override
+  $CachedAssetsTable createAlias(String alias) {
+    return $CachedAssetsTable(attachedDatabase, alias);
+  }
+}
+
+class CachedAsset extends DataClass implements Insertable<CachedAsset> {
+  final String assetKey;
+  final String courseId;
+  final String title;
+  final String fileType;
+  final String localPath;
+  final int fileSizeBytes;
+  final String? lastAccessedAt;
+  final String updatedAt;
+  final String? persistedFileId;
+  final String sourceKind;
+  final String? routeDataJson;
+  const CachedAsset({
+    required this.assetKey,
+    required this.courseId,
+    required this.title,
+    required this.fileType,
+    required this.localPath,
+    required this.fileSizeBytes,
+    this.lastAccessedAt,
+    required this.updatedAt,
+    this.persistedFileId,
+    required this.sourceKind,
+    this.routeDataJson,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['asset_key'] = Variable<String>(assetKey);
+    map['course_id'] = Variable<String>(courseId);
+    map['title'] = Variable<String>(title);
+    map['file_type'] = Variable<String>(fileType);
+    map['local_path'] = Variable<String>(localPath);
+    map['file_size_bytes'] = Variable<int>(fileSizeBytes);
+    if (!nullToAbsent || lastAccessedAt != null) {
+      map['last_accessed_at'] = Variable<String>(lastAccessedAt);
+    }
+    map['updated_at'] = Variable<String>(updatedAt);
+    if (!nullToAbsent || persistedFileId != null) {
+      map['persisted_file_id'] = Variable<String>(persistedFileId);
+    }
+    map['source_kind'] = Variable<String>(sourceKind);
+    if (!nullToAbsent || routeDataJson != null) {
+      map['route_data_json'] = Variable<String>(routeDataJson);
+    }
+    return map;
+  }
+
+  CachedAssetsCompanion toCompanion(bool nullToAbsent) {
+    return CachedAssetsCompanion(
+      assetKey: Value(assetKey),
+      courseId: Value(courseId),
+      title: Value(title),
+      fileType: Value(fileType),
+      localPath: Value(localPath),
+      fileSizeBytes: Value(fileSizeBytes),
+      lastAccessedAt: lastAccessedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastAccessedAt),
+      updatedAt: Value(updatedAt),
+      persistedFileId: persistedFileId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(persistedFileId),
+      sourceKind: Value(sourceKind),
+      routeDataJson: routeDataJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(routeDataJson),
+    );
+  }
+
+  factory CachedAsset.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CachedAsset(
+      assetKey: serializer.fromJson<String>(json['assetKey']),
+      courseId: serializer.fromJson<String>(json['courseId']),
+      title: serializer.fromJson<String>(json['title']),
+      fileType: serializer.fromJson<String>(json['fileType']),
+      localPath: serializer.fromJson<String>(json['localPath']),
+      fileSizeBytes: serializer.fromJson<int>(json['fileSizeBytes']),
+      lastAccessedAt: serializer.fromJson<String?>(json['lastAccessedAt']),
+      updatedAt: serializer.fromJson<String>(json['updatedAt']),
+      persistedFileId: serializer.fromJson<String?>(json['persistedFileId']),
+      sourceKind: serializer.fromJson<String>(json['sourceKind']),
+      routeDataJson: serializer.fromJson<String?>(json['routeDataJson']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'assetKey': serializer.toJson<String>(assetKey),
+      'courseId': serializer.toJson<String>(courseId),
+      'title': serializer.toJson<String>(title),
+      'fileType': serializer.toJson<String>(fileType),
+      'localPath': serializer.toJson<String>(localPath),
+      'fileSizeBytes': serializer.toJson<int>(fileSizeBytes),
+      'lastAccessedAt': serializer.toJson<String?>(lastAccessedAt),
+      'updatedAt': serializer.toJson<String>(updatedAt),
+      'persistedFileId': serializer.toJson<String?>(persistedFileId),
+      'sourceKind': serializer.toJson<String>(sourceKind),
+      'routeDataJson': serializer.toJson<String?>(routeDataJson),
+    };
+  }
+
+  CachedAsset copyWith({
+    String? assetKey,
+    String? courseId,
+    String? title,
+    String? fileType,
+    String? localPath,
+    int? fileSizeBytes,
+    Value<String?> lastAccessedAt = const Value.absent(),
+    String? updatedAt,
+    Value<String?> persistedFileId = const Value.absent(),
+    String? sourceKind,
+    Value<String?> routeDataJson = const Value.absent(),
+  }) => CachedAsset(
+    assetKey: assetKey ?? this.assetKey,
+    courseId: courseId ?? this.courseId,
+    title: title ?? this.title,
+    fileType: fileType ?? this.fileType,
+    localPath: localPath ?? this.localPath,
+    fileSizeBytes: fileSizeBytes ?? this.fileSizeBytes,
+    lastAccessedAt: lastAccessedAt.present
+        ? lastAccessedAt.value
+        : this.lastAccessedAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    persistedFileId: persistedFileId.present
+        ? persistedFileId.value
+        : this.persistedFileId,
+    sourceKind: sourceKind ?? this.sourceKind,
+    routeDataJson: routeDataJson.present
+        ? routeDataJson.value
+        : this.routeDataJson,
+  );
+  CachedAsset copyWithCompanion(CachedAssetsCompanion data) {
+    return CachedAsset(
+      assetKey: data.assetKey.present ? data.assetKey.value : this.assetKey,
+      courseId: data.courseId.present ? data.courseId.value : this.courseId,
+      title: data.title.present ? data.title.value : this.title,
+      fileType: data.fileType.present ? data.fileType.value : this.fileType,
+      localPath: data.localPath.present ? data.localPath.value : this.localPath,
+      fileSizeBytes: data.fileSizeBytes.present
+          ? data.fileSizeBytes.value
+          : this.fileSizeBytes,
+      lastAccessedAt: data.lastAccessedAt.present
+          ? data.lastAccessedAt.value
+          : this.lastAccessedAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      persistedFileId: data.persistedFileId.present
+          ? data.persistedFileId.value
+          : this.persistedFileId,
+      sourceKind: data.sourceKind.present
+          ? data.sourceKind.value
+          : this.sourceKind,
+      routeDataJson: data.routeDataJson.present
+          ? data.routeDataJson.value
+          : this.routeDataJson,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CachedAsset(')
+          ..write('assetKey: $assetKey, ')
+          ..write('courseId: $courseId, ')
+          ..write('title: $title, ')
+          ..write('fileType: $fileType, ')
+          ..write('localPath: $localPath, ')
+          ..write('fileSizeBytes: $fileSizeBytes, ')
+          ..write('lastAccessedAt: $lastAccessedAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('persistedFileId: $persistedFileId, ')
+          ..write('sourceKind: $sourceKind, ')
+          ..write('routeDataJson: $routeDataJson')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    assetKey,
+    courseId,
+    title,
+    fileType,
+    localPath,
+    fileSizeBytes,
+    lastAccessedAt,
+    updatedAt,
+    persistedFileId,
+    sourceKind,
+    routeDataJson,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CachedAsset &&
+          other.assetKey == this.assetKey &&
+          other.courseId == this.courseId &&
+          other.title == this.title &&
+          other.fileType == this.fileType &&
+          other.localPath == this.localPath &&
+          other.fileSizeBytes == this.fileSizeBytes &&
+          other.lastAccessedAt == this.lastAccessedAt &&
+          other.updatedAt == this.updatedAt &&
+          other.persistedFileId == this.persistedFileId &&
+          other.sourceKind == this.sourceKind &&
+          other.routeDataJson == this.routeDataJson);
+}
+
+class CachedAssetsCompanion extends UpdateCompanion<CachedAsset> {
+  final Value<String> assetKey;
+  final Value<String> courseId;
+  final Value<String> title;
+  final Value<String> fileType;
+  final Value<String> localPath;
+  final Value<int> fileSizeBytes;
+  final Value<String?> lastAccessedAt;
+  final Value<String> updatedAt;
+  final Value<String?> persistedFileId;
+  final Value<String> sourceKind;
+  final Value<String?> routeDataJson;
+  final Value<int> rowid;
+  const CachedAssetsCompanion({
+    this.assetKey = const Value.absent(),
+    this.courseId = const Value.absent(),
+    this.title = const Value.absent(),
+    this.fileType = const Value.absent(),
+    this.localPath = const Value.absent(),
+    this.fileSizeBytes = const Value.absent(),
+    this.lastAccessedAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.persistedFileId = const Value.absent(),
+    this.sourceKind = const Value.absent(),
+    this.routeDataJson = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CachedAssetsCompanion.insert({
+    required String assetKey,
+    required String courseId,
+    required String title,
+    this.fileType = const Value.absent(),
+    required String localPath,
+    this.fileSizeBytes = const Value.absent(),
+    this.lastAccessedAt = const Value.absent(),
+    required String updatedAt,
+    this.persistedFileId = const Value.absent(),
+    this.sourceKind = const Value.absent(),
+    this.routeDataJson = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : assetKey = Value(assetKey),
+       courseId = Value(courseId),
+       title = Value(title),
+       localPath = Value(localPath),
+       updatedAt = Value(updatedAt);
+  static Insertable<CachedAsset> custom({
+    Expression<String>? assetKey,
+    Expression<String>? courseId,
+    Expression<String>? title,
+    Expression<String>? fileType,
+    Expression<String>? localPath,
+    Expression<int>? fileSizeBytes,
+    Expression<String>? lastAccessedAt,
+    Expression<String>? updatedAt,
+    Expression<String>? persistedFileId,
+    Expression<String>? sourceKind,
+    Expression<String>? routeDataJson,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (assetKey != null) 'asset_key': assetKey,
+      if (courseId != null) 'course_id': courseId,
+      if (title != null) 'title': title,
+      if (fileType != null) 'file_type': fileType,
+      if (localPath != null) 'local_path': localPath,
+      if (fileSizeBytes != null) 'file_size_bytes': fileSizeBytes,
+      if (lastAccessedAt != null) 'last_accessed_at': lastAccessedAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (persistedFileId != null) 'persisted_file_id': persistedFileId,
+      if (sourceKind != null) 'source_kind': sourceKind,
+      if (routeDataJson != null) 'route_data_json': routeDataJson,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CachedAssetsCompanion copyWith({
+    Value<String>? assetKey,
+    Value<String>? courseId,
+    Value<String>? title,
+    Value<String>? fileType,
+    Value<String>? localPath,
+    Value<int>? fileSizeBytes,
+    Value<String?>? lastAccessedAt,
+    Value<String>? updatedAt,
+    Value<String?>? persistedFileId,
+    Value<String>? sourceKind,
+    Value<String?>? routeDataJson,
+    Value<int>? rowid,
+  }) {
+    return CachedAssetsCompanion(
+      assetKey: assetKey ?? this.assetKey,
+      courseId: courseId ?? this.courseId,
+      title: title ?? this.title,
+      fileType: fileType ?? this.fileType,
+      localPath: localPath ?? this.localPath,
+      fileSizeBytes: fileSizeBytes ?? this.fileSizeBytes,
+      lastAccessedAt: lastAccessedAt ?? this.lastAccessedAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      persistedFileId: persistedFileId ?? this.persistedFileId,
+      sourceKind: sourceKind ?? this.sourceKind,
+      routeDataJson: routeDataJson ?? this.routeDataJson,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (assetKey.present) {
+      map['asset_key'] = Variable<String>(assetKey.value);
+    }
+    if (courseId.present) {
+      map['course_id'] = Variable<String>(courseId.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (fileType.present) {
+      map['file_type'] = Variable<String>(fileType.value);
+    }
+    if (localPath.present) {
+      map['local_path'] = Variable<String>(localPath.value);
+    }
+    if (fileSizeBytes.present) {
+      map['file_size_bytes'] = Variable<int>(fileSizeBytes.value);
+    }
+    if (lastAccessedAt.present) {
+      map['last_accessed_at'] = Variable<String>(lastAccessedAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<String>(updatedAt.value);
+    }
+    if (persistedFileId.present) {
+      map['persisted_file_id'] = Variable<String>(persistedFileId.value);
+    }
+    if (sourceKind.present) {
+      map['source_kind'] = Variable<String>(sourceKind.value);
+    }
+    if (routeDataJson.present) {
+      map['route_data_json'] = Variable<String>(routeDataJson.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CachedAssetsCompanion(')
+          ..write('assetKey: $assetKey, ')
+          ..write('courseId: $courseId, ')
+          ..write('title: $title, ')
+          ..write('fileType: $fileType, ')
+          ..write('localPath: $localPath, ')
+          ..write('fileSizeBytes: $fileSizeBytes, ')
+          ..write('lastAccessedAt: $lastAccessedAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('persistedFileId: $persistedFileId, ')
+          ..write('sourceKind: $sourceKind, ')
+          ..write('routeDataJson: $routeDataJson, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $FileBookmarksTable extends FileBookmarks
+    with TableInfo<$FileBookmarksTable, FileBookmark> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $FileBookmarksTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _assetKeyMeta = const VerificationMeta(
+    'assetKey',
+  );
+  @override
+  late final GeneratedColumn<String> assetKey = GeneratedColumn<String>(
+    'asset_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _courseNameMeta = const VerificationMeta(
+    'courseName',
+  );
+  @override
+  late final GeneratedColumn<String> courseName = GeneratedColumn<String>(
+    'course_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [assetKey, courseName, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'file_bookmarks';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<FileBookmark> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('asset_key')) {
+      context.handle(
+        _assetKeyMeta,
+        assetKey.isAcceptableOrUnknown(data['asset_key']!, _assetKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_assetKeyMeta);
+    }
+    if (data.containsKey('course_name')) {
+      context.handle(
+        _courseNameMeta,
+        courseName.isAcceptableOrUnknown(data['course_name']!, _courseNameMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {assetKey};
+  @override
+  FileBookmark map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return FileBookmark(
+      assetKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}asset_key'],
+      )!,
+      courseName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}course_name'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $FileBookmarksTable createAlias(String alias) {
+    return $FileBookmarksTable(attachedDatabase, alias);
+  }
+}
+
+class FileBookmark extends DataClass implements Insertable<FileBookmark> {
+  final String assetKey;
+  final String courseName;
+  final String createdAt;
+  const FileBookmark({
+    required this.assetKey,
+    required this.courseName,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['asset_key'] = Variable<String>(assetKey);
+    map['course_name'] = Variable<String>(courseName);
+    map['created_at'] = Variable<String>(createdAt);
+    return map;
+  }
+
+  FileBookmarksCompanion toCompanion(bool nullToAbsent) {
+    return FileBookmarksCompanion(
+      assetKey: Value(assetKey),
+      courseName: Value(courseName),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory FileBookmark.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return FileBookmark(
+      assetKey: serializer.fromJson<String>(json['assetKey']),
+      courseName: serializer.fromJson<String>(json['courseName']),
+      createdAt: serializer.fromJson<String>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'assetKey': serializer.toJson<String>(assetKey),
+      'courseName': serializer.toJson<String>(courseName),
+      'createdAt': serializer.toJson<String>(createdAt),
+    };
+  }
+
+  FileBookmark copyWith({
+    String? assetKey,
+    String? courseName,
+    String? createdAt,
+  }) => FileBookmark(
+    assetKey: assetKey ?? this.assetKey,
+    courseName: courseName ?? this.courseName,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  FileBookmark copyWithCompanion(FileBookmarksCompanion data) {
+    return FileBookmark(
+      assetKey: data.assetKey.present ? data.assetKey.value : this.assetKey,
+      courseName: data.courseName.present
+          ? data.courseName.value
+          : this.courseName,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FileBookmark(')
+          ..write('assetKey: $assetKey, ')
+          ..write('courseName: $courseName, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(assetKey, courseName, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is FileBookmark &&
+          other.assetKey == this.assetKey &&
+          other.courseName == this.courseName &&
+          other.createdAt == this.createdAt);
+}
+
+class FileBookmarksCompanion extends UpdateCompanion<FileBookmark> {
+  final Value<String> assetKey;
+  final Value<String> courseName;
+  final Value<String> createdAt;
+  final Value<int> rowid;
+  const FileBookmarksCompanion({
+    this.assetKey = const Value.absent(),
+    this.courseName = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  FileBookmarksCompanion.insert({
+    required String assetKey,
+    this.courseName = const Value.absent(),
+    required String createdAt,
+    this.rowid = const Value.absent(),
+  }) : assetKey = Value(assetKey),
+       createdAt = Value(createdAt);
+  static Insertable<FileBookmark> custom({
+    Expression<String>? assetKey,
+    Expression<String>? courseName,
+    Expression<String>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (assetKey != null) 'asset_key': assetKey,
+      if (courseName != null) 'course_name': courseName,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  FileBookmarksCompanion copyWith({
+    Value<String>? assetKey,
+    Value<String>? courseName,
+    Value<String>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return FileBookmarksCompanion(
+      assetKey: assetKey ?? this.assetKey,
+      courseName: courseName ?? this.courseName,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (assetKey.present) {
+      map['asset_key'] = Variable<String>(assetKey.value);
+    }
+    if (courseName.present) {
+      map['course_name'] = Variable<String>(courseName.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<String>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FileBookmarksCompanion(')
+          ..write('assetKey: $assetKey, ')
+          ..write('courseName: $courseName, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $HomeworksTable extends Homeworks
     with TableInfo<$HomeworksTable, Homework> {
   @override
@@ -4870,6 +5823,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $CoursesTable courses = $CoursesTable(this);
   late final $NotificationsTable notifications = $NotificationsTable(this);
   late final $CourseFilesTable courseFiles = $CourseFilesTable(this);
+  late final $CachedAssetsTable cachedAssets = $CachedAssetsTable(this);
+  late final $FileBookmarksTable fileBookmarks = $FileBookmarksTable(this);
   late final $HomeworksTable homeworks = $HomeworksTable(this);
   late final $AppStateTable appState = $AppStateTable(this);
   @override
@@ -4881,6 +5836,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     courses,
     notifications,
     courseFiles,
+    cachedAssets,
+    fileBookmarks,
     homeworks,
     appState,
   ];
@@ -6357,6 +7314,494 @@ typedef $$CourseFilesTableProcessedTableManager =
       CourseFile,
       PrefetchHooks Function()
     >;
+typedef $$CachedAssetsTableCreateCompanionBuilder =
+    CachedAssetsCompanion Function({
+      required String assetKey,
+      required String courseId,
+      required String title,
+      Value<String> fileType,
+      required String localPath,
+      Value<int> fileSizeBytes,
+      Value<String?> lastAccessedAt,
+      required String updatedAt,
+      Value<String?> persistedFileId,
+      Value<String> sourceKind,
+      Value<String?> routeDataJson,
+      Value<int> rowid,
+    });
+typedef $$CachedAssetsTableUpdateCompanionBuilder =
+    CachedAssetsCompanion Function({
+      Value<String> assetKey,
+      Value<String> courseId,
+      Value<String> title,
+      Value<String> fileType,
+      Value<String> localPath,
+      Value<int> fileSizeBytes,
+      Value<String?> lastAccessedAt,
+      Value<String> updatedAt,
+      Value<String?> persistedFileId,
+      Value<String> sourceKind,
+      Value<String?> routeDataJson,
+      Value<int> rowid,
+    });
+
+class $$CachedAssetsTableFilterComposer
+    extends Composer<_$AppDatabase, $CachedAssetsTable> {
+  $$CachedAssetsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get assetKey => $composableBuilder(
+    column: $table.assetKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get courseId => $composableBuilder(
+    column: $table.courseId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get fileType => $composableBuilder(
+    column: $table.fileType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get localPath => $composableBuilder(
+    column: $table.localPath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get fileSizeBytes => $composableBuilder(
+    column: $table.fileSizeBytes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastAccessedAt => $composableBuilder(
+    column: $table.lastAccessedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get persistedFileId => $composableBuilder(
+    column: $table.persistedFileId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceKind => $composableBuilder(
+    column: $table.sourceKind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get routeDataJson => $composableBuilder(
+    column: $table.routeDataJson,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CachedAssetsTableOrderingComposer
+    extends Composer<_$AppDatabase, $CachedAssetsTable> {
+  $$CachedAssetsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get assetKey => $composableBuilder(
+    column: $table.assetKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get courseId => $composableBuilder(
+    column: $table.courseId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get fileType => $composableBuilder(
+    column: $table.fileType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get localPath => $composableBuilder(
+    column: $table.localPath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get fileSizeBytes => $composableBuilder(
+    column: $table.fileSizeBytes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lastAccessedAt => $composableBuilder(
+    column: $table.lastAccessedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get persistedFileId => $composableBuilder(
+    column: $table.persistedFileId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sourceKind => $composableBuilder(
+    column: $table.sourceKind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get routeDataJson => $composableBuilder(
+    column: $table.routeDataJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CachedAssetsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CachedAssetsTable> {
+  $$CachedAssetsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get assetKey =>
+      $composableBuilder(column: $table.assetKey, builder: (column) => column);
+
+  GeneratedColumn<String> get courseId =>
+      $composableBuilder(column: $table.courseId, builder: (column) => column);
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get fileType =>
+      $composableBuilder(column: $table.fileType, builder: (column) => column);
+
+  GeneratedColumn<String> get localPath =>
+      $composableBuilder(column: $table.localPath, builder: (column) => column);
+
+  GeneratedColumn<int> get fileSizeBytes => $composableBuilder(
+    column: $table.fileSizeBytes,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get lastAccessedAt => $composableBuilder(
+    column: $table.lastAccessedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get persistedFileId => $composableBuilder(
+    column: $table.persistedFileId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get sourceKind => $composableBuilder(
+    column: $table.sourceKind,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get routeDataJson => $composableBuilder(
+    column: $table.routeDataJson,
+    builder: (column) => column,
+  );
+}
+
+class $$CachedAssetsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CachedAssetsTable,
+          CachedAsset,
+          $$CachedAssetsTableFilterComposer,
+          $$CachedAssetsTableOrderingComposer,
+          $$CachedAssetsTableAnnotationComposer,
+          $$CachedAssetsTableCreateCompanionBuilder,
+          $$CachedAssetsTableUpdateCompanionBuilder,
+          (
+            CachedAsset,
+            BaseReferences<_$AppDatabase, $CachedAssetsTable, CachedAsset>,
+          ),
+          CachedAsset,
+          PrefetchHooks Function()
+        > {
+  $$CachedAssetsTableTableManager(_$AppDatabase db, $CachedAssetsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CachedAssetsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CachedAssetsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CachedAssetsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> assetKey = const Value.absent(),
+                Value<String> courseId = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<String> fileType = const Value.absent(),
+                Value<String> localPath = const Value.absent(),
+                Value<int> fileSizeBytes = const Value.absent(),
+                Value<String?> lastAccessedAt = const Value.absent(),
+                Value<String> updatedAt = const Value.absent(),
+                Value<String?> persistedFileId = const Value.absent(),
+                Value<String> sourceKind = const Value.absent(),
+                Value<String?> routeDataJson = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CachedAssetsCompanion(
+                assetKey: assetKey,
+                courseId: courseId,
+                title: title,
+                fileType: fileType,
+                localPath: localPath,
+                fileSizeBytes: fileSizeBytes,
+                lastAccessedAt: lastAccessedAt,
+                updatedAt: updatedAt,
+                persistedFileId: persistedFileId,
+                sourceKind: sourceKind,
+                routeDataJson: routeDataJson,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String assetKey,
+                required String courseId,
+                required String title,
+                Value<String> fileType = const Value.absent(),
+                required String localPath,
+                Value<int> fileSizeBytes = const Value.absent(),
+                Value<String?> lastAccessedAt = const Value.absent(),
+                required String updatedAt,
+                Value<String?> persistedFileId = const Value.absent(),
+                Value<String> sourceKind = const Value.absent(),
+                Value<String?> routeDataJson = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CachedAssetsCompanion.insert(
+                assetKey: assetKey,
+                courseId: courseId,
+                title: title,
+                fileType: fileType,
+                localPath: localPath,
+                fileSizeBytes: fileSizeBytes,
+                lastAccessedAt: lastAccessedAt,
+                updatedAt: updatedAt,
+                persistedFileId: persistedFileId,
+                sourceKind: sourceKind,
+                routeDataJson: routeDataJson,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CachedAssetsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CachedAssetsTable,
+      CachedAsset,
+      $$CachedAssetsTableFilterComposer,
+      $$CachedAssetsTableOrderingComposer,
+      $$CachedAssetsTableAnnotationComposer,
+      $$CachedAssetsTableCreateCompanionBuilder,
+      $$CachedAssetsTableUpdateCompanionBuilder,
+      (
+        CachedAsset,
+        BaseReferences<_$AppDatabase, $CachedAssetsTable, CachedAsset>,
+      ),
+      CachedAsset,
+      PrefetchHooks Function()
+    >;
+typedef $$FileBookmarksTableCreateCompanionBuilder =
+    FileBookmarksCompanion Function({
+      required String assetKey,
+      Value<String> courseName,
+      required String createdAt,
+      Value<int> rowid,
+    });
+typedef $$FileBookmarksTableUpdateCompanionBuilder =
+    FileBookmarksCompanion Function({
+      Value<String> assetKey,
+      Value<String> courseName,
+      Value<String> createdAt,
+      Value<int> rowid,
+    });
+
+class $$FileBookmarksTableFilterComposer
+    extends Composer<_$AppDatabase, $FileBookmarksTable> {
+  $$FileBookmarksTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get assetKey => $composableBuilder(
+    column: $table.assetKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get courseName => $composableBuilder(
+    column: $table.courseName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$FileBookmarksTableOrderingComposer
+    extends Composer<_$AppDatabase, $FileBookmarksTable> {
+  $$FileBookmarksTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get assetKey => $composableBuilder(
+    column: $table.assetKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get courseName => $composableBuilder(
+    column: $table.courseName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$FileBookmarksTableAnnotationComposer
+    extends Composer<_$AppDatabase, $FileBookmarksTable> {
+  $$FileBookmarksTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get assetKey =>
+      $composableBuilder(column: $table.assetKey, builder: (column) => column);
+
+  GeneratedColumn<String> get courseName => $composableBuilder(
+    column: $table.courseName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$FileBookmarksTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $FileBookmarksTable,
+          FileBookmark,
+          $$FileBookmarksTableFilterComposer,
+          $$FileBookmarksTableOrderingComposer,
+          $$FileBookmarksTableAnnotationComposer,
+          $$FileBookmarksTableCreateCompanionBuilder,
+          $$FileBookmarksTableUpdateCompanionBuilder,
+          (
+            FileBookmark,
+            BaseReferences<_$AppDatabase, $FileBookmarksTable, FileBookmark>,
+          ),
+          FileBookmark,
+          PrefetchHooks Function()
+        > {
+  $$FileBookmarksTableTableManager(_$AppDatabase db, $FileBookmarksTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$FileBookmarksTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$FileBookmarksTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$FileBookmarksTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> assetKey = const Value.absent(),
+                Value<String> courseName = const Value.absent(),
+                Value<String> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => FileBookmarksCompanion(
+                assetKey: assetKey,
+                courseName: courseName,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String assetKey,
+                Value<String> courseName = const Value.absent(),
+                required String createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => FileBookmarksCompanion.insert(
+                assetKey: assetKey,
+                courseName: courseName,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$FileBookmarksTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $FileBookmarksTable,
+      FileBookmark,
+      $$FileBookmarksTableFilterComposer,
+      $$FileBookmarksTableOrderingComposer,
+      $$FileBookmarksTableAnnotationComposer,
+      $$FileBookmarksTableCreateCompanionBuilder,
+      $$FileBookmarksTableUpdateCompanionBuilder,
+      (
+        FileBookmark,
+        BaseReferences<_$AppDatabase, $FileBookmarksTable, FileBookmark>,
+      ),
+      FileBookmark,
+      PrefetchHooks Function()
+    >;
 typedef $$HomeworksTableCreateCompanionBuilder =
     HomeworksCompanion Function({
       required String id,
@@ -7133,6 +8578,10 @@ class $AppDatabaseManager {
       $$NotificationsTableTableManager(_db, _db.notifications);
   $$CourseFilesTableTableManager get courseFiles =>
       $$CourseFilesTableTableManager(_db, _db.courseFiles);
+  $$CachedAssetsTableTableManager get cachedAssets =>
+      $$CachedAssetsTableTableManager(_db, _db.cachedAssets);
+  $$FileBookmarksTableTableManager get fileBookmarks =>
+      $$FileBookmarksTableTableManager(_db, _db.fileBookmarks);
   $$HomeworksTableTableManager get homeworks =>
       $$HomeworksTableTableManager(_db, _db.homeworks);
   $$AppStateTableTableManager get appState =>

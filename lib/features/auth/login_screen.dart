@@ -32,20 +32,16 @@
 /// If ticket interception fails (URL pattern changed), we fall back to
 /// extracting cookies via the WebView's cookie manager and injecting
 /// them into Dio's CookieJar.
-import 'package:cookie_jar/cookie_jar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../../core/auth/auth.dart';
 import '../../core/design/app_theme_colors.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/typography.dart';
-import '../../core/providers/providers.dart';
 import '../../core/api/urls.dart' as urls;
-import '../../core/api/learn_api.dart';
-import '../../core/router/router.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -108,9 +104,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     // Fallback detection: if the WebView somehow ends up at learn.tsinghua
     // (meaning the ticket was consumed by the WebView before we could
     // intercept it), try the cookie-extraction fallback.
-    if (url.startsWith(urls.learnPrefix) &&
-        !url.contains('j_spring_security_thauth_roaming_entry') &&
-        !_isProcessingTicket) {
+    if (ref.read(ssoTicketParserProvider).shouldAttemptFallback(url)) {
       await _fallbackCookieExtraction();
     }
   }
@@ -118,34 +112,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   /// This is the critical method: we watch every WebView navigation.
   /// When we see the ticket URL (learn auth roaming), we intercept it.
   NavigationDecision _onNavigationRequest(NavigationRequest request) {
-    final targetUrl = request.url;
-
-    // Pattern: learn.tsinghua.edu.cn/b/j_spring_security_thauth_roaming_entry?ticket=XXX
-    if (targetUrl.contains('j_spring_security_thauth_roaming_entry') &&
-        targetUrl.contains('ticket=')) {
-      // Extract ticket from URL
-      final uri = Uri.parse(targetUrl);
-      final ticket = uri.queryParameters['ticket'];
-
-      if (ticket != null && ticket.isNotEmpty) {
-        // Block the WebView — we'll use Dio to consume this ticket
-        _consumeTicketWithDio(ticket);
-        return NavigationDecision.prevent;
-      }
+    final instruction = ref
+        .read(ssoTicketParserProvider)
+        .inspectNavigation(request.url);
+    if (instruction.shouldConsumeTicket && instruction.ticket != null) {
+      _consumeTicketWithDio(instruction.ticket!);
+      return NavigationDecision.prevent;
     }
-
-    // Also check: sometimes the redirect goes through id.tsinghua first
-    // with a URL like id.tsinghua.edu.cn/.../callback?ticket=ST-XXXX
-    // and then redirects to learn. Catch this pattern too.
-    if (targetUrl.contains('id.tsinghua.edu.cn') &&
-        targetUrl.contains('ticket=') &&
-        !targetUrl.contains('login/form')) {
-      // This might be the intermediate redirect.
-      // Let the WebView follow it — it will eventually redirect to learn,
-      // which we'll catch above.
-    }
-
-    // Allow all other navigation during the SSO flow
     return NavigationDecision.navigate;
   }
 
@@ -164,21 +137,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final api = ref.read(apiClientProvider);
-
-      // Authenticate Dio's session using the SSO ticket.
-      // This internally: (1) follows the 302 redirect chain with cookie
-      // tracking, (2) fetches the course list page, (3) extracts the CSRF
-      // token and language preference.
-      await api.loginWithTicket(ticket);
-
-      // Fetch username from the authenticated session.
-      final userInfo = await api.getUserInfo();
-      final username = userInfo.name;
-
-      // Mark login as successful.
-      // Router will automatically redirect to home via auth state listener.
-      await ref.read(authProvider.notifier).onLoginSuccess(username);
+      await ref.read(ssoLoginCoordinatorProvider).consumeTicket(ticket);
     } catch (e, stackTrace) {
       debugPrint('[LearnX] Login failed: $e');
       debugPrint('[LearnX] Stack trace: $stackTrace');
@@ -220,55 +179,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         'document.documentElement.outerHTML',
       );
 
-      // The returned value might be JSON-encoded string (with surrounding quotes)
-      String pageSource = rawHtml.toString();
-      if (pageSource.startsWith('"') && pageSource.endsWith('"')) {
-        pageSource = pageSource.substring(1, pageSource.length - 1);
-        // Unescape JSON string escapes
-        pageSource = pageSource
-            .replaceAll(r'\n', '\n')
-            .replaceAll(r'\"', '"')
-            .replaceAll(r'\\', r'\')
-            .replaceAll(r'\/', '/');
+      final pageSnapshot = ref
+          .read(ssoFallbackPageParserProvider)
+          .parse(rawHtml.toString());
+
+      final cookieStr = await _webViewController.runJavaScriptReturningResult(
+        'document.cookie',
+      );
+      var cookieString = cookieStr.toString();
+      if (cookieString.startsWith('"') && cookieString.endsWith('"')) {
+        cookieString = cookieString.substring(1, cookieString.length - 1);
       }
 
-      // Extract CSRF token using multiple patterns (same logic as primary path)
-      String? csrfToken;
-      final p1 = RegExp(r'[&?]_csrf=([a-zA-Z0-9\-_]+)', multiLine: true);
-      final m1 = p1.firstMatch(pageSource);
-      if (m1 != null) csrfToken = m1.group(1);
-
-      if (csrfToken == null) {
-        final p2 = RegExp(r'&_csrf=(\S*)"', multiLine: true);
-        final m2 = p2.firstMatch(pageSource);
-        if (m2 != null) csrfToken = m2.group(1);
-      }
-
-      if (csrfToken == null || csrfToken.isEmpty) {
-        debugPrint(
-          '[LearnY] Fallback CSRF extraction failed. '
-          'Page length: ${pageSource.length}',
-        );
-        throw Exception('Fallback: could not find CSRF token in page');
-      }
-
-      final api = ref.read(apiClientProvider);
-      api.setCSRFToken(csrfToken);
-
-      // Extract username
-      final nameRegex = RegExp(r'class="user-log"[^>]*>([^<]+)<');
-      final nameMatch = nameRegex.firstMatch(pageSource);
-      final username = nameMatch?.group(1)?.trim() ?? '';
-
-      // Now: the WebView has the session, but Dio doesn't.
-      // Extract cookies from the WebView and inject into Dio's CookieJar.
-      await _transferWebViewCookiesToDio(api);
-
-      await ref.read(authProvider.notifier).onLoginSuccess(username);
-
-      if (mounted) {
-        context.go(Routes.home);
-      }
+      await ref
+          .read(ssoLoginCoordinatorProvider)
+          .completeFallbackLogin(
+            pageSnapshot: pageSnapshot,
+            cookieString: cookieString,
+          );
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -279,59 +207,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         });
       }
     }
-  }
-
-  /// Extract all cookies from WebView via JS and inject into Dio's CookieJar.
-  /// Note: HttpOnly cookies won't be accessible via `document.cookie`.
-  /// This is a best-effort fallback.
-  Future<void> _transferWebViewCookiesToDio(Learn2018Helper api) async {
-    try {
-      // Get JavaScript-accessible cookies (non-HttpOnly only)
-      final cookieStr = await _webViewController.runJavaScriptReturningResult(
-        'document.cookie',
-      );
-
-      String cookieString = cookieStr.toString();
-      if (cookieString.startsWith('"') && cookieString.endsWith('"')) {
-        cookieString = cookieString.substring(1, cookieString.length - 1);
-      }
-
-      if (cookieString.isEmpty) return;
-
-      // Parse cookie string: "key1=val1; key2=val2; ..."
-      final cookies = cookieString.split(';').map((pair) {
-        final parts = pair.trim().split('=');
-        if (parts.length >= 2) {
-          return Cookie(parts[0].trim(), parts.sublist(1).join('=').trim());
-        }
-        return null;
-      }).whereType<Cookie>();
-
-      // Inject into Dio's CookieJar
-      final cookieJar = _getCookieJarFromHelper(api);
-      if (cookieJar != null) {
-        final learnUri = Uri.parse(urls.learnPrefix);
-        final idUri = Uri.parse(urls.idPrefix);
-
-        for (final cookie in cookies) {
-          await cookieJar.saveFromResponse(learnUri, [cookie]);
-          await cookieJar.saveFromResponse(idUri, [cookie]);
-        }
-      }
-    } catch (_) {
-      // Best-effort: if this fails, the CSRF token approach might still work
-      // for some endpoints, or the user will need to re-login.
-    }
-  }
-
-  // ─────────────────────────────────────────────
-  //  Helpers: access private Dio instance
-  // ─────────────────────────────────────────────
-
-  /// Access the Dio instance from Learn2018Helper.
-  /// This is needed because the helper's Dio has cookie management set up.
-  CookieJar? _getCookieJarFromHelper(Learn2018Helper helper) {
-    return helper.cookieJar;
   }
 
   String _truncateError(String error) {

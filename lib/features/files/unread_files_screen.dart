@@ -13,32 +13,17 @@ import 'package:go_router/go_router.dart';
 import '../../core/design/app_theme_colors.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/cooldown_toast.dart';
+import '../../core/design/file_type_utils.dart';
 import '../../core/design/swipe_to_read.dart';
 import '../../core/design/typography.dart';
 import '../../core/database/database.dart' as db;
+import '../../core/files/file_models.dart';
 import '../../core/providers/providers.dart';
-import '../../core/providers/sync_provider.dart';
+import '../../core/providers/sync_models.dart';
 import '../../core/router/router.dart';
+import '../../core/sync/sync_actions.dart';
+import 'providers/file_queries.dart';
 import '../files/widgets/file_card.dart';
-
-// ---------------------------------------------------------------------------
-//  Providers
-// ---------------------------------------------------------------------------
-
-/// Reactive unread files — auto-updates when DB changes.
-final _unreadFilesProvider = StreamProvider<List<db.CourseFile>>((ref) {
-  final database = ref.watch(databaseProvider);
-  return database.watchUnreadFiles();
-});
-
-/// Course names lookup.
-final _courseNamesProvider = FutureProvider<Map<String, String>>((ref) async {
-  final database = ref.watch(databaseProvider);
-  final semId = ref.watch(currentSemesterIdProvider);
-  if (semId == null) return {};
-  final courses = await database.getCoursesBySemester(semId);
-  return {for (final c in courses) c.id: c.name};
-});
 
 // ---------------------------------------------------------------------------
 //  Sort modes
@@ -100,24 +85,19 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
   }
 
   static String _extractExt(String title, String fileType) {
-    if (fileType.isNotEmpty) return fileType.toLowerCase();
-    final dot = title.lastIndexOf('.');
-    if (dot != -1 && dot < title.length - 1) {
-      return title.substring(dot + 1).toLowerCase();
-    }
-    return '';
+    return FileTypeUtils.extractExt(title, fileType);
   }
 
   void _markRead(db.CourseFile f) {
-    ref.read(databaseProvider).markFileRead(f.id);
+    ref.read(learningDataActionsProvider).markFileRead(f.id);
   }
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
 
-    final filesAsync = ref.watch(_unreadFilesProvider);
-    final courseNamesAsync = ref.watch(_courseNamesProvider);
+    final filesAsync = ref.watch(unreadFilesProvider);
+    final courseNamesAsync = ref.watch(fileCourseNameMapProvider);
 
     return Scaffold(
       backgroundColor: c.bg,
@@ -135,8 +115,8 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
       ),
       body: RefreshIndicator(
         onRefresh: () async {
-          await ref.read(syncStateProvider.notifier).syncFilesOnly();
-          final ss = ref.read(syncStateProvider);
+          final ss =
+              (await ref.read(syncActionsProvider).refreshFilesOnly()).state;
           if (ss.status == SyncStatus.cooldown && context.mounted) {
             CooldownToast.show(context, seconds: ss.cooldownSeconds);
           }
@@ -299,8 +279,10 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
             exitOnSwipe: true,
             onSwipe: () => _markRead(f),
             child: FileCard(
-              file: f,
-              courseName: courseNames[f.courseId] ?? '',
+              item: FileDetailItem.fromCourseFile(
+                f,
+                courseName: courseNames[f.courseId] ?? '',
+              ),
               onTap: () {
                 context.push(
                   Routes.fileDetail(
@@ -426,8 +408,10 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
                     exitOnSwipe: true,
                     onSwipe: () => _markRead(e.value),
                     child: FileCard(
-                      file: e.value,
-                      courseName: courseName,
+                      item: FileDetailItem.fromCourseFile(
+                        e.value,
+                        courseName: courseName,
+                      ),
                       hideCourseName: true,
                       onTap: () {
                         context.push(

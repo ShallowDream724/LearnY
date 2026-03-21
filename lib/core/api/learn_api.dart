@@ -20,6 +20,7 @@ import 'package:flutter/foundation.dart';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
+import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 
 import 'enums.dart';
@@ -91,18 +92,19 @@ class Learn2018Helper {
   // -------------------------------------------------------------------
 
   Learn2018Helper({HelperConfig? config})
-      : _provider = config?.provider,
-        _cookieJar = config?.cookieJar ?? CookieJar(),
-        previewFirstPage =
-            config?.generatePreviewUrlForFirstPage ?? true,
-        _dio = Dio(BaseOptions(
+    : _provider = config?.provider,
+      _cookieJar = config?.cookieJar ?? CookieJar(),
+      previewFirstPage = config?.generatePreviewUrlForFirstPage ?? true,
+      _dio = Dio(
+        BaseOptions(
           followRedirects: true,
           maxRedirects: 5,
           validateStatus: (status) => status != null && status < 400,
           responseType: ResponseType.plain,
           connectTimeout: const Duration(seconds: 15),
           receiveTimeout: const Duration(seconds: 30),
-        )) {
+        ),
+      ) {
     _dio.interceptors.add(CookieManager(_cookieJar));
   }
 
@@ -218,10 +220,7 @@ class Learn2018Helper {
       final uri = Uri.parse(urls.idPrefix);
       await _cookieJar.delete(uri);
     } catch (err) {
-      throw ApiError(
-        reason: FailReason.errorSettingCookies,
-        extra: err,
-      );
+      throw ApiError(reason: FailReason.errorSettingCookies, extra: err);
     }
 
     try {
@@ -264,10 +263,7 @@ class Learn2018Helper {
       return ticket;
     } catch (err) {
       if (err is ApiError) rethrow;
-      throw ApiError(
-        reason: FailReason.errorFetchFromId,
-        extra: err,
-      );
+      throw ApiError(reason: FailReason.errorFetchFromId, extra: err);
     }
   }
 
@@ -308,7 +304,7 @@ class Learn2018Helper {
       fingerPrint,
       fingerGenPrint: fingerGenPrint ?? '',
       fingerGenPrint3: fingerGenPrint3 ?? '',
-    );    // Roam to learn — use manual redirect tracking to capture
+    ); // Roam to learn — use manual redirect tracking to capture
     // session cookies from every 302 hop (see _followRedirectsManually).
     final loginResp = await _followRedirectsManually(
       urls.learnAuthRoam(ticket),
@@ -328,11 +324,11 @@ class Learn2018Helper {
   /// establish the API session.
   Future<void> loginWithTicket(String ticket) async {
     debugPrint('[LearnX] loginWithTicket: starting roam...');
-    final roamResp = await _followRedirectsManually(
-      urls.learnAuthRoam(ticket),
+    final roamResp = await _followRedirectsManually(urls.learnAuthRoam(ticket));
+    debugPrint(
+      '[LearnX] loginWithTicket: roam done, '
+      'status=${roamResp.statusCode}, url=${roamResp.realUri}',
     );
-    debugPrint('[LearnX] loginWithTicket: roam done, '
-        'status=${roamResp.statusCode}, url=${roamResp.realUri}');
     if (roamResp.statusCode != 200) {
       throw const ApiError(reason: FailReason.errorRoaming);
     }
@@ -358,29 +354,32 @@ class Learn2018Helper {
   ///   `_dio.get()` inside an interceptor deadlocks the queue.
   Future<Response> _followRedirectsManually(String url) async {
     debugPrint('[LearnX] _followRedirects: start $url');
-    final bareDio = Dio(BaseOptions(
-      followRedirects: false,
-      validateStatus: (_) => true, // accept all status codes
-      responseType: ResponseType.plain,
-      connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(seconds: 30),
-    ));
+    final bareDio = Dio(
+      BaseOptions(
+        followRedirects: false,
+        validateStatus: (_) => true, // accept all status codes
+        responseType: ResponseType.plain,
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 30),
+      ),
+    );
     bareDio.interceptors.add(CookieManager(_cookieJar));
 
     var currentUrl = url;
     late Response resp;
     for (int i = 0; i < 10; i++) {
       resp = await bareDio.get(currentUrl);
-      debugPrint('[LearnX] _followRedirects: hop $i '
-          'status=${resp.statusCode} url=$currentUrl');
+      debugPrint(
+        '[LearnX] _followRedirects: hop $i '
+        'status=${resp.statusCode} url=$currentUrl',
+      );
       if (resp.statusCode != null &&
           resp.statusCode! >= 300 &&
           resp.statusCode! < 400) {
         final location = resp.headers.value('location');
         if (location == null) break;
         // Resolve relative URLs against the current URL.
-        currentUrl =
-            Uri.parse(currentUrl).resolve(location).toString();
+        currentUrl = Uri.parse(currentUrl).resolve(location).toString();
         continue;
       }
       break; // non-redirect response
@@ -413,12 +412,15 @@ class Learn2018Helper {
   /// Also detects the current language setting.
   Future<void> _extractCSRFToken() async {
     debugPrint('[LearnX] _extractCSRFToken: fetching course list...');
-    final courseListResp =
-        await _dio.get(urls.learnStudentCourseListPage());
+    final courseListResp = await _dio.get(urls.learnStudentCourseListPage());
     final pageSource = courseListResp.data.toString();
-    debugPrint('[LearnX] _extractCSRFToken: page length=${pageSource.length}, '
-        'status=${courseListResp.statusCode}, url=${courseListResp.realUri}');
-    debugPrint('[LearnX] _extractCSRFToken: preview=${pageSource.substring(0, pageSource.length.clamp(0, 300))}');
+    debugPrint(
+      '[LearnX] _extractCSRFToken: page length=${pageSource.length}, '
+      'status=${courseListResp.statusCode}, url=${courseListResp.realUri}',
+    );
+    debugPrint(
+      '[LearnX] _extractCSRFToken: preview=${pageSource.substring(0, pageSource.length.clamp(0, 300))}',
+    );
 
     // Try multiple regex patterns for robustness.
     String? csrfToken;
@@ -431,8 +433,9 @@ class Learn2018Helper {
     // Pattern 2: name="_csrf" value="TOKEN" (form hidden input)
     if (csrfToken == null) {
       final p2 = RegExp(
-          r'''name=['"]_csrf['"]\s+(?:value|content)=['"]([^'"]+)['"]''',
-          multiLine: true);
+        r'''name=['"]_csrf['"]\s+(?:value|content)=['"]([^'"]+)['"]''',
+        multiLine: true,
+      );
       final m2 = p2.firstMatch(pageSource);
       if (m2 != null) csrfToken = m2.group(1);
     }
@@ -447,7 +450,8 @@ class Learn2018Helper {
     if (csrfToken == null || csrfToken.isEmpty) {
       throw ApiError(
         reason: FailReason.invalidResponse,
-        extra: 'cannot fetch CSRF token from source '
+        extra:
+            'cannot fetch CSRF token from source '
             '(page length: ${pageSource.length}, '
             'status: ${courseListResp.statusCode})',
       );
@@ -456,7 +460,8 @@ class Learn2018Helper {
 
     // Extract current language.
     final langRegex = RegExp(
-        r'<script src="/f/wlxt/common/languagejs\?lang=(zh|en)"></script>');
+      r'<script src="/f/wlxt/common/languagejs\?lang=(zh|en)"></script>',
+    );
     final langMatches = langRegex.allMatches(pageSource).toList();
     if (langMatches.isNotEmpty) {
       _lang = langMatches[0].group(1) == 'en' ? Language.en : Language.zh;
@@ -475,15 +480,137 @@ class Learn2018Helper {
   // getUserInfo
   // -------------------------------------------------------------------
 
-  Future<UserInfo> getUserInfo([CourseType courseType = CourseType.student]) async {
+  Future<UserInfo> getUserInfo([
+    CourseType courseType = CourseType.student,
+  ]) async {
     final html = await _fetchText(urls.learnHomepage(courseType));
     final doc = html_parser.parse(html);
 
-    final name = doc.querySelector('a.user-log')?.text.trim() ?? '';
-    final department =
-        doc.querySelector('.fl.up-img-info p:nth-child(2) label')?.text.trim() ?? '';
+    final name = _extractUserName(doc, html);
+    final department = _extractUserDepartment(doc, html);
 
     return UserInfo(name: name, department: department);
+  }
+
+  String _extractUserName(html_dom.Document doc, String rawHtml) {
+    for (final selector in const <String>[
+      'a.user-log',
+      '.user-log',
+      '.user-name',
+      '.up-img-info p:first-child label',
+      '.up-img-info p:first-child',
+    ]) {
+      final text = _normalizeProfileText(
+        doc.querySelector(selector)?.text ?? '',
+      );
+      if (text.isNotEmpty) {
+        return text;
+      }
+    }
+
+    final infoLines = _extractProfileInfoLines(doc);
+    if (infoLines.isNotEmpty) {
+      return infoLines.first;
+    }
+
+    final match = RegExp(
+      r'class="user-log"[^>]*>([^<]+)<',
+      caseSensitive: false,
+      multiLine: true,
+    ).firstMatch(rawHtml);
+    return _normalizeProfileText(match?.group(1) ?? '');
+  }
+
+  String _extractUserDepartment(html_dom.Document doc, String rawHtml) {
+    final infoLines = _extractProfileInfoLines(doc);
+    if (infoLines.length >= 2) {
+      return infoLines[1];
+    }
+
+    for (final selector in const <String>[
+      '.fl.up-img-info p:nth-child(2) label',
+      '.fl.up-img-info p:nth-child(2)',
+      '.up-img-info p:nth-of-type(2) label',
+      '.up-img-info p:nth-of-type(2)',
+      '.up-img-info p + p label',
+      '.up-img-info p + p',
+    ]) {
+      final text = _normalizeDepartmentText(
+        doc.querySelector(selector)?.text ?? '',
+      );
+      if (text.isNotEmpty) {
+        return text;
+      }
+    }
+
+    final bodyText = doc.body?.text ?? '';
+    for (final pattern in const <String>[
+      r'(?:院系|单位)\s*[:：]?\s*([^\n\r]{2,40})',
+      r'(?:院系|单位)\s*</[^>]+>\s*([^\n\r<]{2,40})',
+    ]) {
+      final match = RegExp(pattern, caseSensitive: false).firstMatch(bodyText);
+      final text = _normalizeDepartmentText(match?.group(1) ?? '');
+      if (text.isNotEmpty) {
+        return text;
+      }
+    }
+
+    final htmlMatch = RegExp(
+      r'up-img-info[\s\S]{0,320}?<label[^>]*>([^<]+)</label>[\s\S]{0,180}?<label[^>]*>([^<]+)</label>',
+      caseSensitive: false,
+    ).firstMatch(rawHtml);
+    if (htmlMatch != null) {
+      final second = _normalizeDepartmentText(htmlMatch.group(2) ?? '');
+      if (second.isNotEmpty) {
+        return second;
+      }
+      final first = _normalizeDepartmentText(htmlMatch.group(1) ?? '');
+      if (first.isNotEmpty) {
+        return first;
+      }
+    }
+
+    return '';
+  }
+
+  List<String> _extractProfileInfoLines(html_dom.Document doc) {
+    final container = doc.querySelector('.up-img-info');
+    if (container == null) {
+      return const <String>[];
+    }
+
+    final texts = <String>[
+      ...container
+          .querySelectorAll('p')
+          .map((node) => _normalizeProfileText(node.text))
+          .where((text) => text.isNotEmpty),
+      ...container
+          .querySelectorAll('label')
+          .map((node) => _normalizeProfileText(node.text))
+          .where((text) => text.isNotEmpty),
+    ];
+
+    final deduped = <String>[];
+    for (final text in texts) {
+      if (!deduped.contains(text)) {
+        deduped.add(text);
+      }
+    }
+    return deduped;
+  }
+
+  String _normalizeDepartmentText(String raw) {
+    final normalized = _normalizeProfileText(
+      raw,
+    ).replaceFirst(RegExp(r'^(院系|单位)\s*[:：]?\s*'), '');
+    if (normalized == '清华大学' || normalized == '未登录') {
+      return '';
+    }
+    return normalized;
+  }
+
+  String _normalizeProfileText(String raw) {
+    return raw.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
   // -------------------------------------------------------------------
@@ -495,6 +622,9 @@ class Learn2018Helper {
     String endDate, {
     bool graduate = false,
   }) async {
+    final resolvedStartDate = _normalizeRegistrarDateParam(startDate);
+    final resolvedEndDate = _normalizeRegistrarDateParam(endDate);
+
     // Get registrar ticket
     final ticketResp = await _myFetchWithToken(
       urls.registrarTicket(),
@@ -511,27 +641,56 @@ class Learn2018Helper {
     await _myFetch(urls.registrarAuth(ticket));
 
     // Fetch calendar data
-    final resp = await _myFetchWithToken(urls.registrarCalendar(
-      startDate,
-      endDate,
-      graduate: graduate,
-      callbackName: jsonpExtractorName,
-    ));
+    final resp = await _myFetchWithToken(
+      urls.registrarCalendar(
+        resolvedStartDate,
+        resolvedEndDate,
+        graduate: graduate,
+        callbackName: jsonpExtractorName,
+      ),
+    );
     if (resp.statusCode != 200) {
       throw const ApiError(reason: FailReason.invalidResponse);
     }
 
     final result = extractJSONPResult(resp.data.toString()) as List;
     return result
-        .map((i) => CalendarEvent(
-              location: i['dd']?.toString() ?? '',
-              status: i['fl']?.toString() ?? '',
-              startTime: i['kssj']?.toString() ?? '',
-              endTime: i['jssj']?.toString() ?? '',
-              date: i['nq']?.toString() ?? '',
-              courseName: i['nr']?.toString() ?? '',
-            ))
+        .map(
+          (i) => CalendarEvent(
+            location: i['dd']?.toString() ?? '',
+            status: i['fl']?.toString() ?? '',
+            startTime: i['kssj']?.toString() ?? '',
+            endTime: i['jssj']?.toString() ?? '',
+            date: i['nq']?.toString() ?? '',
+            courseName: i['nr']?.toString() ?? '',
+          ),
+        )
         .toList();
+  }
+
+  String _normalizeRegistrarDateParam(String raw) {
+    final value = raw.trim();
+    if (RegExp(r'^\d{8}$').hasMatch(value)) {
+      return value;
+    }
+
+    final parsed = DateTime.tryParse(value);
+    if (parsed != null) {
+      final month = parsed.month.toString().padLeft(2, '0');
+      final day = parsed.day.toString().padLeft(2, '0');
+      return '${parsed.year}$month$day';
+    }
+
+    final match = RegExp(r'(20\d{2})[^\d]?(\d{1,2})[^\d]?(\d{1,2})').firstMatch(
+      value.replaceAll('年', '-').replaceAll('月', '-').replaceAll('日', ''),
+    );
+    if (match == null) {
+      return value;
+    }
+
+    final month = match.group(2)!.padLeft(2, '0');
+    final day = match.group(3)!.padLeft(2, '0');
+    return '${match.group(1)!}$month$day';
   }
 
   // -------------------------------------------------------------------
@@ -579,7 +738,8 @@ class Learn2018Helper {
   }) async {
     lang ??= _lang;
     final json = await _fetchJson(
-        urls.learnCourseList(semesterID, courseType, lang));
+      urls.learnCourseList(semesterID, courseType, lang),
+    );
 
     if (json['message'] != 'success' || json['resultList'] is! List) {
       throw ApiError(reason: FailReason.invalidResponse, extra: json);
@@ -592,25 +752,28 @@ class Learn2018Helper {
       List<dynamic> timeAndLocation = [];
       try {
         final tlJson = await _fetchJson(
-            urls.learnCourseTimeLocation(c['wlkcid'].toString()));
+          urls.learnCourseTimeLocation(c['wlkcid'].toString()),
+        );
         if (tlJson is List) timeAndLocation = tlJson;
       } catch (_) {
         // Non-blocking: some courses don't have time/location
       }
 
-      courses.add(CourseInfo(
-        id: c['wlkcid'].toString(),
-        name: decodeHTML(c['zywkcm']?.toString()),
-        chineseName: decodeHTML(c['kcm']?.toString()),
-        englishName: decodeHTML(c['ywkcm']?.toString()),
-        timeAndLocation: timeAndLocation,
-        url: urls.learnCoursePage(c['wlkcid'].toString(), courseType),
-        teacherName: c['jsm']?.toString() ?? '',
-        teacherNumber: c['jsh']?.toString() ?? '',
-        courseNumber: c['kch']?.toString() ?? '',
-        courseIndex: _toInt(c['kxh']),
-        courseType: courseType,
-      ));
+      courses.add(
+        CourseInfo(
+          id: c['wlkcid'].toString(),
+          name: decodeHTML(c['zywkcm']?.toString()),
+          chineseName: decodeHTML(c['kcm']?.toString()),
+          englishName: decodeHTML(c['ywkcm']?.toString()),
+          timeAndLocation: timeAndLocation,
+          url: urls.learnCoursePage(c['wlkcid'].toString(), courseType),
+          teacherName: c['jsm']?.toString() ?? '',
+          teacherNumber: c['jsh']?.toString() ?? '',
+          courseNumber: c['kch']?.toString() ?? '',
+          courseIndex: _toInt(c['kxh']),
+          courseType: courseType,
+        ),
+      );
     }
     return courses;
   }
@@ -628,28 +791,39 @@ class Learn2018Helper {
     final contents = <String, List<dynamic>>{};
     final errors = <String, Object>{};
 
-    await Future.wait(courseIDs.map((id) async {
-      try {
-        switch (type) {
-          case ContentType.notification:
-            contents[id] = await getNotificationList(id, courseType: courseType);
-          case ContentType.file:
-            contents[id] = await getFileList(id, courseType: courseType);
-          case ContentType.homework:
-            contents[id] = await getHomeworkList(id, courseType: courseType);
-          case ContentType.discussion:
-            contents[id] = await getDiscussionList(id, courseType: courseType);
-          case ContentType.question:
-            contents[id] = await getAnsweredQuestionList(id, courseType: courseType);
-          case ContentType.questionnaire:
-            contents[id] = await getQuestionnaireList(id);
+    await Future.wait(
+      courseIDs.map((id) async {
+        try {
+          switch (type) {
+            case ContentType.notification:
+              contents[id] = await getNotificationList(
+                id,
+                courseType: courseType,
+              );
+            case ContentType.file:
+              contents[id] = await getFileList(id, courseType: courseType);
+            case ContentType.homework:
+              contents[id] = await getHomeworkList(id, courseType: courseType);
+            case ContentType.discussion:
+              contents[id] = await getDiscussionList(
+                id,
+                courseType: courseType,
+              );
+            case ContentType.question:
+              contents[id] = await getAnsweredQuestionList(
+                id,
+                courseType: courseType,
+              );
+            case ContentType.questionnaire:
+              contents[id] = await getQuestionnaireList(id);
+          }
+        } catch (e) {
+          if (!allowFailure) {
+            errors[id] = e;
+          }
         }
-      } catch (e) {
-        if (!allowFailure) {
-          errors[id] = e;
-        }
-      }
-    }));
+      }),
+    );
 
     if (errors.isNotEmpty) {
       throw ApiError(
@@ -668,10 +842,12 @@ class Learn2018Helper {
     String courseID, {
     CourseType courseType = CourseType.student,
   }) async {
-    final unexpired =
-        await _getNotificationListKind(courseID, courseType, false);
-    final expired =
-        await _getNotificationListKind(courseID, courseType, true);
+    final unexpired = await _getNotificationListKind(
+      courseID,
+      courseType,
+      false,
+    );
+    final expired = await _getNotificationListKind(courseID, courseType, true);
     return [...unexpired, ...expired];
   }
 
@@ -689,9 +865,9 @@ class Learn2018Helper {
       throw ApiError(reason: FailReason.invalidResponse, extra: json);
     }
 
-    final result = (json['object']?['aaData'] ??
-            json['object']?['resultsList'] ??
-            []) as List;
+    final result =
+        (json['object']?['aaData'] ?? json['object']?['resultsList'] ?? [])
+            as List;
 
     final notifications = <Notification>[];
     for (final n in result) {
@@ -700,7 +876,10 @@ class Learn2018Helper {
         content: _base64Decode(n['ggnr']?.toString()),
         title: decodeHTML(n['bt']?.toString()),
         url: urls.learnNotificationDetail(
-            courseID, n['ggid'].toString(), courseType),
+          courseID,
+          n['ggid'].toString(),
+          courseType,
+        ),
         publisher: n['fbrxm']?.toString() ?? '',
         hasRead: n['sfyd'] == yes,
         markedImportant: _toInt(n['sfqd']) == 1,
@@ -719,7 +898,11 @@ class Learn2018Helper {
       if (attachmentName != null && attachmentName.isNotEmpty) {
         try {
           final detail = await _parseNotificationDetail(
-              courseID, notification.id, courseType, attachmentName);
+            courseID,
+            notification.id,
+            courseType,
+            attachmentName,
+          );
           notification = notification.copyWith(attachment: detail);
         } catch (_) {
           // Non-blocking
@@ -773,30 +956,38 @@ class Learn2018Helper {
           final size = formatFileSize(rawSize);
           final downloadUrl = urls.learnFileDownload(fileId, courseType);
           final previewUrl = urls.learnFilePreview(
-            ContentType.file, fileId, courseType, firstPageOnly: previewFirstPage,
+            ContentType.file,
+            fileId,
+            courseType,
+            firstPageOnly: previewFirstPage,
           );
 
-          parsed.add(CourseFile(
-            id: f[0]?.toString() ?? '',
-            fileId: fileId,
-            title: title,
-            description: decodeHTML(f[5]?.toString()),
-            rawSize: rawSize,
-            size: size,
-            uploadTime: f[6]?.toString() ?? '',
-            publishTime: f[10]?.toString() ?? '',
-            downloadUrl: downloadUrl,
-            previewUrl: previewUrl,
-            isNew: _toInt(f[8]) == 1,
-            markedImportant: _toInt(f[2]) == 1,
-            visitCount: 0,
-            downloadCount: 0,
-            fileType: (f.length > 13) ? (f[13]?.toString() ?? '') : '',
-            remoteFile: RemoteFile(
-              id: fileId, name: title,
-              downloadUrl: downloadUrl, previewUrl: previewUrl, size: size,
+          parsed.add(
+            CourseFile(
+              id: f[0]?.toString() ?? '',
+              fileId: fileId,
+              title: title,
+              description: decodeHTML(f[5]?.toString()),
+              rawSize: rawSize,
+              size: size,
+              uploadTime: f[6]?.toString() ?? '',
+              publishTime: f[10]?.toString() ?? '',
+              downloadUrl: downloadUrl,
+              previewUrl: previewUrl,
+              isNew: _toInt(f[8]) == 1,
+              markedImportant: _toInt(f[2]) == 1,
+              visitCount: 0,
+              downloadCount: 0,
+              fileType: (f.length > 13) ? (f[13]?.toString() ?? '') : '',
+              remoteFile: RemoteFile(
+                id: fileId,
+                name: title,
+                downloadUrl: downloadUrl,
+                previewUrl: previewUrl,
+                size: size,
+              ),
             ),
-          ));
+          );
         } else if (f is Map) {
           // Map (object) format
           final title = decodeHTML(f['bt']?.toString());
@@ -811,31 +1002,33 @@ class Learn2018Helper {
           );
           final size = f['fileSize']?.toString() ?? '';
 
-          parsed.add(CourseFile(
-            id: f['kjxxid']?.toString() ?? '',
-            fileId: fileId,
-            category: categories[f['kjflid']?.toString()],
-            title: title,
-            description: decodeHTML(f['ms']?.toString()),
-            rawSize: _toInt(f['wjdx']),
-            size: size,
-            uploadTime: uploadTime,
-            publishTime: uploadTime,
-            downloadUrl: downloadUrl,
-            previewUrl: previewUrl,
-            isNew: f['isNew'] == true || _toInt(f['isNew']) == 1,
-            markedImportant: _toInt(f['sfqd']) == 1,
-            visitCount: _toInt(f['xsllcs'] ?? f['llcs']),
-            downloadCount: _toInt(f['xzcs']),
-            fileType: f['wjlx']?.toString() ?? '',
-            remoteFile: RemoteFile(
-              id: fileId,
-              name: title,
+          parsed.add(
+            CourseFile(
+              id: f['kjxxid']?.toString() ?? '',
+              fileId: fileId,
+              category: categories[f['kjflid']?.toString()],
+              title: title,
+              description: decodeHTML(f['ms']?.toString()),
+              rawSize: _toInt(f['wjdx']),
+              size: size,
+              uploadTime: uploadTime,
+              publishTime: uploadTime,
               downloadUrl: downloadUrl,
               previewUrl: previewUrl,
-              size: size,
+              isNew: f['isNew'] == true || _toInt(f['isNew']) == 1,
+              markedImportant: _toInt(f['sfqd']) == 1,
+              visitCount: _toInt(f['xsllcs'] ?? f['llcs']),
+              downloadCount: _toInt(f['xzcs']),
+              fileType: f['wjlx']?.toString() ?? '',
+              remoteFile: RemoteFile(
+                id: fileId,
+                name: title,
+                downloadUrl: downloadUrl,
+                previewUrl: previewUrl,
+                size: size,
+              ),
             ),
-          ));
+          );
         }
       } catch (e, st) {
         debugPrint('[API] Failed to parse file: $e\n$st');
@@ -852,18 +1045,21 @@ class Learn2018Helper {
     String courseID, {
     CourseType courseType = CourseType.student,
   }) async {
-    final json =
-        await _fetchJson(urls.learnFileCategoryList(courseID, courseType));
+    final json = await _fetchJson(
+      urls.learnFileCategoryList(courseID, courseType),
+    );
     if (json['result'] != 'success') {
       throw ApiError(reason: FailReason.invalidResponse, extra: json);
     }
     final result = (json['object']?['rows'] ?? []) as List;
     return result
-        .map((c) => FileCategory(
-              id: c['kjflid']?.toString() ?? '',
-              title: decodeHTML(c['bt']?.toString()),
-              creationTime: c['czsj']?.toString() ?? '',
-            ))
+        .map(
+          (c) => FileCategory(
+            id: c['kjflid']?.toString() ?? '',
+            title: decodeHTML(c['bt']?.toString()),
+            creationTime: c['czsj']?.toString() ?? '',
+          ),
+        )
         .toList();
   }
 
@@ -888,7 +1084,8 @@ class Learn2018Helper {
     String categoryId,
   ) async {
     final json = await _fetchJson(
-        urls.learnFileListByCategoryStudent(courseID, categoryId));
+      urls.learnFileListByCategoryStudent(courseID, categoryId),
+    );
     if (json['result'] != 'success') {
       throw ApiError(reason: FailReason.invalidResponse, extra: json);
     }
@@ -945,7 +1142,8 @@ class Learn2018Helper {
       urls.learnFileListByCategoryTeacher,
       method: 'POST',
       data: FormData.fromMap(
-          urls.learnFileListByCategoryTeacherFormData(courseID, categoryId)),
+        urls.learnFileListByCategoryTeacherFormData(courseID, categoryId),
+      ),
     );
     if (json['result'] != 'success') {
       throw ApiError(reason: FailReason.invalidResponse, extra: json);
@@ -1087,43 +1285,48 @@ class Learn2018Helper {
 
       final grade = _toDoubleOrNull(h['cj']);
 
-      homeworks.add(Homework(
-        id: id,
-        studentHomeworkId: id,
-        baseId: baseId,
-        title: decodeHTML(h['bt']?.toString()),
-        url: hwUrl,
-        deadline: h['jzsj']?.toString() ?? '',
-        lateSubmissionDeadline: h['bjjzsj']?.toString(),
-        isLateSubmission: h['sfbj'] == yes,
-        completionType: HomeworkCompletionType.fromValue(_toInt(h['zywcfs'])),
-        submissionType: HomeworkSubmissionType.fromValue(_toInt(h['zytjfs'])),
-        submitUrl: urls.learnHomeworkSubmitPage(
-            h['wlkcid']?.toString() ?? '', id),
-        submitTime: h['scsj']?.toString(),
-        grade: grade,
-        gradeLevel: grade != null ? gradeLevelMap[grade.toInt()] : null,
-        graderName: trimAndDefine(h['jsm']),
-        gradeContent: trimAndDefine(h['pynr']),
-        gradeTime: h['pysj']?.toString(),
-        isFavorite: h['sfsc'] == yes,
-        favoriteTime: (h['scsj'] != null && h['sfsc'] == yes)
-            ? h['scsj']?.toString()
-            : null,
-        comment: h['bznr']?.toString(),
-        excellentHomeworkList: excellentMap[baseId],
-        submitted: submitted,
-        graded: graded,
-        // Detail fields from page parsing
-        description: apiDetail['description']?.toString() ??
-            pageDetail['description']?.toString(),
-        attachment: pageDetail['attachment'] as RemoteFile?,
-        answerContent: pageDetail['answerContent']?.toString(),
-        answerAttachment: pageDetail['answerAttachment'] as RemoteFile?,
-        submittedContent: pageDetail['submittedContent']?.toString(),
-        submittedAttachment: pageDetail['submittedAttachment'] as RemoteFile?,
-        gradeAttachment: pageDetail['gradeAttachment'] as RemoteFile?,
-      ));
+      homeworks.add(
+        Homework(
+          id: id,
+          studentHomeworkId: id,
+          baseId: baseId,
+          title: decodeHTML(h['bt']?.toString()),
+          url: hwUrl,
+          deadline: h['jzsj']?.toString() ?? '',
+          lateSubmissionDeadline: h['bjjzsj']?.toString(),
+          isLateSubmission: h['sfbj'] == yes,
+          completionType: HomeworkCompletionType.fromValue(_toInt(h['zywcfs'])),
+          submissionType: HomeworkSubmissionType.fromValue(_toInt(h['zytjfs'])),
+          submitUrl: urls.learnHomeworkSubmitPage(
+            h['wlkcid']?.toString() ?? '',
+            id,
+          ),
+          submitTime: h['scsj']?.toString(),
+          grade: grade,
+          gradeLevel: grade != null ? gradeLevelMap[grade.toInt()] : null,
+          graderName: trimAndDefine(h['jsm']),
+          gradeContent: trimAndDefine(h['pynr']),
+          gradeTime: h['pysj']?.toString(),
+          isFavorite: h['sfsc'] == yes,
+          favoriteTime: (h['scsj'] != null && h['sfsc'] == yes)
+              ? h['scsj']?.toString()
+              : null,
+          comment: h['bznr']?.toString(),
+          excellentHomeworkList: excellentMap[baseId],
+          submitted: submitted,
+          graded: graded,
+          // Detail fields from page parsing
+          description:
+              apiDetail['description']?.toString() ??
+              pageDetail['description']?.toString(),
+          attachment: pageDetail['attachment'] as RemoteFile?,
+          answerContent: pageDetail['answerContent']?.toString(),
+          answerAttachment: pageDetail['answerAttachment'] as RemoteFile?,
+          submittedContent: pageDetail['submittedContent']?.toString(),
+          submittedAttachment: pageDetail['submittedAttachment'] as RemoteFile?,
+          gradeAttachment: pageDetail['gradeAttachment'] as RemoteFile?,
+        ),
+      );
     }
     return homeworks;
   }
@@ -1137,7 +1340,8 @@ class Learn2018Helper {
     CourseType courseType = CourseType.student,
   }) async {
     final json = await _fetchJson(
-        urls.learnDiscussionList(courseID, courseType));
+      urls.learnDiscussionList(courseID, courseType),
+    );
     if (json['result'] != 'success') {
       throw ApiError(reason: FailReason.invalidResponse, extra: json);
     }
@@ -1175,7 +1379,8 @@ class Learn2018Helper {
     CourseType courseType = CourseType.student,
   }) async {
     final json = await _fetchJson(
-        urls.learnQuestionListAnswered(courseID, courseType));
+      urls.learnQuestionListAnswered(courseID, courseType),
+    );
     if (json['result'] != 'success') {
       throw ApiError(reason: FailReason.invalidResponse, extra: json);
     }
@@ -1209,9 +1414,13 @@ class Learn2018Helper {
 
   Future<List<Questionnaire>> getQuestionnaireList(String courseID) async {
     final ongoing = await _getQuestionnaireListAtUrl(
-        courseID, urls.learnQnrListOngoing);
+      courseID,
+      urls.learnQnrListOngoing,
+    );
     final ended = await _getQuestionnaireListAtUrl(
-        courseID, urls.learnQnrListEnded);
+      courseID,
+      urls.learnQnrListEnded,
+    );
     return [...ongoing, ...ended];
   }
 
@@ -1231,28 +1440,34 @@ class Learn2018Helper {
     final result = (json['object']?['aaData'] ?? []) as List;
     final questionnaires = <Questionnaire>[];
     for (final e in result) {
-      final type = qnrTypeMap[e['wjlx']?.toString()] ?? QuestionnaireType.survey;
+      final type =
+          qnrTypeMap[e['wjlx']?.toString()] ?? QuestionnaireType.survey;
       List<QuestionnaireDetail> detail = [];
       try {
         detail = await _getQuestionnaireDetail(courseID, e['wjid'].toString());
       } catch (_) {}
 
-      questionnaires.add(Questionnaire(
-        id: e['wjid']?.toString() ?? '',
-        type: type,
-        title: decodeHTML(e['wjbt']?.toString()),
-        startTime: e['kssj']?.toString() ?? '',
-        endTime: e['jssj']?.toString() ?? '',
-        uploadTime: e['scsj']?.toString() ?? '',
-        uploaderId: e['scr']?.toString() ?? '',
-        uploaderName: e['scrxm']?.toString() ?? '',
-        submitTime: e['tjsj']?.toString(),
-        isFavorite: e['sfsc'] == yes,
-        comment: e['bznr']?.toString(),
-        url: urls.learnQnrSubmitPage(
-            e['wlkcid']?.toString() ?? '', e['wjid'].toString(), type),
-        detail: detail,
-      ));
+      questionnaires.add(
+        Questionnaire(
+          id: e['wjid']?.toString() ?? '',
+          type: type,
+          title: decodeHTML(e['wjbt']?.toString()),
+          startTime: e['kssj']?.toString() ?? '',
+          endTime: e['jssj']?.toString() ?? '',
+          uploadTime: e['scsj']?.toString() ?? '',
+          uploaderId: e['scr']?.toString() ?? '',
+          uploaderName: e['scrxm']?.toString() ?? '',
+          submitTime: e['tjsj']?.toString(),
+          isFavorite: e['sfsc'] == yes,
+          comment: e['bznr']?.toString(),
+          url: urls.learnQnrSubmitPage(
+            e['wlkcid']?.toString() ?? '',
+            e['wjid'].toString(),
+            type,
+          ),
+          detail: detail,
+        ),
+      );
     }
     return questionnaires;
   }
@@ -1332,7 +1547,8 @@ class Learn2018Helper {
             id: e['ywid']?.toString() ?? '',
             type: ctype,
             title: decodeHTML(e['ywbt']?.toString()),
-            time: (ctype == ContentType.discussion ||
+            time:
+                (ctype == ContentType.discussion ||
                     ctype == ContentType.question)
                 ? (e['tlsj']?.toString() ?? '')
                 : (e['ywsj']?.toString() ?? ''),
@@ -1428,10 +1644,11 @@ class Learn2018Helper {
 
   Future<void> sortCourses(List<String> courseIDs) async {
     final body = jsonEncode(
-      courseIDs.asMap().entries.map((e) => {
-        'wlkcid': e.value,
-        'xh': e.key + 1,
-      }).toList(),
+      courseIDs
+          .asMap()
+          .entries
+          .map((e) => {'wlkcid': e.value, 'xh': e.key + 1})
+          .toList(),
     );
     final json = await _fetchJson(
       urls.learnSortCourses,
@@ -1505,7 +1722,8 @@ class Learn2018Helper {
     String attachmentName,
   ) async {
     final html = await _fetchText(
-        urls.learnNotificationDetail(courseID, id, courseType));
+      urls.learnNotificationDetail(courseID, id, courseType),
+    );
     final doc = html_parser.parse(html);
 
     String path;
@@ -1516,7 +1734,8 @@ class Learn2018Helper {
     }
 
     final size = trimAndDefine(
-        doc.querySelector('div#attachment > div.fl > span[class^="color"]')?.text);
+      doc.querySelector('div#attachment > div.fl > span[class^="color"]')?.text,
+    );
 
     // Extract attachment ID from URL params
     final params = Uri.parse('?${path.split('?').last}').queryParameters;
@@ -1550,7 +1769,8 @@ class Learn2018Helper {
 
     final fileDivs = doc.querySelectorAll('div.list.fujian.clearfix');
     final contentDivs = doc.querySelectorAll(
-        'div.list.calendar.clearfix > div.fl.right > div.c55');
+      'div.list.calendar.clearfix > div.fl.right > div.c55',
+    );
     final boxboxDivs = doc.querySelectorAll('div.boxbox');
 
     String? submittedContent;
@@ -1562,19 +1782,25 @@ class Learn2018Helper {
     }
 
     return {
-      'description':
-          contentDivs.isNotEmpty ? trimAndDefine(contentDivs[0].innerHtml) : null,
-      'answerContent':
-          contentDivs.length > 1 ? trimAndDefine(contentDivs[1].innerHtml) : null,
+      'description': contentDivs.isNotEmpty
+          ? trimAndDefine(contentDivs[0].innerHtml)
+          : null,
+      'answerContent': contentDivs.length > 1
+          ? trimAndDefine(contentDivs[1].innerHtml)
+          : null,
       'submittedContent': submittedContent,
-      'attachment':
-          fileDivs.isNotEmpty ? _parseHomeworkFile(fileDivs[0]) : null,
-      'answerAttachment':
-          fileDivs.length > 1 ? _parseHomeworkFile(fileDivs[1]) : null,
-      'submittedAttachment':
-          fileDivs.length > 2 ? _parseHomeworkFile(fileDivs[2]) : null,
-      'gradeAttachment':
-          fileDivs.length > 3 ? _parseHomeworkFile(fileDivs[3]) : null,
+      'attachment': fileDivs.isNotEmpty
+          ? _parseHomeworkFile(fileDivs[0])
+          : null,
+      'answerAttachment': fileDivs.length > 1
+          ? _parseHomeworkFile(fileDivs[1])
+          : null,
+      'submittedAttachment': fileDivs.length > 2
+          ? _parseHomeworkFile(fileDivs[2])
+          : null,
+      'gradeAttachment': fileDivs.length > 3
+          ? _parseHomeworkFile(fileDivs[3])
+          : null,
     };
   }
 
@@ -1591,9 +1817,7 @@ class Learn2018Helper {
     if (json['result'] != 'success') {
       throw ApiError(reason: FailReason.invalidResponse, extra: json);
     }
-    return {
-      'description': trimAndDefine(json['msg']),
-    };
+    return {'description': trimAndDefine(json['msg'])};
   }
 
   // -------------------------------------------------------------------
@@ -1604,14 +1828,15 @@ class Learn2018Helper {
     if (fileDiv == null) return null;
 
     // Try .ftitle > a first, then .fl > a
-    var fileNode = fileDiv.querySelector('.ftitle a') ??
-        fileDiv.querySelector('.fl a');
+    var fileNode =
+        fileDiv.querySelector('.ftitle a') ?? fileDiv.querySelector('.fl a');
 
     if (fileNode == null) return null;
 
     final href = fileNode.attributes['href'] ?? '';
     final size = trimAndDefine(
-        fileDiv.querySelector('.fl > span[class^="color"]')?.text);
+      fileDiv.querySelector('.fl > span[class^="color"]')?.text,
+    );
     final params = Uri.parse('?${href.split('?').last}').queryParameters;
     final attachmentId = params['fileId'] ?? '';
 
@@ -1639,7 +1864,7 @@ class Learn2018Helper {
   // -------------------------------------------------------------------
 
   Future<Map<String, List<ExcellentHomework>>>
-      _getExcellentHomeworkListByHomework(String courseID) async {
+  _getExcellentHomeworkListByHomework(String courseID) async {
     final json = await _fetchJson(
       urls.learnHomeworkListExcellent,
       method: 'POST',
@@ -1655,7 +1880,9 @@ class Learn2018Helper {
       final id = h['xszyid']?.toString() ?? '';
       final baseId = h['zyid']?.toString() ?? '';
       final hwUrl = urls.learnHomeworkExcellentPage(
-          h['wlkcid']?.toString() ?? '', id);
+        h['wlkcid']?.toString() ?? '',
+        id,
+      );
 
       Map<String, dynamic> pageDetail = {};
       try {
@@ -1681,7 +1908,8 @@ class Learn2018Helper {
           name: cyParts.length > 1 ? cyParts[1] : null,
           anonymous: h['sfzm'] == yes,
         ),
-        description: apiDetail['description']?.toString() ??
+        description:
+            apiDetail['description']?.toString() ??
             pageDetail['description']?.toString(),
         attachment: pageDetail['attachment'] as RemoteFile?,
         answerContent: pageDetail['answerContent']?.toString(),
