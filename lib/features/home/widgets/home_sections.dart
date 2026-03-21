@@ -172,8 +172,12 @@ class HomeTodayScheduleSection extends ConsumerStatefulWidget {
 }
 
 class _HomeTodayScheduleSectionState
-    extends ConsumerState<HomeTodayScheduleSection> {
+    extends ConsumerState<HomeTodayScheduleSection>
+    with AutomaticKeepAliveClientMixin<HomeTodayScheduleSection> {
   late final PageController _pageController;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -191,6 +195,7 @@ class _HomeTodayScheduleSectionState
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final authState = ref.watch(authProvider);
     if (!authState.isLoggedIn) {
       return const SizedBox.shrink();
@@ -203,17 +208,6 @@ class _HomeTodayScheduleSectionState
     final currentItems =
         scheduleAsync.valueOrNull?.itemsFor(currentDay) ??
         const <TodayScheduleItem>[];
-
-    ref.listen<int>(homeSchedulePageIndexProvider, (previous, next) {
-      if (!_pageController.hasClients) return;
-      final page = _pageController.page?.round() ?? _pageController.initialPage;
-      if (page == next) return;
-      _pageController.animateToPage(
-        next,
-        duration: const Duration(milliseconds: 260),
-        curve: Curves.easeOutCubic,
-      );
-    });
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
