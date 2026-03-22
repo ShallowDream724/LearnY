@@ -1,7 +1,7 @@
 name: learn_y
 description: "LearnY - A premium client for Tsinghua University Web Learning"
 publish_to: 'none'
-version: 0.1.0-beta+3
+version: 0.1.1-beta+4
 
 environment:
   sdk: ^3.11.1
@@ -43,6 +43,9 @@ dependencies:
   # File / path utilities
   path_provider: ^2.1.5
   path: ^1.9.1
+  mime: ^2.0.0
+  archive: ^4.0.9
+  xml: ^6.6.1
   share_plus: ^10.1.4
 
   # Date & time
@@ -60,8 +63,8 @@ dependencies:
   flutter_animate: ^4.5.2
   google_fonts: ^6.2.1
   open_filex: ^4.7.0
-  flutter_pdfview: ^1.4.4
   file_picker: ^10.3.10
+  pdfrx: ^2.2.24
 
 dev_dependencies:
   flutter_test:
@@ -78,6 +81,7 @@ dev_dependencies:
   # Testing
   mockito: ^5.4.4
   build_runner_core: ^8.0.0
+  webview_flutter_platform_interface: ^2.14.0
 
 flutter:
   uses-material-design: true

@@ -1,16 +1,16 @@
-/// Assignments screen — timeline-grouped homework list.
-///
-/// Design: assignments grouped by deadline proximity:
-///   本周截止 → 下周截止 → 更远 → 已完成
-/// Left-side timeline connector with urgency dots.
-///
-/// Architecture:
-///   - Providers          : data fetching + filtering
-///   - _TimeGroup enum    : grouping logic
-///   - _StatsStrip        : compact stats bar
-///   - _FilterRow         : filter pills
-///   - _TimelineSection   : group header + connector + children
-///   - _HomeworkItem      : individual assignment card
+// Assignments screen — timeline-grouped homework list.
+//
+// Design: assignments grouped by deadline proximity:
+//   本周截止 → 下周截止 → 更远 → 已完成
+// Left-side timeline connector with urgency dots.
+//
+// Architecture:
+//   - Providers          : data fetching + filtering
+//   - _TimeGroup enum    : grouping logic
+//   - _StatsStrip        : compact stats bar
+//   - _FilterRow         : filter pills
+//   - _TimelineSection   : group header + connector + children
+//   - _HomeworkItem      : individual assignment card
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

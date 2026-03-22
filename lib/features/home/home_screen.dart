@@ -1,10 +1,10 @@
-/// Home Screen — Smart aggregation of urgent items.
-///
-/// Sections:
-/// 1. Greeting + Stats bar (courses, pending, unread)
-/// 2. Urgent assignments (deadline timeline)
-/// 3. Unread notifications
-/// 4. Quick actions
+// Home Screen — Smart aggregation of urgent items.
+//
+// Sections:
+// 1. Greeting + Stats bar (courses, pending, unread)
+// 2. Urgent assignments (deadline timeline)
+// 3. Unread notifications
+// 4. Quick actions
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';

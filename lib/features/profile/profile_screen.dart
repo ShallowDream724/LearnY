@@ -1,6 +1,6 @@
-/// Profile / Settings screen.
-///
-/// Shows user info, app preferences, and logout.
+// Profile / Settings screen.
+//
+// Shows user info, app preferences, and logout.
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,6 +15,8 @@ import '../../core/providers/providers.dart';
 import '../../core/router/router.dart';
 import '../files/providers/file_bookmark_providers.dart';
 import 'providers/profile_identity_provider.dart';
+import 'widgets/auto_relogin_enrollment_screen.dart';
+import 'widgets/auto_relogin_setup_dialog.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -24,6 +26,8 @@ class ProfileScreen extends ConsumerWidget {
     final c = context.colors;
     final authState = ref.watch(authProvider);
     final themeMode = ref.watch(themeModeProvider);
+    final autoReloginEnabled = ref.watch(autoReloginEnabledProvider);
+    final hasStoredCredential = ref.watch(storedCredentialAvailabilityProvider);
     final favoriteCount =
         ref.watch(bookmarkedFileCountProvider).valueOrNull ?? 0;
     final profileIdentity = ref.watch(profileIdentityProvider).valueOrNull;
@@ -146,6 +150,34 @@ class ProfileScreen extends ConsumerWidget {
                     ),
                   ],
                 ).animate(delay: 100.ms).fadeIn(duration: 300.ms),
+
+                const SizedBox(height: 24),
+
+                _SectionLabel(label: '登录与安全', textColor: c.subtitle),
+                const SizedBox(height: 8),
+
+                _SettingsCard(
+                  surface: c.surface,
+                  border: c.border,
+                  children: [
+                    _SettingsSwitchTile(
+                      icon: Icons.lock_clock_outlined,
+                      title: '自动重新登录',
+                      subtitle: _buildAutoReloginSubtitle(
+                        enabled: autoReloginEnabled,
+                        hasStoredCredential: hasStoredCredential.valueOrNull,
+                      ),
+                      value: autoReloginEnabled,
+                      textColor: c.text,
+                      subColor: c.subtitle,
+                      onChanged: (value) => _handleAutoReloginToggle(
+                        context,
+                        ref,
+                        enabled: value,
+                      ),
+                    ),
+                  ],
+                ).animate(delay: 125.ms).fadeIn(duration: 300.ms),
 
                 const SizedBox(height: 24),
 
@@ -294,6 +326,55 @@ class ProfileScreen extends ConsumerWidget {
     return '当前 ${updateInfo.currentBuild.shortLabel}';
   }
 
+  String _buildAutoReloginSubtitle({
+    required bool enabled,
+    required bool? hasStoredCredential,
+  }) {
+    if (!enabled) {
+      return '关闭';
+    }
+    if (hasStoredCredential == null) {
+      return '读取中...';
+    }
+    if (!hasStoredCredential) {
+      return '需重新配置';
+    }
+    return '已开启';
+  }
+
+  Future<void> _handleAutoReloginToggle(
+    BuildContext context,
+    WidgetRef ref, {
+    required bool enabled,
+  }) async {
+    if (!enabled) {
+      await ref.read(authReloginServiceProvider).clearStoredCredential();
+      await ref.read(autoReloginEnabledProvider.notifier).setEnabled(false);
+      ref.invalidate(storedCredentialAvailabilityProvider);
+      if (context.mounted) {
+        AppToast.showInfo(context, message: '已关闭自动重新登录');
+      }
+      return;
+    }
+
+    final input = await showDialog<AutoReloginSetupInput>(
+      context: context,
+      builder: (_) => const AutoReloginSetupDialog(),
+    );
+    if (input == null || !context.mounted) {
+      return;
+    }
+
+    final configured = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => AutoReloginEnrollmentScreen(input: input),
+      ),
+    );
+    if (configured == true && context.mounted) {
+      AppToast.showSuccess(context, message: '已启用自动重新登录');
+    }
+  }
+
   Future<void> _handleUpdateTap(BuildContext context, WidgetRef ref) async {
     final info = await ref.refresh(appUpdateInfoProvider.future);
     if (!context.mounted) {
@@ -427,6 +508,57 @@ class _SettingsTile extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _SettingsSwitchTile extends StatelessWidget {
+  const _SettingsSwitchTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.textColor,
+    required this.subColor,
+    required this.onChanged,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool value;
+  final Color textColor;
+  final Color subColor;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          Icon(icon, size: 22, color: subColor),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: AppTypography.titleMedium.copyWith(color: textColor),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  style: AppTypography.bodySmall.copyWith(color: subColor),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Switch.adaptive(value: value, onChanged: onChanged),
+        ],
       ),
     );
   }

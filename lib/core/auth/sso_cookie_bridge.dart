@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/learn_api.dart';
 import '../api/urls.dart' as urls;
-import '../providers/app_providers.dart';
+import '../providers/api_client_provider.dart';
 
 class SsoCookieBridge {
   const SsoCookieBridge(this._api);

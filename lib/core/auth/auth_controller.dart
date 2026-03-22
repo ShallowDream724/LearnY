@@ -1,8 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../providers/api_client_provider.dart';
 import '../providers/app_providers.dart';
+import '../providers/auth_preferences_provider.dart';
 import 'auth_session_repository.dart';
 import 'auth_session_store.dart';
+import 'credential_vault.dart';
 
 enum AuthRestoreState { restoring, ready }
 
@@ -78,8 +81,9 @@ class AuthState {
 class AuthController extends StateNotifier<AuthState> {
   final Ref _ref;
   final AuthSessionRepository _repository;
+  final CredentialVault _credentialVault;
 
-  AuthController(this._ref, this._repository)
+  AuthController(this._ref, this._repository, this._credentialVault)
     : super(const AuthState.restoring()) {
     _restore();
   }
@@ -128,6 +132,8 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<void> logout() async {
+    await _credentialVault.clear();
+    await _ref.read(autoReloginEnabledProvider.notifier).setEnabled(false);
     await _repository.logout();
     _ref.read(currentSemesterIdProvider.notifier).state = null;
     state = const AuthState.signedOut();
@@ -148,5 +154,9 @@ final authSessionRepositoryProvider = Provider<AuthSessionRepository>((ref) {
 });
 
 final authProvider = StateNotifierProvider<AuthController, AuthState>((ref) {
-  return AuthController(ref, ref.watch(authSessionRepositoryProvider));
+  return AuthController(
+    ref,
+    ref.watch(authSessionRepositoryProvider),
+    ref.watch(credentialVaultProvider),
+  );
 });

@@ -1,13 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../core/design/responsive.dart';
 import '../core/design/theme.dart';
 import '../core/providers/providers.dart';
 import '../core/router/router.dart';
+import 'app_orientation.dart';
 
 class LearnYApp extends ConsumerStatefulWidget {
   const LearnYApp({super.key});
@@ -26,6 +25,7 @@ class _LearnYAppState extends ConsumerState<LearnYApp>
     WidgetsBinding.instance.addObserver(this);
     ref.read(appSessionCoordinatorProvider);
     unawaited(ref.read(appUpdateInfoProvider.future));
+    unawaited(AppOrientation.restoreDefault());
     _router = buildRouter(ref: ref);
   }
 
@@ -56,23 +56,6 @@ class _LearnYAppState extends ConsumerState<LearnYApp>
         _ => ThemeMode.system,
       },
       routerConfig: _router,
-      builder: (context, child) {
-        final deviceType = layoutTypeOf(context);
-        if (deviceType == LayoutType.compact) {
-          SystemChrome.setPreferredOrientations([
-            DeviceOrientation.portraitUp,
-            DeviceOrientation.portraitDown,
-          ]);
-        } else {
-          SystemChrome.setPreferredOrientations([
-            DeviceOrientation.portraitUp,
-            DeviceOrientation.portraitDown,
-            DeviceOrientation.landscapeLeft,
-            DeviceOrientation.landscapeRight,
-          ]);
-        }
-        return child!;
-      },
     );
   }
 }

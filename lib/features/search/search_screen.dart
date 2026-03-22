@@ -1,24 +1,24 @@
-/// Global search screen — search across all courses' content.
-///
-/// UX Design Decisions:
-///
-/// 1. **Search-as-you-type** with 300ms debounce: responsive but not wasteful.
-///    Searches local DB (Drift) so it's fast even offline.
-///
-/// 2. **Multi-category results**: grouped into courses, notifications, homework,
-///    and files — each with a visual section header and distinct card style.
-///    The user can immediately see which category the result belongs to.
-///
-/// 3. **Recent searches**: persisted in AppState (key-value store).
-///    Shows up when the search field is empty, with a clear-all option.
-///
-/// 4. **Empty states**: differentiated between "start searching" (search icon),
-///    "no results" (with suggestion), and "loading" states.
-///
-/// 5. **Result count badges**: each category header shows the count,
-///    helping users gauge result distribution at a glance.
-///
-/// 6. **Navigation**: tapping a result navigates to the appropriate detail page.
+// Global search screen — search across all courses' content.
+//
+// UX Design Decisions:
+//
+// 1. **Search-as-you-type** with 300ms debounce: responsive but not wasteful.
+//    Searches local DB (Drift) so it's fast even offline.
+//
+// 2. **Multi-category results**: grouped into courses, notifications, homework,
+//    and files — each with a visual section header and distinct card style.
+//    The user can immediately see which category the result belongs to.
+//
+// 3. **Recent searches**: persisted in AppState (key-value store).
+//    Shows up when the search field is empty, with a clear-all option.
+//
+// 4. **Empty states**: differentiated between "start searching" (search icon),
+//    "no results" (with suggestion), and "loading" states.
+//
+// 5. **Result count badges**: each category header shows the count,
+//    helping users gauge result distribution at a glance.
+//
+// 6. **Navigation**: tapping a result navigates to the appropriate detail page.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';

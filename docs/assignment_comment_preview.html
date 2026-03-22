@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Assignment Comment Preview</title>
+  <style>
+    :root {
+      --bg: #f7f9fc;
+      --surface: #ecfff0;
+      --surface-border: #d6f2dc;
+      --text: #14233a;
+      --muted: #9fb0c8;
+      --muted-2: #7d8da3;
+      --success: #34c759;
+      --success-soft: #dff8e6;
+      --quote-bg: rgba(52, 199, 89, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "SF Pro Display", "PingFang SC", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top, rgba(87, 146, 255, 0.08), transparent 28%),
+        linear-gradient(180deg, #fbfcff 0%, var(--bg) 100%);
+      color: var(--text);
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    .phone {
+      width: 390px;
+      max-width: 100%;
+      border-radius: 34px;
+      background: rgba(255, 255, 255, 0.82);
+      border: 1px solid rgba(183, 196, 221, 0.5);
+      box-shadow: 0 24px 70px rgba(28, 49, 94, 0.14);
+      backdrop-filter: blur(16px);
+      padding: 28px 20px 30px;
+    }
+
+    .title {
+      font-size: 18px;
+      font-weight: 700;
+      margin: 0 0 12px;
+    }
+
+    .hint {
+      margin: 0 0 20px;
+      color: var(--muted-2);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .card {
+      position: relative;
+      background: linear-gradient(180deg, #f0fff3 0%, var(--surface) 100%);
+      border: 1px solid var(--surface-border);
+      border-radius: 22px;
+      padding: 18px 20px;
+      overflow: hidden;
+    }
+
+    .card::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(135deg, rgba(255,255,255,0.34), transparent 48%);
+    }
+
+    .top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .course {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 10px;
+      letter-spacing: 0.2px;
+    }
+
+    .homework {
+      font-size: 22px;
+      font-weight: 750;
+      line-height: 1.2;
+      margin: 0;
+    }
+
+    .right {
+      text-align: right;
+      min-width: 74px;
+      padding-top: 2px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 10px;
+      background: var(--success-soft);
+      color: var(--success);
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1;
+      margin-bottom: 10px;
+    }
+
+    .score-row {
+      display: flex;
+      justify-content: flex-end;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .score {
+      color: var(--success);
+      font-size: 20px;
+      font-weight: 760;
+      line-height: 1;
+    }
+
+    .chevron {
+      color: #c7c7cc;
+      font-size: 18px;
+      font-weight: 700;
+      transform: translateY(1px);
+    }
+
+    .comment {
+      position: relative;
+      z-index: 1;
+      margin-top: 14px;
+      padding: 10px 12px 10px 14px;
+      border-radius: 12px;
+      background: var(--quote-bg);
+      border-left: 3px solid rgba(52, 199, 89, 0.42);
+      color: #587089;
+      font-size: 13px;
+      line-height: 1.45;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .comment b {
+      color: #4d6a5d;
+      font-weight: 700;
+      margin-right: 6px;
+    }
+
+    .rules {
+      margin-top: 18px;
+      padding: 14px 14px 0;
+      border-top: 1px dashed rgba(159, 176, 200, 0.45);
+      color: var(--muted-2);
+      font-size: 12px;
+      line-height: 1.65;
+    }
+
+    .rules div {
+      margin-bottom: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <h1 class="title">作业卡片改造预览</h1>
+    <p class="hint">
+      目标：分数大小不动，只在“有教师评语”时补一条单行摘要；无评语时这条区域完全不出现。
+    </p>
+
+    <section class="card">
+      <div class="top">
+        <div>
+          <div class="course">分子生物学</div>
+          <h2 class="homework">第2次作业</h2>
+        </div>
+        <div class="right">
+          <div class="badge">已批改</div>
+          <div class="score-row">
+            <div class="score">97</div>
+            <div class="chevron">›</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="comment">
+        <b>评语</b>论述结构比较完整，案例选择也合适，但关键结论还可以再压缩并突出重点…
+      </div>
+    </section>
+
+    <div class="rules">
+      <div>1. 没有评语：卡片维持你现在的高度和结构，不额外占空间。</div>
+      <div>2. 有评语：仅显示一行摘要，告诉用户“老师写了反馈”。</div>
+      <div>3. 分数视觉权重保持当前级别，不缩小，不抢掉成绩辨识度。</div>
+      <div>4. 详情页“我的提交”若正文只是无意义占位符（如箭头），则不显示正文块。</div>
+    </div>
+  </div>
+</body>
+</html>

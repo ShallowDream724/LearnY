@@ -1,8 +1,8 @@
-/// Phase 3: Replace old variable USAGES with c.xxx equivalents.
-///
-/// Phase 1 removed ternary declarations.
-/// Phase 2 removed isDark params.
-/// Phase 3 replaces dangling variable names with c.xxx.
+// Phase 3: Replace old variable USAGES with c.xxx equivalents.
+//
+// Phase 1 removed ternary declarations.
+// Phase 2 removed isDark params.
+// Phase 3 replaces dangling variable names with c.xxx.
 import 'dart:io';
 
 final files = [
@@ -54,7 +54,7 @@ void main() {
   for (final path in files) {
     final file = File(path);
     if (!file.existsSync()) {
-      print('SKIP: $path');
+      stdout.writeln('SKIP: $path');
       continue;
     }
     var content = file.readAsStringSync();
@@ -93,10 +93,10 @@ void main() {
 
     if (changes > 0) {
       file.writeAsStringSync(content);
-      print('PHASE3 ($changes fixes): $path');
+      stdout.writeln('PHASE3 ($changes fixes): $path');
     } else {
-      print('NO CHANGE: $path');
+      stdout.writeln('NO CHANGE: $path');
     }
   }
-  print('\nPhase 3 done!');
+  stdout.writeln('\nPhase 3 done!');
 }

@@ -1,4 +1,4 @@
-/// Deadline card — shows an assignment with urgency indication.
+// Deadline card — shows an assignment with urgency indication.
 import 'package:flutter/material.dart';
 
 import '../../../core/design/app_theme_colors.dart';

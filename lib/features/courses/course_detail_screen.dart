@@ -1,15 +1,15 @@
-/// Course detail screen — tabbed view of a single course.
-///
-/// Tabs:
-/// 1. 通知 (Notifications) — with read/unread state
-/// 2. 文件 (Files) — with download state, file size, search
-/// 3. 作业 (Homework) — with status filter
-///
-/// Design decisions:
-/// - Use TabBar instead of BottomNavBar (since we're inside the shell)
-/// - SliverAppBar with course name + teacher pinned
-/// - Each tab is its own lazy-loaded list
-/// - On tablet, notifications + files show side-by-side
+// Course detail screen — tabbed view of a single course.
+//
+// Tabs:
+// 1. 通知 (Notifications) — with read/unread state
+// 2. 文件 (Files) — with download state, file size, search
+// 3. 作业 (Homework) — with status filter
+//
+// Design decisions:
+// - Use TabBar instead of BottomNavBar (since we're inside the shell)
+// - SliverAppBar with course name + teacher pinned
+// - Each tab is its own lazy-loaded list
+// - On tablet, notifications + files show side-by-side
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';

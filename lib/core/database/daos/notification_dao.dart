@@ -1,6 +1,9 @@
 part of '../database.dart';
 
 extension NotificationDao on AppDatabase {
+  Expression<bool> _isUnreadExpr($NotificationsTable t) =>
+      t.hasRead.equalsExp(t.hasReadLocal);
+
   Future<List<Notification>> getNotificationsByCourse(String courseId) =>
       (select(notifications)..where((t) => t.courseId.equals(courseId))).get();
 
@@ -8,18 +11,32 @@ extension NotificationDao on AppDatabase {
       (select(notifications)..where((t) => t.id.equals(id))).getSingleOrNull();
 
   Future<List<Notification>> getUnreadNotifications() =>
-      (select(notifications)..where(
-            (t) => t.hasRead.equals(false) & t.hasReadLocal.equals(false),
-          ))
-          .get();
+      (select(notifications)..where(_isUnreadExpr)).get();
 
   Future<void> upsertNotification(NotificationsCompanion entry) =>
       into(notifications).insertOnConflictUpdate(entry);
 
-  Future<void> markNotificationReadLocal(String id) =>
-      (update(notifications)..where((t) => t.id.equals(id))).write(
-        const NotificationsCompanion(hasReadLocal: Value(true)),
-      );
+  Future<void> markNotificationReadLocal(String id) async {
+    final notification = await getNotificationById(id);
+    if (notification == null) {
+      return;
+    }
+
+    await (update(notifications)..where((t) => t.id.equals(id))).write(
+      NotificationsCompanion(hasReadLocal: Value(!notification.hasRead)),
+    );
+  }
+
+  Future<void> markNotificationUnreadLocal(String id) async {
+    final notification = await getNotificationById(id);
+    if (notification == null) {
+      return;
+    }
+
+    await (update(notifications)..where((t) => t.id.equals(id))).write(
+      NotificationsCompanion(hasReadLocal: Value(notification.hasRead)),
+    );
+  }
 
   Stream<List<Notification>> watchNotificationsByCourse(String courseId) =>
       (select(
@@ -48,10 +65,7 @@ extension NotificationDao on AppDatabase {
   )..orderBy([(t) => OrderingTerm.desc(t.publishTime)])).watch();
 
   Stream<List<Notification>> watchUnreadNotifications() =>
-      (select(notifications)..where(
-            (t) => t.hasRead.equals(false) & t.hasReadLocal.equals(false),
-          ))
-          .watch();
+      (select(notifications)..where(_isUnreadExpr)).watch();
 
   Stream<List<Notification>> watchUnreadNotificationsBySemester(
     String semesterId,
@@ -62,8 +76,7 @@ extension NotificationDao on AppDatabase {
           ])
           ..where(
             courses.semesterId.equals(semesterId) &
-                notifications.hasRead.equals(false) &
-                notifications.hasReadLocal.equals(false),
+                _isUnreadExpr(notifications),
           )
           ..orderBy([OrderingTerm.desc(notifications.publishTime)]);
 

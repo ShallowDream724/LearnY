@@ -1,7 +1,7 @@
-/// Courses screen — grid of course cards with notification badges.
-///
-/// Each card shows: course name, teacher, unread count badge,
-/// pending homework indicator, and latest activity.
+// Courses screen — grid of course cards with notification badges.
+//
+// Each card shows: course name, teacher, unread count badge,
+// pending homework indicator, and latest activity.
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

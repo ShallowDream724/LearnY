@@ -1,7 +1,7 @@
-/// Database connection factory — platform-specific.
-///
-/// Uses `NativeDatabase` from sqlite3_flutter_libs for mobile,
-/// and can be extended for web (drift worker) if needed.
+// Database connection factory — platform-specific.
+//
+// Uses `NativeDatabase` from sqlite3_flutter_libs for mobile,
+// and can be extended for web (drift worker) if needed.
 import 'dart:io';
 
 import 'package:drift/drift.dart';

@@ -1,7 +1,7 @@
-/// LearnY Database — Drift schema for offline caching.
-///
-/// Tables mirror the API models for local persistence.
-/// Run `dart run build_runner build` to generate `database.g.dart`.
+// LearnY Database — Drift schema for offline caching.
+//
+// Tables mirror the API models for local persistence.
+// Run `dart run build_runner build` to generate `database.g.dart`.
 import 'package:drift/drift.dart';
 
 import 'app_state_keys.dart';

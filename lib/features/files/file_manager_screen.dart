@@ -1,7 +1,7 @@
-/// File manager screen — local storage management.
-///
-/// Accessed from Profile > 文件管理.
-/// Shows: total cache size, per-course breakdown, individual file cleanup.
+// File manager screen — local storage management.
+//
+// Accessed from Profile > 文件管理.
+// Shows: total cache size, per-course breakdown, individual file cleanup.
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

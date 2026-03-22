@@ -1,28 +1,19 @@
-/// File detail screen — preview + info panel for a course file or attachment.
-///
-/// Preview strategy (per architecture):
-/// - PDF → flutter_pdfview inline
-/// - Images → Image.file() inline
-/// - Text/code → SelectableText inline
-/// - Office/other → info panel + system open
-///
-/// Features:
-/// - Auto-download on entry
-/// - Download progress bar overlay
-/// - AppBar: refresh / share / open-external / info-toggle
-/// - Info panel: type, size, upload time, category, importance, description
-import 'dart:io';
-
+// File detail screen — preview + info panel for a course file or attachment.
+//
+// The page contract stays stable: auto-download on entry, the same action bar,
+// and an optional info panel. The preview implementation is now delegated to the
+// preview subsystem so richer formats can be added without growing this screen.
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../app/app_orientation.dart';
 import '../../core/design/app_toast.dart';
 import '../../core/design/app_theme_colors.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/file_type_utils.dart';
+import '../../core/files/file_access_resolver.dart';
 import '../../core/files/file_asset_actions.dart';
 import '../../core/files/file_asset_runtime.dart';
 import '../../core/files/file_models.dart';
@@ -30,15 +21,12 @@ import '../../core/files/file_preview_registry.dart';
 import '../../core/services/file_download_service.dart';
 import 'providers/file_bookmark_providers.dart';
 import 'providers/file_queries.dart';
-
-// ---------------------------------------------------------------------------
-//  Screen
-// ---------------------------------------------------------------------------
+import 'widgets/file_preview_view.dart';
 
 class FileDetailScreen extends ConsumerStatefulWidget {
-  final FileDetailRouteData routeData;
-
   const FileDetailScreen({super.key, required this.routeData});
+
+  final FileDetailRouteData routeData;
 
   @override
   ConsumerState<FileDetailScreen> createState() => _FileDetailScreenState();
@@ -57,7 +45,9 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
     final file = await ref.read(
       fileDetailItemProvider(widget.routeData).future,
     );
-    if (!mounted || file == null) return;
+    if (!mounted || file == null) {
+      return;
+    }
 
     await ref.read(fileAssetActionsProvider).ensureAvailable(file);
   }
@@ -104,50 +94,52 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
       });
     }
 
-    return Scaffold(
-      backgroundColor: c.bg,
-      appBar: AppBar(
-        title: Text(
-          widget.routeData.courseName,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+    return PreviewOrientationScope(
+      child: Scaffold(
+        backgroundColor: c.bg,
+        appBar: AppBar(
+          title: Text(
+            widget.routeData.courseName,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+          actions: file == null || fileState == null
+              ? const []
+              : _buildActions(file, fileState, isFavorite),
         ),
-        actions: file == null || fileState == null
-            ? const []
-            : _buildActions(file, fileState, isFavorite),
-      ),
-      body: fileAsync.when(
-        loading: () =>
-            const Center(child: CircularProgressIndicator.adaptive()),
-        error: (error, _) => _ErrorView(message: '加载失败', onRetry: null),
-        data: (file) {
-          if (file == null) {
-            return _ErrorView(message: '文件不存在', onRetry: null);
-          }
-          final resolvedState = runtimeResolver.resolveDetailItem(
-            file,
-            trackedDownloadStates,
-          );
+        body: fileAsync.when(
+          loading: () =>
+              const Center(child: CircularProgressIndicator.adaptive()),
+          error: (error, _) => _ErrorView(message: '加载失败', onRetry: null),
+          data: (file) {
+            if (file == null) {
+              return _ErrorView(message: '文件不存在', onRetry: null);
+            }
+            final resolvedState = runtimeResolver.resolveDetailItem(
+              file,
+              trackedDownloadStates,
+            );
 
-          return Stack(
-            children: [
-              _buildBody(file, resolvedState),
-              if (resolvedState.status == DownloadStatus.downloading)
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  child: LinearProgressIndicator(
-                    value: resolvedState.progress > 0
-                        ? resolvedState.progress
-                        : null,
-                    minHeight: 3,
-                    backgroundColor: Colors.transparent,
-                    valueColor: AlwaysStoppedAnimation(c.infoAccent),
+            return Stack(
+              children: [
+                _buildBody(file, resolvedState),
+                if (resolvedState.status == DownloadStatus.downloading)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: LinearProgressIndicator(
+                      value: resolvedState.progress > 0
+                          ? resolvedState.progress
+                          : null,
+                      minHeight: 3,
+                      backgroundColor: Colors.transparent,
+                      valueColor: AlwaysStoppedAnimation(c.infoAccent),
+                    ),
                   ),
-                ),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -173,7 +165,9 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
                 .read(fileAssetActionsProvider)
                 .setReadState(file, isRead: file.isNew);
 
-            if (!mounted) return;
+            if (!mounted) {
+              return;
+            }
             AppToast.showSuccess(
               context,
               message: file.isNew ? '已标为已读' : '已标为未读',
@@ -194,7 +188,9 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
                 await ref
                     .read(fileFavoriteActionsProvider)
                     .setFavorite(item: file, isFavorite: !isFavorite);
-                if (!mounted) return;
+                if (!mounted) {
+                  return;
+                }
                 AppToast.showSuccess(
                   context,
                   message: isFavorite ? '已取消收藏' : '已加入收藏',
@@ -210,7 +206,7 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
               await _startDownload(file);
               break;
             case _FileAction.share:
-              await _shareFile(fs);
+              await _shareFile(file, fs);
               break;
             case _FileAction.openExternal:
               await _openExternal(file);
@@ -267,9 +263,10 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
         );
       case DownloadStatus.downloaded:
         if (!_showInfo && _canPreview(file) && fs.localPath != null) {
-          return _PreviewBody(
-            preview: _previewOf(file),
+          return FilePreviewView(
+            item: file,
             localPath: fs.localPath!,
+            onOpenExternal: () => _openExternal(file),
           );
         }
         return _FileInfoPanel(
@@ -277,15 +274,30 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
           courseName: widget.routeData.courseName,
           isDownloaded: true,
           onOpen: () => _openExternal(file),
-          onShare: () => _shareFile(fs),
+          onShare: () => _shareFile(file, fs),
         );
     }
   }
 
-  Future<void> _shareFile(FileAssetRuntime fs) async {
-    if (fs.localPath == null) return;
+  Future<void> _shareFile(FileDetailItem file, FileAssetRuntime fs) async {
+    if (fs.localPath == null) {
+      return;
+    }
+
+    final accessDescriptor = ref
+        .read(fileAccessResolverProvider)
+        .resolve(title: file.title, fileType: file.fileType);
     try {
-      await Share.shareXFiles([XFile(fs.localPath!)]);
+      await Share.shareXFiles(
+        [
+          XFile(
+            fs.localPath!,
+            mimeType: accessDescriptor.mimeType,
+            name: accessDescriptor.displayName,
+          ),
+        ],
+        fileNameOverrides: [accessDescriptor.displayName],
+      );
     } catch (e) {
       if (mounted) {
         AppToast.showError(context, message: '分享失败: $e');
@@ -303,223 +315,10 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
 
 enum _FileAction { redownload, share, openExternal, toggleInfo }
 
-// ---------------------------------------------------------------------------
-//  Preview body — dispatches to appropriate preview widget
-// ---------------------------------------------------------------------------
-
-class _PreviewBody extends StatelessWidget {
-  final FilePreviewDescriptor preview;
-  final String localPath;
-
-  const _PreviewBody({required this.preview, required this.localPath});
-
-  @override
-  Widget build(BuildContext context) {
-    switch (preview.capability) {
-      case FilePreviewCapability.pdf:
-        return _PdfPreview(filePath: localPath);
-      case FilePreviewCapability.image:
-        return _ImagePreview(filePath: localPath);
-      case FilePreviewCapability.text:
-        return _TextPreview(filePath: localPath);
-      case FilePreviewCapability.none:
-        return const SizedBox.shrink();
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-//  PDF Preview
-// ---------------------------------------------------------------------------
-
-class _PdfPreview extends StatefulWidget {
-  final String filePath;
-  const _PdfPreview({required this.filePath});
-
-  @override
-  State<_PdfPreview> createState() => _PdfPreviewState();
-}
-
-class _PdfPreviewState extends State<_PdfPreview> {
-  int _totalPages = 0;
-  int _currentPage = 0;
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        PDFView(
-          filePath: widget.filePath,
-          enableSwipe: true,
-          swipeHorizontal: false,
-          autoSpacing: true,
-          pageFling: true,
-          fitPolicy: FitPolicy.BOTH,
-          nightMode: context.isDark,
-          onRender: (pages) {
-            if (pages != null) setState(() => _totalPages = pages);
-          },
-          onPageChanged: (page, total) {
-            if (page != null) setState(() => _currentPage = page);
-          },
-          onError: (error) {
-            debugPrint('PDF render error: $error');
-          },
-        ),
-        if (_totalPages > 0)
-          Positioned(
-            bottom: 16,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.black54,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Text(
-                  '${_currentPage + 1} / $_totalPages',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontFamily: 'JetBrains Mono',
-                    fontFamilyFallback: ['monospace'],
-                  ),
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-//  Image Preview
-// ---------------------------------------------------------------------------
-
-class _ImagePreview extends StatelessWidget {
-  final String filePath;
-  const _ImagePreview({required this.filePath});
-
-  @override
-  Widget build(BuildContext context) {
-    return InteractiveViewer(
-      minScale: 0.5,
-      maxScale: 4.0,
-      child: Center(
-        child: Image.file(
-          File(filePath),
-          fit: BoxFit.contain,
-          errorBuilder: (_, error, stackTrace) => Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.broken_image_rounded,
-                  size: 48,
-                  color: Colors.grey,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '图片加载失败',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-//  Text Preview
-// ---------------------------------------------------------------------------
-
-class _TextPreview extends StatefulWidget {
-  final String filePath;
-  const _TextPreview({required this.filePath});
-
-  @override
-  State<_TextPreview> createState() => _TextPreviewState();
-}
-
-class _TextPreviewState extends State<_TextPreview> {
-  String _content = '';
-  bool _loading = true;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadContent();
-  }
-
-  Future<void> _loadContent() async {
-    try {
-      final file = File(widget.filePath);
-      final content = await file.readAsString();
-      if (mounted) {
-        setState(() {
-          // Limit to 100KB to avoid OOM on huge files
-          _content = content.length > 100000
-              ? '${content.substring(0, 100000)}\n\n... (文件过大，仅显示前100KB)'
-              : content;
-          _loading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = '无法读取文件内容';
-          _loading = false;
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator.adaptive());
-    }
-    if (_error != null) {
-      return Center(
-        child: Text(_error!, style: TextStyle(color: Colors.grey[600])),
-      );
-    }
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: SelectableText(
-        _content,
-        style: TextStyle(
-          fontFamily: 'JetBrains Mono',
-          fontFamilyFallback: const ['monospace'],
-          fontSize: 13,
-          height: 1.6,
-          color: c.text,
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-//  Downloading view
-// ---------------------------------------------------------------------------
-
 class _DownloadingView extends StatelessWidget {
-  final double progress;
   const _DownloadingView({required this.progress});
+
+  final double progress;
 
   @override
   Widget build(BuildContext context) {
@@ -555,14 +354,11 @@ class _DownloadingView extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-//  Error view
-// ---------------------------------------------------------------------------
-
 class _ErrorView extends StatelessWidget {
+  const _ErrorView({required this.message, this.onRetry});
+
   final String message;
   final VoidCallback? onRetry;
-  const _ErrorView({required this.message, this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -586,17 +382,7 @@ class _ErrorView extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-//  File Info Panel — shown for non-previewable files or info toggle
-// ---------------------------------------------------------------------------
-
 class _FileInfoPanel extends StatelessWidget {
-  final FileDetailItem file;
-  final String courseName;
-  final bool isDownloaded;
-  final VoidCallback? onOpen;
-  final VoidCallback? onShare;
-
   const _FileInfoPanel({
     required this.file,
     required this.courseName,
@@ -604,6 +390,12 @@ class _FileInfoPanel extends StatelessWidget {
     this.onOpen,
     this.onShare,
   });
+
+  final FileDetailItem file;
+  final String courseName;
+  final bool isDownloaded;
+  final VoidCallback? onOpen;
+  final VoidCallback? onShare;
 
   @override
   Widget build(BuildContext context) {
@@ -618,7 +410,6 @@ class _FileInfoPanel extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // File icon
                 Center(
                       child: Container(
                         width: 72,
@@ -642,8 +433,6 @@ class _FileInfoPanel extends StatelessWidget {
                       duration: 300.ms,
                     ),
                 const SizedBox(height: 16),
-
-                // Title
                 Center(
                   child: Text(
                     file.title,
@@ -663,8 +452,6 @@ class _FileInfoPanel extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 24),
-
-                // Metadata card
                 Container(
                       decoration: BoxDecoration(
                         color: c.surface,
@@ -715,8 +502,6 @@ class _FileInfoPanel extends StatelessWidget {
                     .animate()
                     .fadeIn(delay: 100.ms, duration: 300.ms)
                     .slideY(begin: 0.1, end: 0, duration: 300.ms),
-
-                // Description
                 if (file.description.isNotEmpty) ...[
                   const SizedBox(height: 16),
                   Container(
@@ -756,8 +541,6 @@ class _FileInfoPanel extends StatelessWidget {
             ),
           ),
         ),
-
-        // Bottom action bar for non-previewable files
         if (isDownloaded)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -819,18 +602,7 @@ class _FileInfoPanel extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-//  Metadata row
-// ---------------------------------------------------------------------------
-
 class _MetaRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color textColor;
-  final Color sub;
-  final Color? valueColor;
-
   const _MetaRow({
     required this.icon,
     required this.label,
@@ -839,6 +611,13 @@ class _MetaRow extends StatelessWidget {
     required this.sub,
     this.valueColor,
   });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color textColor;
+  final Color sub;
+  final Color? valueColor;
 
   @override
   Widget build(BuildContext context) {

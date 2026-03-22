@@ -1,8 +1,10 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../providers/api_client_provider.dart';
 import '../providers/sync_provider.dart';
 import 'auth_controller.dart';
+import 'session_recovery_coordinator.dart';
 
 typedef DelayedTaskScheduler =
     Future<void> Function(Duration delay, Future<void> Function() task);
@@ -12,6 +14,7 @@ abstract class AppSessionCoordinatorDelegate {
 
   void markSessionHealthy();
   void markSessionExpired(String? message);
+  Future<bool> recoverSession();
   Future<void> syncAll();
 }
 
@@ -32,6 +35,14 @@ class RiverpodAppSessionCoordinatorDelegate
   @override
   void markSessionHealthy() {
     _ref.read(authProvider.notifier).markSessionHealthy();
+  }
+
+  @override
+  Future<bool> recoverSession() async {
+    final result = await _ref
+        .read(sessionRecoveryCoordinatorProvider)
+        .recoverSession(apiClient: _ref.read(apiClientProvider));
+    return result.recovered;
   }
 
   @override
@@ -59,6 +70,7 @@ class AppSessionCoordinator {
 
   DateTime? _pausedAt;
   bool _postAuthSyncScheduled = false;
+  Future<void>? _recoveryTask;
 
   static Future<void> _defaultScheduleTask(
     Duration delay,
@@ -115,7 +127,7 @@ class AppSessionCoordinator {
       return;
     }
 
-    _delegate.markSessionExpired(next.errorMessage);
+    _triggerRecoveryAfterSyncFailure(next.errorMessage);
   }
 
   Future<void> _syncOnResumeIfNeeded() async {
@@ -125,6 +137,12 @@ class AppSessionCoordinator {
     }
 
     if (_now().difference(pausedAt) < resumeSyncThreshold) {
+      return;
+    }
+
+    final auth = _delegate.authState;
+    if (auth.requiresReauthentication) {
+      await _recoverSession(resyncOnSuccess: true);
       return;
     }
 
@@ -138,6 +156,31 @@ class AppSessionCoordinator {
     }
 
     await _delegate.syncAll();
+  }
+
+  void _triggerRecoveryAfterSyncFailure(String? message) {
+    _recoveryTask ??= _recoverSession(
+      errorMessage: message,
+      resyncOnSuccess: true,
+    ).whenComplete(() {
+      _recoveryTask = null;
+    });
+  }
+
+  Future<void> _recoverSession({
+    String? errorMessage,
+    required bool resyncOnSuccess,
+  }) async {
+    final recovered = await _delegate.recoverSession();
+    if (!recovered) {
+      _delegate.markSessionExpired(errorMessage);
+      return;
+    }
+
+    _delegate.markSessionHealthy();
+    if (resyncOnSuccess) {
+      await _delegate.syncAll();
+    }
   }
 
   bool _shouldScheduleForegroundSync(AuthState? previous, AuthState next) {

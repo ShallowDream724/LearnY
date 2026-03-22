@@ -1,4 +1,4 @@
-/// Notification card — compact unread notification item.
+// Notification card — compact unread notification item.
 import 'package:flutter/material.dart';
 
 import '../../../core/design/app_theme_colors.dart';

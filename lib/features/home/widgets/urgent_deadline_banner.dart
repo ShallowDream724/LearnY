@@ -1,12 +1,11 @@
-/// Urgent deadline banner — premium "X个作业即将截止" card
-/// with live countdown timers (<24h), 本周/下周 date text,
-/// sequence number urgency indicators, and configurable threshold.
-///
-/// Design: warm cream gradient background, three urgency tiers
-///   critical (<24h): #FF3B30 red
-///   warning  (24-72h): #E8590C burnt orange
-///   normal   (>72h):   #007AFF Apple blue
-import 'dart:async';
+// Urgent deadline banner — premium "X个作业即将截止" card
+// with live countdown timers (<24h), 本周/下周 date text,
+// sequence number urgency indicators, and configurable threshold.
+//
+// Design: warm cream gradient background, three urgency tiers
+//   critical (<24h): #FF3B30 red
+//   warning  (24-72h): #E8590C burnt orange
+//   normal   (>72h):   #007AFF Apple blue
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -33,7 +32,6 @@ class UrgentDeadlineBanner extends ConsumerStatefulWidget {
 
 class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
     with SingleTickerProviderStateMixin {
-  Timer? _countdownTimer;
   late AnimationController _pulseController;
 
   @override
@@ -84,7 +82,7 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
       if (h > 0) {
         return '剩余 ${h}h ${m}m';
       } else {
-        return '剩余 ${m}分钟';
+        return '剩余 $m分钟';
       }
     }
 
@@ -213,7 +211,7 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
                 // Pulsing dot
                 AnimatedBuilder(
                   animation: _pulseController,
-                  builder: (_, __) => Opacity(
+                  builder: (context, child) => Opacity(
                     opacity: 0.5 + 0.5 * _pulseController.value,
                     child: Transform.scale(
                       scale: 0.85 + 0.15 * _pulseController.value,

@@ -1,25 +1,25 @@
-/// Homework detail page — multi-state view of assignment lifecycle.
-///
-/// UX Design Decisions:
-///
-/// 1. **Status-first design**: A prominent status header with
-///    color-coded indicator (pending/submitted/graded/overdue) tells the
-///    student their position in the assignment lifecycle at a glance.
-///
-/// 2. **Deadline countdown**: For pending assignments, a live countdown
-///    (days + hours remaining) creates appropriate urgency without panic.
-///    The color shifts from green → amber → red as the deadline approaches.
-///
-/// 3. **Collapsible sections**: Description, submission, grade feedback
-///    are in expandable cards. This prevents information overload while
-///    keeping everything accessible.
-///
-/// 4. **Grade visualization**: When graded, a circular progress ring shows
-///    the score visually, with color-coded levels (excellent → fail).
-///
-/// 5. **Attachment consistency**: All attachment cards use the same
-///    design language (type icon, name, size, download button) across
-///    assignment files, submitted files, and grade feedback files.
+// Homework detail page — multi-state view of assignment lifecycle.
+//
+// UX Design Decisions:
+//
+// 1. **Status-first design**: A prominent status header with
+//    color-coded indicator (pending/submitted/graded/overdue) tells the
+//    student their position in the assignment lifecycle at a glance.
+//
+// 2. **Deadline countdown**: For pending assignments, a live countdown
+//    (days + hours remaining) creates appropriate urgency without panic.
+//    The color shifts from green → amber → red as the deadline approaches.
+//
+// 3. **Collapsible sections**: Description, submission, grade feedback
+//    are in expandable cards. This prevents information overload while
+//    keeping everything accessible.
+//
+// 4. **Grade visualization**: When graded, a circular progress ring shows
+//    the score visually, with color-coded levels (excellent → fail).
+//
+// 5. **Attachment consistency**: All attachment cards use the same
+//    design language (type icon, name, size, download button) across
+//    assignment files, submitted files, and grade feedback files.
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

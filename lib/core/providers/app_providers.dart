@@ -1,7 +1,6 @@
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-import '../api/learn_api.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../database/connection.dart';
 import '../database/database.dart';
 
@@ -15,21 +14,16 @@ final cookieJarProvider = Provider<CookieJar>((ref) {
   return CookieJar();
 });
 
+/// System secure storage for sensitive auth material.
+final secureStorageProvider = Provider<FlutterSecureStorage>((ref) {
+  return const FlutterSecureStorage();
+});
+
 /// Global database instance — created once and kept alive for the app lifetime.
 final databaseProvider = Provider<AppDatabase>((ref) {
   final db = createDatabase();
   ref.onDispose(() => db.close());
   return db;
-});
-
-/// API client — backed only by the persisted cookie jar.
-///
-/// Authentication is intentionally owned by the WebView SSO flow. We do not
-/// wire an incomplete username/password credential provider here, because the
-/// app currently does not persist those values.
-final apiClientProvider = Provider<Learn2018Helper>((ref) {
-  final jar = ref.watch(cookieJarProvider);
-  return Learn2018Helper(config: HelperConfig(cookieJar: jar));
 });
 
 /// Seeded from `main.dart` so semester-scoped cached data can render on the

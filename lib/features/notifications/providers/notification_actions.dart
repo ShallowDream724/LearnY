@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/api/enums.dart';
 import '../../../core/providers/providers.dart';
 
 class NotificationActions {
@@ -14,17 +13,21 @@ class NotificationActions {
         .markNotificationRead(notificationId);
   }
 
-  Future<void> setFavorite({
+  Future<void> markUnread(String notificationId) {
+    return _ref
+        .read(learningDataActionsProvider)
+        .markNotificationUnread(notificationId);
+  }
+
+  Future<void> setReadState({
     required String notificationId,
-    required bool isFavorite,
+    required bool isRead,
   }) async {
-    final api = _ref.read(apiClientProvider);
-    if (isFavorite) {
-      await api.addToFavorites(ContentType.notification, notificationId);
+    if (isRead) {
+      await markRead(notificationId);
       return;
     }
-
-    await api.removeFromFavorites(notificationId);
+    await markUnread(notificationId);
   }
 }
 

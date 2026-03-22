@@ -16,6 +16,7 @@ import '../../../core/providers/sync_models.dart';
 import '../../../core/router/router.dart';
 import '../../../core/sync/sync_actions.dart';
 import '../../../core/utils/deadline_time.dart';
+import '../../../core/utils/notification_read_state.dart';
 import '../../files/providers/file_bookmark_providers.dart';
 import '../../files/widgets/file_card.dart';
 import '../../files/widgets/file_type_filter_button.dart';
@@ -90,7 +91,7 @@ class CourseNotificationsTab extends ConsumerWidget {
             itemCount: notifications.length,
             itemBuilder: (context, index) {
               final notification = notifications[index];
-              final isRead = notification.hasRead || notification.hasReadLocal;
+              final isRead = notification.isEffectivelyRead;
 
               return Padding(
                 padding: const EdgeInsets.only(bottom: 10),

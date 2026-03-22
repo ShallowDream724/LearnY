@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database.dart' as db;
 import '../../../core/providers/providers.dart';
+import '../../../core/utils/notification_read_state.dart';
 import '../../../core/utils/stream_combiner.dart';
 import '../../../core/design/file_type_utils.dart';
 
@@ -55,8 +56,7 @@ List<CourseStats> _buildCourseStats({
         .where(
           (notification) =>
               notification.courseId == course.id &&
-              !notification.hasRead &&
-              !notification.hasReadLocal,
+              notification.isEffectivelyUnread,
         )
         .length;
     final pending = homeworks
@@ -110,8 +110,8 @@ final courseNotificationsProvider =
       final database = ref.watch(databaseProvider);
       return database.watchNotificationsByCourse(courseId).map((notifications) {
         notifications.sort((a, b) {
-          final aIsRead = a.hasRead || a.hasReadLocal;
-          final bIsRead = b.hasRead || b.hasReadLocal;
+          final aIsRead = a.isEffectivelyRead;
+          final bIsRead = b.isEffectivelyRead;
           if (aIsRead != bIsRead) return aIsRead ? 1 : -1;
           return b.publishTime.compareTo(a.publishTime);
         });

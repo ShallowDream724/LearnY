@@ -1,10 +1,10 @@
-/// File cache service — manages disk storage for downloaded files.
-///
-/// Responsibilities:
-/// 1. Calculate cache sizes (total, per-course, per-file)
-/// 2. Clear caches (total, per-course, per-file)
-/// 3. Enumerate cached files with disk size
-/// 4. Integrity checks (DB ↔ disk sync)
+// File cache service — manages disk storage for downloaded files.
+//
+// Responsibilities:
+// 1. Calculate cache sizes (total, per-course, per-file)
+// 2. Clear caches (total, per-course, per-file)
+// 3. Enumerate cached files with disk size
+// 4. Integrity checks (DB ↔ disk sync)
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';

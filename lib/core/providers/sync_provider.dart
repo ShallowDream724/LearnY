@@ -1,7 +1,7 @@
-/// Data sync providers — fetch data from API and cache in DB.
-///
-/// This file focuses on state transitions and user-facing sync state.
-/// The orchestration and cooldown policy live in `core/sync/`.
+// Data sync providers — fetch data from API and cache in DB.
+//
+// This file focuses on state transitions and user-facing sync state.
+// The orchestration and cooldown policy live in `core/sync/`.
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/enums.dart';

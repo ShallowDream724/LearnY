@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/learn_api.dart';
-import '../providers/app_providers.dart';
+import '../providers/api_client_provider.dart';
 import 'sso_cookie_bridge.dart';
 import 'sso_fallback_page_parser.dart';
 

@@ -38,6 +38,7 @@ class Credential {
   final String? fingerPrint;
   final String? fingerGenPrint;
   final String? fingerGenPrint3;
+  final String? deviceName;
 
   const Credential({
     this.username,
@@ -45,10 +46,12 @@ class Credential {
     this.fingerPrint,
     this.fingerGenPrint,
     this.fingerGenPrint3,
+    this.deviceName,
   });
 }
 
 typedef CredentialProvider = Future<Credential> Function();
+typedef SessionRecoveryHandler = Future<bool> Function();
 
 // ---------------------------------------------------------------------------
 // Config
@@ -57,11 +60,13 @@ typedef CredentialProvider = Future<Credential> Function();
 class HelperConfig {
   final CredentialProvider? provider;
   final CookieJar? cookieJar;
+  final SessionRecoveryHandler? sessionRecoveryHandler;
   final bool generatePreviewUrlForFirstPage;
 
   const HelperConfig({
     this.provider,
     this.cookieJar,
+    this.sessionRecoveryHandler,
     this.generatePreviewUrlForFirstPage = true,
   });
 }
@@ -73,6 +78,7 @@ class HelperConfig {
 class Learn2018Helper {
   final CredentialProvider? _provider;
   final CookieJar _cookieJar;
+  final SessionRecoveryHandler? _sessionRecoveryHandler;
   final Dio _dio;
   final bool previewFirstPage;
 
@@ -94,6 +100,7 @@ class Learn2018Helper {
   Learn2018Helper({HelperConfig? config})
     : _provider = config?.provider,
       _cookieJar = config?.cookieJar ?? CookieJar(),
+      _sessionRecoveryHandler = config?.sessionRecoveryHandler,
       previewFirstPage = config?.generatePreviewUrlForFirstPage ?? true,
       _dio = Dio(
         BaseOptions(
@@ -124,7 +131,36 @@ class Learn2018Helper {
     return url.contains('login_timeout') || resp.statusCode == 403;
   }
 
-  /// Fetch wrapper with automatic re-login on session timeout.
+  Future<bool>? _sessionRecoveryFuture;
+
+  Future<bool> _attemptConfiguredSessionRecovery() {
+    final handler = _sessionRecoveryHandler;
+    if (handler == null) {
+      return Future<bool>.value(false);
+    }
+
+    final inFlight = _sessionRecoveryFuture;
+    if (inFlight != null) {
+      return inFlight;
+    }
+
+    final future = () async {
+      try {
+        return await handler();
+      } catch (error, stackTrace) {
+        debugPrint('[LearnY] Session recovery handler failed: $error');
+        debugPrint('$stackTrace');
+        return false;
+      } finally {
+        _sessionRecoveryFuture = null;
+      }
+    }();
+
+    _sessionRecoveryFuture = future;
+    return future;
+  }
+
+  /// Fetch wrapper with automatic session recovery on timeout.
   Future<Response> _myFetch(
     String url, {
     String method = 'GET',
@@ -144,9 +180,20 @@ class Learn2018Helper {
 
     final resp = await doFetch();
     if (_isLoginTimeout(resp)) {
-      // Session expired. SSO-based auth cannot auto-re-login
-      // (we don't store passwords). Throw so the sync layer
-      // can show a "session expired" banner.
+      final recovered = await _attemptConfiguredSessionRecovery();
+      if (recovered) {
+        final retryUrl = Uri.parse(url).queryParameters.containsKey('_csrf')
+            ? urls.addCSRFTokenToUrl(url, _csrfToken)
+            : url;
+        final retryResp = await _dio.request(
+          retryUrl,
+          data: data,
+          options: opts,
+        );
+        if (!_isLoginTimeout(retryResp)) {
+          return retryResp;
+        }
+      }
       throw const ApiError(reason: FailReason.notLoggedIn);
     }
     return resp;
@@ -214,6 +261,7 @@ class Learn2018Helper {
     String fingerPrint, {
     String fingerGenPrint = '',
     String fingerGenPrint3 = '',
+    String deviceName = '',
   }) async {
     // Clear JSESSIONID to ensure fresh login
     try {
@@ -232,6 +280,12 @@ class Learn2018Helper {
 
       // 2. Encrypt password with SM2
       final encryptedPassword = _sm2Encrypt(password, sm2PublicKey);
+      final resolvedFingerGenPrint = fingerGenPrint.trim().isNotEmpty
+          ? fingerGenPrint
+          : fingerGenPrint3;
+      final resolvedDeviceName = deviceName.trim().isNotEmpty
+          ? deviceName.trim()
+          : _defaultTrustedDeviceName();
 
       // 3. POST login form
       final formData = FormData.fromMap({
@@ -239,8 +293,9 @@ class Learn2018Helper {
         'i_pass': '04$encryptedPassword',
         'singleLogin': 'on',
         'fingerPrint': fingerPrint,
-        'fingerGenPrint': fingerGenPrint,
+        'fingerGenPrint': resolvedFingerGenPrint,
         'fingerGenPrint3': fingerGenPrint3,
+        'deviceName': resolvedDeviceName,
         'i_captcha': '',
       });
 
@@ -255,10 +310,13 @@ class Learn2018Helper {
 
       // 4. Extract ticket from the redirect anchor
       final respBody = checkResp.data.toString();
-      final doc2 = html_parser.parse(respBody);
-      final anchor = doc2.querySelector('a');
-      final redirectUrl = anchor?.attributes['href'] ?? '';
-      final ticket = redirectUrl.split('=').last;
+      final ticket = _extractRoamingTicket(respBody);
+      if (ticket == null || ticket.isEmpty) {
+        if (_looksLikeBadCredentialResponse(respBody)) {
+          throw const ApiError(reason: FailReason.badCredential);
+        }
+        throw const ApiError(reason: FailReason.invalidResponse);
+      }
 
       return ticket;
     } catch (err) {
@@ -281,6 +339,7 @@ class Learn2018Helper {
     String? fingerPrint,
     String? fingerGenPrint,
     String? fingerGenPrint3,
+    String? deviceName,
   ]) async {
     if (username == null || password == null || fingerPrint == null) {
       if (_provider == null) {
@@ -292,6 +351,7 @@ class Learn2018Helper {
       fingerPrint = cred.fingerPrint;
       fingerGenPrint = cred.fingerGenPrint;
       fingerGenPrint3 = cred.fingerGenPrint3;
+      deviceName = cred.deviceName;
       if (username == null || password == null || fingerPrint == null) {
         throw const ApiError(reason: FailReason.noCredential);
       }
@@ -304,6 +364,7 @@ class Learn2018Helper {
       fingerPrint,
       fingerGenPrint: fingerGenPrint ?? '',
       fingerGenPrint3: fingerGenPrint3 ?? '',
+      deviceName: deviceName ?? '',
     ); // Roam to learn — use manual redirect tracking to capture
     // session cookies from every 302 hop (see _followRedirectsManually).
     final loginResp = await _followRedirectsManually(
@@ -334,6 +395,27 @@ class Learn2018Helper {
     }
     await _extractCSRFToken();
     debugPrint('[LearnX] loginWithTicket: complete, csrf=$_csrfToken');
+  }
+
+  /// Attempt to restore a learn session from currently persisted cookies.
+  ///
+  /// This is a best-effort step used before credential-based re-login. If a
+  /// trusted-browser SSO cookie is still valid, following the learn redirect
+  /// chain can silently recreate the learn session and refresh the CSRF token.
+  Future<bool> attemptSilentSessionRecovery() async {
+    try {
+      final resp = await _followRedirectsManually(
+        urls.learnStudentCourseListPage(),
+      );
+      if (resp.statusCode != 200) {
+        return false;
+      }
+
+      await _extractCSRFToken();
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   // -------------------------------------------------------------------
@@ -400,6 +482,11 @@ class Learn2018Helper {
       await _extractCSRFToken();
     } catch (e) {
       debugPrint('[LearnX] _ensureCSRFToken failed: $e');
+      final recovered = await _attemptConfiguredSessionRecovery();
+      if (recovered) {
+        await _extractCSRFToken();
+        return;
+      }
       throw const ApiError(reason: FailReason.notLoggedIn);
     }
   }
@@ -466,6 +553,39 @@ class Learn2018Helper {
     if (langMatches.isNotEmpty) {
       _lang = langMatches[0].group(1) == 'en' ? Language.en : Language.zh;
     }
+  }
+
+  String? _extractRoamingTicket(String responseBody) {
+    final doc = html_parser.parse(responseBody);
+    for (final anchor in doc.querySelectorAll('a')) {
+      final href = anchor.attributes['href'];
+      if (href == null || href.isEmpty) {
+        continue;
+      }
+      final uri = Uri.tryParse(href);
+      final ticket = uri?.queryParameters['ticket'];
+      if (ticket != null && ticket.isNotEmpty) {
+        return ticket;
+      }
+    }
+    return null;
+  }
+
+  bool _looksLikeBadCredentialResponse(String responseBody) {
+    return responseBody.contains('用户名或密码不正确') ||
+        responseBody.contains('密码不正确') ||
+        responseBody.contains('请重试');
+  }
+
+  String _defaultTrustedDeviceName() {
+    return switch (defaultTargetPlatform) {
+      TargetPlatform.android => 'Android,LearnY',
+      TargetPlatform.iOS => 'iOS,LearnY',
+      TargetPlatform.macOS => 'macOS,LearnY',
+      TargetPlatform.windows => 'Windows,LearnY',
+      TargetPlatform.linux => 'Linux,LearnY',
+      TargetPlatform.fuchsia => 'Fuchsia,LearnY',
+    };
   }
 
   // -------------------------------------------------------------------

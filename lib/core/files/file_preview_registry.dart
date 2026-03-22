@@ -3,7 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../design/file_type_utils.dart';
 import 'file_models.dart';
 
-enum FilePreviewCapability { pdf, image, text, none }
+enum FilePreviewCapability {
+  pdf,
+  image,
+  text,
+  document,
+  spreadsheet,
+  presentation,
+  none,
+}
 
 class FilePreviewDescriptor {
   const FilePreviewDescriptor({
@@ -14,7 +22,14 @@ class FilePreviewDescriptor {
   final FilePreviewCapability capability;
   final String extension;
 
-  bool get canInlinePreview => capability != FilePreviewCapability.none;
+  bool get canInlinePreview => switch (capability) {
+    FilePreviewCapability.pdf ||
+    FilePreviewCapability.image ||
+    FilePreviewCapability.text ||
+    FilePreviewCapability.document ||
+    FilePreviewCapability.spreadsheet => true,
+    FilePreviewCapability.presentation || FilePreviewCapability.none => false,
+  };
 }
 
 class FilePreviewRegistry {
@@ -59,6 +74,12 @@ class FilePreviewRegistry {
       case 'css':
       case 'dart':
         return FilePreviewCapability.text;
+      case 'docx':
+        return FilePreviewCapability.document;
+      case 'xlsx':
+        return FilePreviewCapability.spreadsheet;
+      case 'pptx':
+        return FilePreviewCapability.presentation;
       default:
         return FilePreviewCapability.none;
     }

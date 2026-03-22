@@ -1,10 +1,10 @@
-/// Global files screen — all files across courses with timeline groups.
-///
-/// Features:
-/// - Time groups: 今天新增 / 本周 / 更早
-/// - Filter pills: 全部 / 未读(新) / 收藏 / 已下载
-/// - Search bar (title + course name fuzzy match)
-/// - Tap → FileDetailScreen
+// Global files screen — all files across courses with timeline groups.
+//
+// Features:
+// - Time groups: 今天新增 / 本周 / 更早
+// - Filter pills: 全部 / 未读(新) / 收藏 / 已下载
+// - Search bar (title + course name fuzzy match)
+// - Tap → FileDetailScreen
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

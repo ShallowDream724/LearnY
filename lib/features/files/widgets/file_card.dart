@@ -1,7 +1,7 @@
-/// Reusable file card widget — used in global files list and course detail.
-///
-/// Shows: file type icon, course name, title, size/time, download state,
-/// importance badge, new badge.
+// Reusable file card widget — used in global files list and course detail.
+//
+// Shows: file type icon, course name, title, size/time, download state,
+// importance badge, new badge.
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 

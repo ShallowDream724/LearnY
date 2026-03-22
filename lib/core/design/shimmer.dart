@@ -1,7 +1,7 @@
-/// Shimmer loading skeleton — premium loading placeholder.
-///
-/// Provides a pulsing skeleton effect that replaces CircularProgressIndicator
-/// for a more polished loading experience.
+// Shimmer loading skeleton — premium loading placeholder.
+//
+// Provides a pulsing skeleton effect that replaces CircularProgressIndicator
+// for a more polished loading experience.
 import 'package:flutter/material.dart';
 
 import 'app_theme_colors.dart';

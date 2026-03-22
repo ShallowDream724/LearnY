@@ -1,8 +1,8 @@
-/// Connectivity provider — monitors network state and exposes it to the UI.
-///
-/// Uses `connectivity_plus` for real-time network state changes.
-/// The app shell wraps content with a _ConnectivityBanner that shows
-/// a subtle offline indicator when network is unavailable.
+// Connectivity provider — monitors network state and exposes it to the UI.
+//
+// Uses `connectivity_plus` for real-time network state changes.
+// The app shell wraps content with a _ConnectivityBanner that shows
+// a subtle offline indicator when network is unavailable.
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';

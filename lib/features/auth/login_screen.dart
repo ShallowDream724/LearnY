@@ -1,37 +1,37 @@
-/// WebView-based SSO login screen — with proper Dio session handoff.
-///
-/// ## How it works
-///
-/// The original JS library does:
-/// 1. POST login form with SM2-encrypted password to id.tsinghua.edu.cn
-/// 2. Extract a `ticket` (like `ST-XXXXX`) from the response page
-/// 3. Use the ticket to call `learn.tsinghua.edu.cn/b/j_spring_security_thauth_roaming_entry?ticket=XXX`
-/// 4. This sets session cookies and authenticates the user
-/// 5. Then fetch the course list page to extract the CSRF token
-///
-/// In our WebView approach:
-/// 1. Load the id.tsinghua.edu.cn login page in a WebView
-/// 2. The WebView handles SM2 encryption natively (the page's own JS does it)
-/// 3. After successful login, the page produces a redirect containing the ticket
-/// 4. We monitor WebView navigation for URLs matching the ticket pattern
-/// 5. When we detect the ticket redirect, we:
-///    a. Block the WebView from consuming it
-///    b. Extract the ticket string
-///    c. Use Dio to call learnAuthRoam(ticket) — Dio gets the session cookies
-///    d. Use Dio to fetch the course list page for the CSRF token
-/// 6. Now Dio is fully authenticated and the API client works
-///
-/// ## Why not just extract cookies from the WebView?
-///
-/// Session cookies are typically HttpOnly, so `document.cookie` in JS
-/// won't return them. Platform-specific cookie extraction is fragile.
-/// The ticket interception approach is clean and reliable.
-///
-/// ## Fallback
-///
-/// If ticket interception fails (URL pattern changed), we fall back to
-/// extracting cookies via the WebView's cookie manager and injecting
-/// them into Dio's CookieJar.
+// WebView-based SSO login screen — with proper Dio session handoff.
+//
+// ## How it works
+//
+// The original JS library does:
+// 1. POST login form with SM2-encrypted password to id.tsinghua.edu.cn
+// 2. Extract a `ticket` (like `ST-XXXXX`) from the response page
+// 3. Use the ticket to call `learn.tsinghua.edu.cn/b/j_spring_security_thauth_roaming_entry?ticket=XXX`
+// 4. This sets session cookies and authenticates the user
+// 5. Then fetch the course list page to extract the CSRF token
+//
+// In our WebView approach:
+// 1. Load the id.tsinghua.edu.cn login page in a WebView
+// 2. The WebView handles SM2 encryption natively (the page's own JS does it)
+// 3. After successful login, the page produces a redirect containing the ticket
+// 4. We monitor WebView navigation for URLs matching the ticket pattern
+// 5. When we detect the ticket redirect, we:
+//    a. Block the WebView from consuming it
+//    b. Extract the ticket string
+//    c. Use Dio to call learnAuthRoam(ticket) — Dio gets the session cookies
+//    d. Use Dio to fetch the course list page for the CSRF token
+// 6. Now Dio is fully authenticated and the API client works
+//
+// ## Why not just extract cookies from the WebView?
+//
+// Session cookies are typically HttpOnly, so `document.cookie` in JS
+// won't return them. Platform-specific cookie extraction is fragile.
+// The ticket interception approach is clean and reliable.
+//
+// ## Fallback
+//
+// If ticket interception fails (URL pattern changed), we fall back to
+// extracting cookies via the WebView's cookie manager and injecting
+// them into Dio's CookieJar.
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

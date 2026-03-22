@@ -20,6 +20,21 @@ class LearningDataActions {
     await _database.markNotificationReadLocal(notificationId);
   }
 
+  Future<void> markNotificationUnread(String notificationId) async {
+    await _database.markNotificationUnreadLocal(notificationId);
+  }
+
+  Future<void> setNotificationReadState(
+    String notificationId, {
+    required bool isRead,
+  }) async {
+    if (isRead) {
+      await markNotificationRead(notificationId);
+      return;
+    }
+    await markNotificationUnread(notificationId);
+  }
+
   Future<void> markFileRead(String fileId) async {
     await _fileRepository.markRead(fileId);
   }

@@ -1,12 +1,12 @@
-/// Assignment submission screen — Apple-level modal for submitting homework.
-///
-/// Design philosophy:
-///   - Clean, focused interface: only what you need to submit
-///   - Generous multiline text area with live character count
-///   - Attachment: tap to add, shows file preview card, tap × to remove
-///   - Submit confirmation with Apple-style action sheet
-///   - Upload progress overlay with smooth animation
-///   - Success → haptic + checkmark → auto-dismiss
+// Assignment submission screen — Apple-level modal for submitting homework.
+//
+// Design philosophy:
+//   - Clean, focused interface: only what you need to submit
+//   - Generous multiline text area with live character count
+//   - Attachment: tap to add, shows file preview card, tap × to remove
+//   - Submit confirmation with Apple-style action sheet
+//   - Upload progress overlay with smooth animation
+//   - Success → haptic + checkmark → auto-dismiss
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';

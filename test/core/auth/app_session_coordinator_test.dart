@@ -62,7 +62,7 @@ void main() {
       expect(delegate.markExpiredMessages, isEmpty);
     });
 
-    test('marks session expired after sync reports expiry', () {
+    test('marks session expired after sync reports expiry', () async {
       final delegate = _FakeCoordinatorDelegate(
         authState: const AuthState.authenticated(username: 'demo'),
       );
@@ -76,6 +76,8 @@ void main() {
         ),
       );
 
+      await Future<void>.delayed(Duration.zero);
+      expect(delegate.recoveryCalls, 1);
       expect(delegate.markExpiredMessages, ['cookie expired']);
     });
 
@@ -110,19 +112,47 @@ void main() {
         coordinator.handleLifecycleStateChanged(AppLifecycleState.resumed);
         await Future<void>.delayed(Duration.zero);
         expect(delegate.syncCalls, 1);
+        expect(delegate.recoveryCalls, 1);
       },
     );
+
+    test('recovers and re-syncs after session expiry when recovery succeeds', () async {
+      final delegate = _FakeCoordinatorDelegate(
+        authState: const AuthState.authenticated(username: 'demo'),
+        recoveryResult: true,
+      );
+      final coordinator = AppSessionCoordinator(delegate);
+
+      coordinator.handleSyncStateChanged(
+        const SyncState(status: SyncStatus.syncing),
+        const SyncState(
+          status: SyncStatus.sessionExpired,
+          errorMessage: 'cookie expired',
+        ),
+      );
+
+      await Future<void>.delayed(Duration.zero);
+      expect(delegate.recoveryCalls, 1);
+      expect(delegate.markHealthyCalls, 1);
+      expect(delegate.syncCalls, 1);
+      expect(delegate.markExpiredMessages, isEmpty);
+    });
   });
 }
 
 class _FakeCoordinatorDelegate implements AppSessionCoordinatorDelegate {
-  _FakeCoordinatorDelegate({required this.authState});
+  _FakeCoordinatorDelegate({
+    required this.authState,
+    this.recoveryResult = false,
+  });
 
   @override
   AuthState authState;
 
+  final bool recoveryResult;
   int syncCalls = 0;
   int markHealthyCalls = 0;
+  int recoveryCalls = 0;
   final List<String?> markExpiredMessages = <String?>[];
 
   @override
@@ -138,6 +168,15 @@ class _FakeCoordinatorDelegate implements AppSessionCoordinatorDelegate {
   void markSessionHealthy() {
     markHealthyCalls++;
     authState = AuthState.authenticated(username: authState.username ?? 'demo');
+  }
+
+  @override
+  Future<bool> recoverSession() async {
+    recoveryCalls++;
+    if (recoveryResult) {
+      authState = AuthState.authenticated(username: authState.username ?? 'demo');
+    }
+    return recoveryResult;
   }
 
   @override

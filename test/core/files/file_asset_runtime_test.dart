@@ -87,13 +87,40 @@ void main() {
         registry.describe(fileName: 'slides.pdf').capability,
         FilePreviewCapability.pdf,
       );
+      expect(registry.describe(fileName: 'slides.pdf').canInlinePreview, isTrue);
       expect(
         registry.describe(fileName: 'photo.JPG').capability,
         FilePreviewCapability.image,
       );
+      expect(registry.describe(fileName: 'photo.JPG').canInlinePreview, isTrue);
       expect(
         registry.describe(fileName: 'notes.md').capability,
         FilePreviewCapability.text,
+      );
+      expect(registry.describe(fileName: 'notes.md').canInlinePreview, isTrue);
+      expect(
+        registry.describe(fileName: 'lecture.docx').capability,
+        FilePreviewCapability.document,
+      );
+      expect(
+        registry.describe(fileName: 'lecture.docx').canInlinePreview,
+        isTrue,
+      );
+      expect(
+        registry.describe(fileName: 'grades.xlsx').capability,
+        FilePreviewCapability.spreadsheet,
+      );
+      expect(
+        registry.describe(fileName: 'grades.xlsx').canInlinePreview,
+        isTrue,
+      );
+      expect(
+        registry.describe(fileName: 'courseware.pptx').capability,
+        FilePreviewCapability.presentation,
+      );
+      expect(
+        registry.describe(fileName: 'courseware.pptx').canInlinePreview,
+        isFalse,
       );
     });
 

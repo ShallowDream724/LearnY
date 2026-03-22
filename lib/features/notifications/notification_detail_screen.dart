@@ -1,12 +1,12 @@
-/// Notification detail page — full content view with attachments.
-///
-/// UX Design Decisions:
-/// - Full-screen page (pushed above shell) for focused reading
-/// - Auto-marks notification as read locally when opened
-/// - HTML content stripped to styled text (with "open in browser" for complex HTML)
-/// - Attachment card with file type icon, size, and download button
-/// - Bottom action bar: favorite, share
-/// - Responsive: constrained width on tablets for readability
+// Notification detail page — full content view with attachments.
+//
+// UX Design Decisions:
+// - Full-screen page (pushed above shell) for focused reading
+// - Auto-marks notification as read locally when opened
+// - HTML content stripped to styled text (with "open in browser" for complex HTML)
+// - Attachment card with file type icon, size, and download button
+// - Top action: mark unread / read
+// - Responsive: constrained width on tablets for readability
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -22,6 +22,7 @@ import '../../core/database/database.dart' as db;
 import '../../core/files/file_models.dart';
 import '../../core/files/widgets/file_attachment_card.dart';
 import '../../core/router/router.dart';
+import '../../core/utils/notification_read_state.dart';
 import 'providers/notification_actions.dart';
 import 'providers/notification_providers.dart';
 
@@ -44,8 +45,6 @@ class NotificationDetailScreen extends ConsumerStatefulWidget {
 
 class _NotificationDetailScreenState
     extends ConsumerState<NotificationDetailScreen> {
-  bool? _favoriteOverride;
-
   @override
   void initState() {
     super.initState();
@@ -54,23 +53,31 @@ class _NotificationDetailScreenState
     });
   }
 
-  /// Toggle favorite with optimistic UI: update icon immediately,
-  /// call API in background, revert on failure.
-  Future<void> _toggleFavorite(
+  Future<void> _toggleReadState(
     db.Notification notification,
-    bool isFavorite,
   ) async {
-    final nextValue = !isFavorite;
-    setState(() => _favoriteOverride = nextValue);
+    final nextReadState = !notification.isEffectivelyRead;
 
     try {
       await ref
           .read(notificationActionsProvider)
-          .setFavorite(notificationId: notification.id, isFavorite: nextValue);
-    } catch (e) {
+          .setReadState(
+            notificationId: notification.id,
+            isRead: nextReadState,
+          );
+      if (!mounted) {
+        return;
+      }
+      AppToast.showSuccess(
+        context,
+        message: nextReadState ? '已标为已读' : '已标为未读',
+      );
+    } catch (_) {
       if (mounted) {
-        setState(() => _favoriteOverride = isFavorite);
-        AppToast.showError(context, message: isFavorite ? '取消收藏失败' : '收藏失败');
+        AppToast.showError(
+          context,
+          message: nextReadState ? '标记已读失败' : '标记未读失败',
+        );
       }
     }
   }
@@ -136,7 +143,7 @@ class _NotificationDetailScreenState
             );
           }
 
-          final isFavorite = _favoriteOverride ?? notification.isFavorite;
+          final isRead = notification.isEffectivelyRead;
           final attachmentEntry = FileAttachmentEntry.fromJson(
             label: '查看附件',
             rawJson: notification.attachmentJson,
@@ -155,12 +162,13 @@ class _NotificationDetailScreenState
                 actions: [
                   IconButton(
                     icon: Icon(
-                      isFavorite
-                          ? Icons.bookmark_rounded
-                          : Icons.bookmark_border_rounded,
-                      color: isFavorite ? AppColors.warning : c.subtitle,
+                      isRead
+                          ? Icons.mark_email_unread_rounded
+                          : Icons.mark_email_read_outlined,
+                      color: isRead ? AppColors.primary : c.subtitle,
                     ),
-                    onPressed: () => _toggleFavorite(notification, isFavorite),
+                    tooltip: isRead ? '标为未读' : '标为已读',
+                    onPressed: () => _toggleReadState(notification),
                   ),
                 ],
               ),
