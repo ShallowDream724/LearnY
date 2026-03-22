@@ -176,13 +176,17 @@ final homeScheduleSnapshotProvider = StreamProvider<HomeScheduleSnapshot>((
         events: events,
         courseIdsByName: _uniqueCourseIdsByName(courses),
       );
+      final mergedSnapshot = mergeHomeScheduleSnapshots(
+        primary: remoteSnapshot,
+        fallback: localSnapshot,
+      );
       await _persistHomeScheduleSnapshot(
         database: database,
         semesterId: semesterId,
-        snapshot: remoteSnapshot,
+        snapshot: mergedSnapshot,
       );
-      if (!_scheduleSnapshotsEqual(remoteSnapshot, emittedSnapshot)) {
-        yield remoteSnapshot;
+      if (!_scheduleSnapshotsEqual(mergedSnapshot, emittedSnapshot)) {
+        yield mergedSnapshot;
       }
     } catch (error, stackTrace) {
       debugPrint(
@@ -316,6 +320,52 @@ HomeScheduleSnapshot buildHomeScheduleSnapshotFromCachedCourses({
   }
 
   return HomeScheduleSnapshot(days: days, itemsByDateKey: itemsByDateKey);
+}
+
+@visibleForTesting
+HomeScheduleSnapshot mergeHomeScheduleSnapshots({
+  required HomeScheduleSnapshot primary,
+  required HomeScheduleSnapshot fallback,
+}) {
+  final mergedItemsByDateKey = <String, List<TodayScheduleItem>>{};
+
+  for (final day in primary.days) {
+    final primaryItems = [...primary.itemsFor(day)];
+    final knownKeys = primaryItems
+        .map(_scheduleItemIdentityKey)
+        .whereType<String>()
+        .toSet();
+
+    for (final item in fallback.itemsFor(day)) {
+      final identityKey = _scheduleItemIdentityKey(item);
+      if (identityKey != null && knownKeys.contains(identityKey)) {
+        continue;
+      }
+      primaryItems.add(item);
+      if (identityKey != null) {
+        knownKeys.add(identityKey);
+      }
+    }
+
+    primaryItems.sort((left, right) {
+      final byStart = left.startTime.compareTo(right.startTime);
+      if (byStart != 0) {
+        return byStart;
+      }
+      final byCourse = left.courseName.compareTo(right.courseName);
+      if (byCourse != 0) {
+        return byCourse;
+      }
+      return left.location.compareTo(right.location);
+    });
+
+    mergedItemsByDateKey[day.dateKey] = primaryItems;
+  }
+
+  return HomeScheduleSnapshot(
+    days: primary.days,
+    itemsByDateKey: mergedItemsByDateKey,
+  );
 }
 
 Future<HomeScheduleSnapshot> _buildCachedScheduleSnapshot({
@@ -507,6 +557,19 @@ bool _stringListsEqual(List<String> left, List<String> right) {
   return true;
 }
 
+String? _scheduleItemIdentityKey(TodayScheduleItem item) {
+  final courseName = item.courseName.trim();
+  final courseIdentity = courseName.isNotEmpty
+      ? courseName
+      : item.courseId?.trim() ?? '';
+  if (courseIdentity.isEmpty) {
+    return null;
+  }
+  final startTime = item.startTime.trim();
+  final location = item.location.trim();
+  return '$courseIdentity|$startTime|$location';
+}
+
 List<_ParsedCourseMeeting> _decodeCourseMeetings(String rawJson) {
   if (rawJson.trim().isEmpty) {
     return const <_ParsedCourseMeeting>[];
@@ -616,11 +679,32 @@ Set<int> _parseWeeks(String raw) {
     weeks.addAll(_fullWeekSet());
   }
 
+  final frontHalfWeekCount = _parseChineseWeekCountDescriptor(
+    value,
+    prefix: '前',
+  );
+  if (frontHalfWeekCount != null) {
+    weeks.addAll({for (var week = 1; week <= frontHalfWeekCount; week += 1) week});
+  }
+
+  final trailingWeekStart = _parseChineseWeekCountDescriptor(
+    value,
+    prefix: '后',
+  );
+  if (trailingWeekStart != null) {
+    weeks.addAll({
+      for (var week = trailingWeekStart + 1; week <= _fullWeekCount; week += 1)
+        week,
+    });
+  }
+
   for (final token
       in value
           .replaceAll('全周', '')
           .replaceAll('单周', '')
           .replaceAll('双周', '')
+          .replaceAll(RegExp(r'前[一二三四五六七八九十两\d]+周'), '')
+          .replaceAll(RegExp(r'后[一二三四五六七八九十两\d]+周'), '')
           .split(RegExp(r'[，,、]'))) {
     final cleaned = token.trim();
     if (cleaned.isEmpty) {
@@ -657,7 +741,68 @@ Set<int> _parseWeeks(String raw) {
   return weeks;
 }
 
-Set<int> _fullWeekSet() => {for (var week = 1; week <= 30; week += 1) week};
+const int _fullWeekCount = 30;
+
+Set<int> _fullWeekSet() =>
+    {for (var week = 1; week <= _fullWeekCount; week += 1) week};
+
+int? _parseChineseWeekCountDescriptor(String raw, {required String prefix}) {
+  final match = RegExp('$prefix([一二三四五六七八九十两\\d]+)周').firstMatch(raw);
+  if (match == null) {
+    return null;
+  }
+  return _parseChineseInteger(match.group(1)!);
+}
+
+int? _parseChineseInteger(String raw) {
+  final value = raw.trim();
+  if (value.isEmpty) {
+    return null;
+  }
+
+  final arabic = int.tryParse(value);
+  if (arabic != null) {
+    return arabic;
+  }
+
+  const digits = <String, int>{
+    '零': 0,
+    '一': 1,
+    '二': 2,
+    '两': 2,
+    '三': 3,
+    '四': 4,
+    '五': 5,
+    '六': 6,
+    '七': 7,
+    '八': 8,
+    '九': 9,
+  };
+
+  if (value == '十') {
+    return 10;
+  }
+  if (value.startsWith('十')) {
+    final suffix = digits[value.substring(1)];
+    return suffix == null ? null : 10 + suffix;
+  }
+  if (value.endsWith('十')) {
+    final prefixValue = digits[value.substring(0, value.length - 1)];
+    return prefixValue == null ? null : prefixValue * 10;
+  }
+
+  final tenIndex = value.indexOf('十');
+  if (tenIndex > 0 && tenIndex < value.length - 1) {
+    final prefixValue = digits[value.substring(0, tenIndex)];
+    final suffixValue = digits[value.substring(tenIndex + 1)];
+    if (prefixValue == null || suffixValue == null) {
+      return null;
+    }
+    return prefixValue * 10 + suffixValue;
+  }
+
+  return digits[value];
+}
 
 List<(int, int)> _collapseConsecutivePeriods(List<int> periods) {
   if (periods.isEmpty) {

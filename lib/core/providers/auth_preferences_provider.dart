@@ -5,16 +5,10 @@ import '../database/database.dart';
 import 'app_providers.dart';
 
 class AutoReloginPreferenceNotifier extends StateNotifier<bool> {
-  AutoReloginPreferenceNotifier(this._db) : super(false) {
-    _load();
-  }
+  AutoReloginPreferenceNotifier(this._db, {required bool initialEnabled})
+    : super(initialEnabled);
 
   final AppDatabase _db;
-
-  Future<void> _load() async {
-    final saved = await _db.getState(AppStateKeys.autoReloginEnabled);
-    state = saved == 'true';
-  }
 
   Future<void> setEnabled(bool enabled) async {
     state = enabled;
@@ -28,5 +22,8 @@ class AutoReloginPreferenceNotifier extends StateNotifier<bool> {
 
 final autoReloginEnabledProvider =
     StateNotifierProvider<AutoReloginPreferenceNotifier, bool>((ref) {
-      return AutoReloginPreferenceNotifier(ref.watch(databaseProvider));
+      return AutoReloginPreferenceNotifier(
+        ref.watch(databaseProvider),
+        initialEnabled: ref.watch(initialAutoReloginEnabledProvider),
+      );
     });

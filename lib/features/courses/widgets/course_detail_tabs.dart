@@ -16,6 +16,7 @@ import '../../../core/providers/sync_models.dart';
 import '../../../core/router/router.dart';
 import '../../../core/sync/sync_actions.dart';
 import '../../../core/utils/deadline_time.dart';
+import '../../../core/utils/homework_grade_display.dart';
 import '../../../core/utils/notification_read_state.dart';
 import '../../files/providers/file_bookmark_providers.dart';
 import '../../files/widgets/file_card.dart';
@@ -493,12 +494,16 @@ class CourseHomeworksTab extends ConsumerWidget {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
             itemCount: homeworks.length,
-            itemBuilder: (context, index) {
-              final homework = homeworks[index];
-              final statusColor = _statusColor(homework);
-              final statusText = _statusText(homework);
+          itemBuilder: (context, index) {
+            final homework = homeworks[index];
+            final statusColor = _statusColor(homework);
+            final statusText = _statusText(homework);
+            final gradeDisplay = resolveHomeworkGradeDisplay(
+              grade: homework.grade,
+              gradeLevel: homework.gradeLevel,
+            );
 
-              return Padding(
+            return Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Material(
                   color: c.surface,
@@ -569,12 +574,12 @@ class CourseHomeworksTab extends ConsumerWidget {
                                 ),
                               ),
                               if (homework.graded &&
-                                  homework.grade != null) ...[
+                                  gradeDisplay.hasDisplayValue) ...[
                                 const Spacer(),
                                 Text(
-                                  '${homework.grade}',
+                                  gradeDisplay.primaryLabel!,
                                   style: AppTypography.titleSmall.copyWith(
-                                    color: _gradeColor(homework.grade!),
+                                    color: _gradeColor(gradeDisplay.numericGrade),
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
@@ -622,7 +627,8 @@ class CourseHomeworksTab extends ConsumerWidget {
         '${d.minute.toString().padLeft(2, '0')}';
   }
 
-  Color _gradeColor(double grade) {
+  Color _gradeColor(double? grade) {
+    if (grade == null) return AppColors.info;
     if (grade >= 90) return AppColors.gradeExcellent;
     if (grade >= 80) return AppColors.gradeGood;
     if (grade >= 70) return AppColors.gradeAverage;

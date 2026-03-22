@@ -9,6 +9,7 @@ import '../../../core/files/file_models.dart';
 import '../../../core/files/widgets/file_attachment_card.dart';
 import '../../../core/router/router.dart';
 import '../../../core/utils/deadline_time.dart';
+import '../../../core/utils/homework_grade_display.dart';
 
 class HomeworkStatusHeader extends StatelessWidget {
   const HomeworkStatusHeader({super.key, required this.homework});
@@ -208,7 +209,11 @@ class HomeworkGradeSection extends StatelessWidget {
       courseName: courseName,
     );
 
-    final grade = homework.grade;
+    final gradeDisplay = resolveHomeworkGradeDisplay(
+      grade: homework.grade,
+      gradeLevel: homework.gradeLevel,
+    );
+    final grade = gradeDisplay.numericGrade;
     final gradeColor = _gradeColor(grade);
 
     return Container(
@@ -234,7 +239,7 @@ class HomeworkGradeSection extends StatelessWidget {
           const SizedBox(height: 16),
           Row(
             children: [
-              if (grade != null)
+              if (gradeDisplay.hasDisplayValue)
                 Container(
                   width: 72,
                   height: 72,
@@ -246,15 +251,20 @@ class HomeworkGradeSection extends StatelessWidget {
                       width: 2,
                     ),
                   ),
-                  child: Center(
-                    child: Text(
-                      grade.toStringAsFixed(
-                        grade == grade.roundToDouble() ? 0 : 1,
-                      ),
-                      style: AppTypography.statMedium.copyWith(
-                        color: gradeColor,
-                        fontWeight: FontWeight.w800,
-                        fontSize: grade >= 100 ? 18 : 22,
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        gradeDisplay.compactBadgeLabel ?? '已批',
+                        style: AppTypography.statMedium.copyWith(
+                          color: gradeColor,
+                          fontWeight: FontWeight.w800,
+                          fontSize: gradeDisplay.isNumeric
+                              ? ((grade ?? 0) >= 100 ? 18 : 22)
+                              : 18,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
                     ),
                   ),
@@ -273,7 +283,7 @@ class HomeworkGradeSection extends StatelessWidget {
                   ),
                   child: Center(
                     child: Text(
-                      _gradeLevelDisplay(homework.gradeLevel),
+                      gradeDisplay.compactBadgeLabel ?? '已批',
                       style: AppTypography.titleMedium.copyWith(
                         color: gradeColor,
                       ),
@@ -302,7 +312,7 @@ class HomeworkGradeSection extends StatelessWidget {
                           color: c.tertiary,
                         ),
                       ),
-                    if (homework.gradeLevel != null) ...[
+                    if (gradeDisplay.gradeLevelLabel != null) ...[
                       const SizedBox(height: 4),
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -314,7 +324,7 @@ class HomeworkGradeSection extends StatelessWidget {
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
-                          _gradeLevelDisplay(homework.gradeLevel),
+                          gradeDisplay.gradeLevelLabel!,
                           style: AppTypography.labelSmall.copyWith(
                             color: gradeColor,
                             fontWeight: FontWeight.w600,
@@ -356,20 +366,6 @@ class HomeworkGradeSection extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  String _gradeLevelDisplay(String? level) {
-    if (level == null) return '—';
-    return switch (level) {
-      'checked' => '已阅',
-      'distinction' => '优秀',
-      'pass' => '通过',
-      'failure' => '不及格',
-      'exempted course' => '免课',
-      'exemption' => '免修',
-      'incomplete' => '缓考',
-      _ => level.toUpperCase(),
-    };
   }
 
   Color _gradeColor(double? grade) {

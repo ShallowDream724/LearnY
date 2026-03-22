@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:cookie_jar/cookie_jar.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/enums.dart';
@@ -80,7 +81,9 @@ class AuthReloginService {
         credential.deviceName,
       );
       return true;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      debugPrint('[LearnY] Secure credential relogin failed: $error');
+      debugPrint('$stackTrace');
       return false;
     }
   }

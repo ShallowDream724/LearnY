@@ -1403,7 +1403,11 @@ class Learn2018Helper {
         apiDetail = await _getHomeworkDetail(baseId);
       } catch (_) {}
 
-      final grade = _toDoubleOrNull(h['cj']);
+      final rawGrade = _toDoubleOrNull(h['cj']);
+      final mappedGradeLevel =
+          rawGrade != null ? gradeLevelMap[rawGrade.toInt()] : null;
+      final grade =
+          rawGrade != null && rawGrade >= 0 ? rawGrade : null;
 
       homeworks.add(
         Homework(
@@ -1423,7 +1427,7 @@ class Learn2018Helper {
           ),
           submitTime: h['scsj']?.toString(),
           grade: grade,
-          gradeLevel: grade != null ? gradeLevelMap[grade.toInt()] : null,
+          gradeLevel: mappedGradeLevel,
           graderName: trimAndDefine(h['jsm']),
           gradeContent: trimAndDefine(h['pynr']),
           gradeTime: h['pysj']?.toString(),

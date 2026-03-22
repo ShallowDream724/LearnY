@@ -26,6 +26,7 @@ import '../../core/providers/sync_models.dart';
 import '../../core/router/router.dart';
 import '../../core/sync/sync_actions.dart';
 import '../../core/utils/deadline_time.dart';
+import '../../core/utils/homework_grade_display.dart';
 import 'providers/assignments_providers.dart';
 
 class _GroupMeta {
@@ -489,6 +490,10 @@ class _HomeworkItem extends StatelessWidget {
     final c = context.colors;
     final isGraded = hw.graded;
     final isSubmitted = hw.submitted;
+    final gradeDisplay = resolveHomeworkGradeDisplay(
+      grade: hw.grade,
+      gradeLevel: hw.gradeLevel,
+    );
 
     // Card background
     Color cardBg;
@@ -571,17 +576,19 @@ class _HomeworkItem extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    if (isGraded && hw.grade != null)
+                    if (isGraded && gradeDisplay.hasDisplayValue)
                       Text(
-                        hw.grade! == hw.grade!.roundToDouble()
-                            ? hw.grade!.toInt().toString()
-                            : hw.grade!.toStringAsFixed(1),
-                        style: const TextStyle(
-                          fontFamily: 'JetBrains Mono',
-                          fontFamilyFallback: ['monospace'],
+                        gradeDisplay.primaryLabel!,
+                        style: TextStyle(
+                          fontFamily: gradeDisplay.isNumeric
+                              ? 'JetBrains Mono'
+                              : null,
+                          fontFamilyFallback: gradeDisplay.isNumeric
+                              ? const ['monospace']
+                              : null,
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF34C759),
+                          color: const Color(0xFF34C759),
                         ),
                       )
                     else if (!isDone)

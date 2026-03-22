@@ -18,14 +18,17 @@ void main() async {
   final cookieJar = PersistCookieJar(
     storage: FileStorage('${appDir.path}/cookies/'),
   );
-  final initialCurrentSemesterId = await _resolveInitialCurrentSemesterId();
+  final bootstrap = await _resolveBootstrapState();
 
   runApp(
     ProviderScope(
       overrides: [
         cookieJarProvider.overrideWithValue(cookieJar),
         initialCurrentSemesterIdProvider.overrideWithValue(
-          initialCurrentSemesterId,
+          bootstrap.initialCurrentSemesterId,
+        ),
+        initialAutoReloginEnabledProvider.overrideWithValue(
+          bootstrap.initialAutoReloginEnabled,
         ),
       ],
       child: const LearnYApp(),
@@ -33,16 +36,35 @@ void main() async {
   );
 }
 
-Future<String?> _resolveInitialCurrentSemesterId() async {
+class _BootstrapState {
+  const _BootstrapState({
+    required this.initialCurrentSemesterId,
+    required this.initialAutoReloginEnabled,
+  });
+
+  final String? initialCurrentSemesterId;
+  final bool initialAutoReloginEnabled;
+}
+
+Future<_BootstrapState> _resolveBootstrapState() async {
   final db = createDatabase();
   try {
-    final persisted = await db.getState(AppStateKeys.currentSemesterId);
-    if (persisted != null && persisted.trim().isNotEmpty) {
-      return persisted;
+    final persistedSemesterId = await db.getState(AppStateKeys.currentSemesterId);
+    final persistedAutoRelogin =
+        await db.getState(AppStateKeys.autoReloginEnabled);
+
+    String? initialCurrentSemesterId;
+    if (persistedSemesterId != null && persistedSemesterId.trim().isNotEmpty) {
+      initialCurrentSemesterId = persistedSemesterId;
+    } else {
+      final mostRecentSemester = await db.getMostRecentSemester();
+      initialCurrentSemesterId = mostRecentSemester?.id;
     }
 
-    final mostRecentSemester = await db.getMostRecentSemester();
-    return mostRecentSemester?.id;
+    return _BootstrapState(
+      initialCurrentSemesterId: initialCurrentSemesterId,
+      initialAutoReloginEnabled: persistedAutoRelogin == 'true',
+    );
   } finally {
     await db.close();
   }

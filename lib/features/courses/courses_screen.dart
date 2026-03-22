@@ -109,53 +109,52 @@ class CoursesScreen extends ConsumerWidget {
                   );
                 }
 
+                final cols = courseGridColumns(context);
+
                 return SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
                   sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, rowIndex) {
-                        final cols = courseGridColumns(context);
-                        final i1 = rowIndex * cols;
-                        final i2 = i1 + 1;
-                        final hasSecond = cols > 1 && i2 < stats.length;
+                    delegate: SliverChildBuilderDelegate((context, rowIndex) {
+                      final startIndex = rowIndex * cols;
 
-                        Widget card(int index) {
-                          return Expanded(
-                            child:
-                                _CourseCard(
-                                      stats: stats[index],
-                                      colorIndex: index,
-                                    )
-                                    .animate(delay: (60 * index).ms)
-                                    .fadeIn(duration: 300.ms)
-                                    .scale(
-                                      begin: const Offset(0.95, 0.95),
-                                      end: const Offset(1, 1),
-                                    ),
-                          );
-                        }
+                      Widget card(int index) {
+                        return Expanded(
+                          child:
+                              _CourseCard(
+                                    stats: stats[index],
+                                    colorIndex: index,
+                                  )
+                                  .animate(delay: (60 * index).ms)
+                                  .fadeIn(duration: 300.ms)
+                                  .scale(
+                                    begin: const Offset(0.95, 0.95),
+                                    end: const Offset(1, 1),
+                                  ),
+                        );
+                      }
 
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: IntrinsicHeight(
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                card(i1),
-                                if (hasSecond) ...[
-                                  const SizedBox(width: 10),
-                                  card(i2),
-                                ] else if (cols > 1)
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              for (
+                                var columnIndex = 0;
+                                columnIndex < cols;
+                                columnIndex += 1
+                              ) ...[
+                                if (columnIndex > 0) const SizedBox(width: 10),
+                                if (startIndex + columnIndex < stats.length)
+                                  card(startIndex + columnIndex)
+                                else
                                   const Expanded(child: SizedBox()),
                               ],
-                            ),
+                            ],
                           ),
-                        );
-                      },
-                      childCount:
-                          (stats.length + courseGridColumns(context) - 1) ~/
-                          courseGridColumns(context),
-                    ),
+                        ),
+                      );
+                    }, childCount: (stats.length + cols - 1) ~/ cols),
                   ),
                 );
               },

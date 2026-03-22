@@ -600,7 +600,6 @@ class HomeNewFileCard extends StatelessWidget {
 }
 
 const int _scheduleGridColumnCount = 2;
-const int _scheduleMaxVisibleTiles = 6;
 const double _scheduleGridTileHeight = 64;
 const double _scheduleGridSpacing = 6;
 const double _scheduleCardHeaderHeight = 38;
@@ -610,12 +609,9 @@ double _scheduleCardHeight(List<TodayScheduleItem> items) {
   if (items.isEmpty) {
     return 74;
   }
-  final visibleCount = items.length.clamp(1, _scheduleMaxVisibleTiles);
+  final visibleCount = items.length;
   final columnCount = visibleCount == 1 ? 1 : _scheduleGridColumnCount;
-  final visibleRows = ((visibleCount + columnCount - 1) ~/ columnCount).clamp(
-    1,
-    3,
-  );
+  final visibleRows = (visibleCount + columnCount - 1) ~/ columnCount;
   return _scheduleCardHeaderHeight +
       visibleRows * _scheduleGridTileHeight +
       (visibleRows - 1) * _scheduleGridSpacing +
@@ -714,7 +710,12 @@ class _ScheduleDayPage extends StatelessWidget {
 
     if (items.isEmpty) {
       return Padding(
-        padding: const EdgeInsets.fromLTRB(12, 2, 12, _scheduleCardBottomPadding),
+        padding: const EdgeInsets.fromLTRB(
+          12,
+          2,
+          12,
+          _scheduleCardBottomPadding,
+        ),
         child: Row(
           children: [
             Icon(Icons.event_available_rounded, size: 16, color: c.tertiary),
@@ -732,9 +733,7 @@ class _ScheduleDayPage extends StatelessWidget {
 
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, _scheduleCardBottomPadding),
-      physics: items.length > _scheduleMaxVisibleTiles
-          ? const BouncingScrollPhysics()
-          : const NeverScrollableScrollPhysics(),
+      physics: const NeverScrollableScrollPhysics(),
       primary: false,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: columnCount,

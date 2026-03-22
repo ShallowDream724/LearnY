@@ -30,6 +30,10 @@ final databaseProvider = Provider<AppDatabase>((ref) {
 /// first frame after a cold start.
 final initialCurrentSemesterIdProvider = Provider<String?>((ref) => null);
 
+/// Seeded from `main.dart` so secure auto-relogin recovery does not race the
+/// first foreground sync after a cold start.
+final initialAutoReloginEnabledProvider = Provider<bool>((ref) => false);
+
 /// Tracks the currently selected semester ID.
 final currentSemesterIdProvider = StateProvider<String?>((ref) {
   return ref.watch(initialCurrentSemesterIdProvider);

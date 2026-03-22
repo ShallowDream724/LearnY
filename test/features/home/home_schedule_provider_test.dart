@@ -59,6 +59,36 @@ void main() {
       expect(evenWeekSnapshot.itemsFor(evenWeekDay.first), isEmpty);
     });
 
+    test('parses front-half week descriptors like 前八周', () {
+      final firstHalfDay = buildHomeScheduleDays(
+        DateTime(2026, 3, 16),
+        length: 1,
+      );
+      final laterDay = buildHomeScheduleDays(
+        DateTime(2026, 5, 18),
+        length: 1,
+      );
+
+      final course = _course(
+        name: '临床早接',
+        timeAndLocation: ['星期一第3节(前八周)，医学楼101'],
+      );
+
+      final firstHalfSnapshot = buildHomeScheduleSnapshotFromCachedCourses(
+        days: firstHalfDay,
+        courses: [course],
+        semesterStartDate: '2026-03-16',
+      );
+      final laterSnapshot = buildHomeScheduleSnapshotFromCachedCourses(
+        days: laterDay,
+        courses: [course],
+        semesterStartDate: '2026-03-16',
+      );
+
+      expect(firstHalfSnapshot.itemsFor(firstHalfDay.first), hasLength(1));
+      expect(laterSnapshot.itemsFor(laterDay.first), isEmpty);
+    });
+
     test(
       'matches the observed slot mapping from learn course time strings',
       () {
@@ -178,6 +208,43 @@ void main() {
         expect(decoded.itemsFor(days.first).first.startTime, '08:00');
       },
     );
+  });
+
+  group('mergeHomeScheduleSnapshots', () {
+    test('keeps local items when registrar snapshot is missing a course', () {
+      final days = buildHomeScheduleDays(DateTime(2026, 3, 16), length: 1);
+      final remote = buildHomeScheduleSnapshotFromCalendarEvents(
+        days: days,
+        events: const [
+          api.CalendarEvent(
+            location: '六教6A414',
+            status: '',
+            startTime: '13:30',
+            endTime: '15:05',
+            date: '20260316',
+            courseName: '土力学',
+          ),
+        ],
+      );
+      final local = buildHomeScheduleSnapshotFromCachedCourses(
+        days: days,
+        courses: [
+          _course(name: '土力学', timeAndLocation: ['星期一第3节(全周)，六教6A414']),
+          _course(name: '临床早接', timeAndLocation: ['星期一第4节(前八周)，医学楼101']),
+        ],
+        semesterStartDate: '2026-03-16',
+      );
+
+      final merged = mergeHomeScheduleSnapshots(
+        primary: remote,
+        fallback: local,
+      );
+
+      expect(
+        merged.itemsFor(days.first).map((item) => item.courseName).toList(),
+        ['土力学', '临床早接'],
+      );
+    });
   });
 }
 
