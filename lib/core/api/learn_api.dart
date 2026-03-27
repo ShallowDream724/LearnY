@@ -18,6 +18,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import 'package:cookie_jar/cookie_jar.dart';
+import 'package:dart_sm/dart_sm.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:html/dom.dart' as html_dom;
@@ -39,6 +40,7 @@ class Credential {
   final String? fingerGenPrint;
   final String? fingerGenPrint3;
   final String? deviceName;
+  final bool singleLoginEnabled;
 
   const Credential({
     this.username,
@@ -47,6 +49,7 @@ class Credential {
     this.fingerGenPrint,
     this.fingerGenPrint3,
     this.deviceName,
+    this.singleLoginEnabled = false,
   });
 }
 
@@ -69,6 +72,136 @@ class HelperConfig {
     this.sessionRecoveryHandler,
     this.generatePreviewUrlForFirstPage = true,
   });
+}
+
+@visibleForTesting
+bool isIdentityLoginUri(Uri? uri) {
+  if (uri == null) {
+    return false;
+  }
+
+  final identityHost = Uri.parse(urls.idPrefix).host;
+  if (uri.host == identityHost) {
+    return true;
+  }
+
+  final normalized = uri.toString();
+  return normalized.contains('login_timeout') ||
+      normalized.contains('/do/off/ui/auth/login/');
+}
+
+@visibleForTesting
+bool looksLikeIdentityLoginPage(String pageSource) {
+  if (pageSource.isEmpty) {
+    return false;
+  }
+
+  final normalized = pageSource.toLowerCase();
+  return normalized.contains('id="theform"') ||
+      normalized.contains("id='theform'") ||
+      normalized.contains('id="sm2publickey"') ||
+      normalized.contains("id='sm2publickey'") ||
+      normalized.contains('name="i_user"') ||
+      normalized.contains("name='i_user'") ||
+      normalized.contains('name="i_pass"') ||
+      normalized.contains("name='i_pass'") ||
+      normalized.contains('统一身份认证');
+}
+
+@visibleForTesting
+bool isAuthenticatedLearnPage({
+  required Uri? pageUri,
+  required String pageSource,
+}) {
+  final learnHost = Uri.parse(urls.learnPrefix).host;
+  if (pageUri == null || pageUri.host != learnHost) {
+    return false;
+  }
+
+  if (isIdentityLoginUri(pageUri) || looksLikeIdentityLoginPage(pageSource)) {
+    return false;
+  }
+
+  return true;
+}
+
+@visibleForTesting
+String? extractCsrfTokenFromPage(String pageSource) {
+  if (pageSource.isEmpty) {
+    return null;
+  }
+
+  String? csrfToken;
+
+  final p1 = RegExp(r'[&?]_csrf=([a-zA-Z0-9\-_]+)', multiLine: true);
+  final m1 = p1.firstMatch(pageSource);
+  if (m1 != null) {
+    csrfToken = m1.group(1);
+  }
+
+  if (csrfToken == null) {
+    final p2 = RegExp(
+      r'''name=['"]_csrf['"]\s+(?:value|content)=['"]([^'"]+)['"]''',
+      multiLine: true,
+    );
+    final m2 = p2.firstMatch(pageSource);
+    if (m2 != null) {
+      csrfToken = m2.group(1);
+    }
+  }
+
+  if (csrfToken == null) {
+    final p3 = RegExp(r'&_csrf=(\S*)"', multiLine: true);
+    final m3 = p3.firstMatch(pageSource);
+    if (m3 != null) {
+      csrfToken = m3.group(1);
+    }
+  }
+
+  return csrfToken;
+}
+
+@visibleForTesting
+bool supportsSingleLoginShortcut(String loginPageSource) {
+  return loginPageSource.contains('checkSingle');
+}
+
+@visibleForTesting
+Map<String, String> buildIdentityCheckFormData({
+  required String username,
+  required String encryptedPassword,
+  required String fingerPrint,
+  String fingerGenPrint = '',
+  String fingerGenPrint3 = '',
+  String deviceName = '',
+  bool includeSingleLogin = false,
+}) {
+  final normalizedDeviceName = deviceName.trim();
+
+  return {
+    'i_user': username,
+    'i_pass': encryptedPassword,
+    if (includeSingleLogin) 'singleLogin': 'on',
+    'fingerPrint': fingerPrint,
+    'fingerGenPrint': fingerGenPrint,
+    'fingerGenPrint3': fingerGenPrint3,
+    'i_captcha': '',
+    if (normalizedDeviceName.isNotEmpty) 'deviceName': normalizedDeviceName,
+  };
+}
+
+@visibleForTesting
+Map<String, String> buildIdentityCheckHeaders({required String referer}) {
+  return {'Origin': urls.idPrefix, 'Referer': referer};
+}
+
+String _authResponsePreview(String responseBody, {int maxLength = 240}) {
+  final normalized = responseBody.replaceAll(RegExp(r'\s+'), ' ').trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return '${normalized.substring(0, maxLength)}...';
 }
 
 // ---------------------------------------------------------------------------
@@ -127,8 +260,16 @@ class Learn2018Helper {
   // -------------------------------------------------------------------
 
   bool _isLoginTimeout(Response resp) {
-    final url = resp.realUri.toString();
-    return url.contains('login_timeout') || resp.statusCode == 403;
+    if (resp.statusCode == 403) {
+      return true;
+    }
+
+    if (isIdentityLoginUri(resp.realUri)) {
+      return true;
+    }
+
+    final body = resp.data?.toString() ?? '';
+    return looksLikeIdentityLoginPage(body);
   }
 
   Future<bool>? _sessionRecoveryFuture;
@@ -262,6 +403,7 @@ class Learn2018Helper {
     String fingerGenPrint = '',
     String fingerGenPrint3 = '',
     String deviceName = '',
+    bool includeSingleLogin = false,
   }) async {
     // Clear JSESSIONID to ensure fresh login
     try {
@@ -271,42 +413,62 @@ class Learn2018Helper {
       throw ApiError(reason: FailReason.errorSettingCookies, extra: err);
     }
 
+    Response<dynamic>? loginResp;
+    Uri? checkUri;
+    Map<String, String>? checkPayload;
+
     try {
       // 1. Get the login form page to extract sm2 public key
-      final loginResp = await _dio.get(urls.idLogin());
-      final doc = html_parser.parse(loginResp.data.toString());
-      final sm2PublicKeyEl = doc.getElementById('sm2publicKey');
-      final sm2PublicKey = sm2PublicKeyEl?.text.trim() ?? '';
-
-      // 2. Encrypt password with SM2
-      final encryptedPassword = _sm2Encrypt(password, sm2PublicKey);
-      final resolvedFingerGenPrint = fingerGenPrint.trim().isNotEmpty
-          ? fingerGenPrint
-          : fingerGenPrint3;
-      final resolvedDeviceName = deviceName.trim().isNotEmpty
-          ? deviceName.trim()
-          : _defaultTrustedDeviceName();
-
-      // 3. POST login form
-      final formData = FormData.fromMap({
-        'i_user': username,
-        'i_pass': '04$encryptedPassword',
-        'singleLogin': 'on',
-        'fingerPrint': fingerPrint,
-        'fingerGenPrint': resolvedFingerGenPrint,
-        'fingerGenPrint3': fingerGenPrint3,
-        'deviceName': resolvedDeviceName,
-        'i_captcha': '',
-      });
-
-      final checkResp = await _dio.post(
-        urls.idLoginCheck(),
-        data: formData,
-        options: Options(
-          followRedirects: false,
-          validateStatus: (s) => s != null && s < 500,
-        ),
+      loginResp = await _dio.get(urls.idLogin());
+      final loginPageSource = loginResp.data.toString();
+      late final Response checkResp;
+      final checkHeaders = buildIdentityCheckHeaders(
+        referer: loginResp.realUri.toString(),
       );
+      if (supportsSingleLoginShortcut(loginPageSource)) {
+        checkUri = Uri.parse(urls.idLoginCheckSingle());
+        checkPayload = {
+          'i_rememberme': 'on',
+          'fingerPrint': fingerPrint,
+          'fingerGenPrint': fingerGenPrint,
+        };
+        checkResp = await _dio.post(
+          checkUri.toString(),
+          data: checkPayload,
+          options: Options(
+            contentType: Headers.formUrlEncodedContentType,
+            headers: checkHeaders,
+            followRedirects: false,
+            validateStatus: (s) => s != null && s < 500,
+          ),
+        );
+      } else {
+        final doc = html_parser.parse(loginPageSource);
+        final sm2PublicKeyEl = doc.getElementById('sm2publicKey');
+        final sm2PublicKey = sm2PublicKeyEl?.text.trim() ?? '';
+        final encryptedPassword = _sm2Encrypt(password, sm2PublicKey);
+        checkUri = Uri.parse(urls.idLoginCheck());
+        checkPayload = buildIdentityCheckFormData(
+          username: username,
+          encryptedPassword: encryptedPassword,
+          fingerPrint: fingerPrint,
+          fingerGenPrint: fingerGenPrint,
+          fingerGenPrint3: fingerGenPrint3,
+          deviceName: deviceName,
+          includeSingleLogin: includeSingleLogin,
+        );
+
+        checkResp = await _dio.post(
+          checkUri.toString(),
+          data: checkPayload,
+          options: Options(
+            contentType: Headers.formUrlEncodedContentType,
+            headers: checkHeaders,
+            followRedirects: false,
+            validateStatus: (s) => s != null && s < 500,
+          ),
+        );
+      }
 
       // 4. Extract ticket from the redirect anchor
       final respBody = checkResp.data.toString();
@@ -315,12 +477,47 @@ class Learn2018Helper {
         if (_looksLikeBadCredentialResponse(respBody)) {
           throw const ApiError(reason: FailReason.badCredential);
         }
-        throw const ApiError(reason: FailReason.invalidResponse);
+        throw ApiError(
+          reason: FailReason.invalidResponse,
+          extra:
+              'loginGetStatus=${loginResp.statusCode}, '
+              'loginGetUri=${loginResp.realUri}, '
+              'checkUri=$checkUri, '
+              'checkStatus=${checkResp.statusCode}, '
+              'checkRealUri=${checkResp.realUri}, '
+              'postedKeys=${checkPayload.keys.join(',')}, '
+              'responsePreview=${_authResponsePreview(respBody)}',
+        );
       }
 
       return ticket;
     } catch (err) {
       if (err is ApiError) rethrow;
+      if (err is DioException) {
+        final responseBody = err.response?.data?.toString() ?? '';
+        final requestHeaderKeys =
+            err.requestOptions.headers.keys
+                .map((key) => key.toString())
+                .toList()
+              ..sort();
+        final requestContentType =
+            err.requestOptions.contentType?.toString() ?? '(none)';
+        throw ApiError(
+          reason: FailReason.errorFetchFromId,
+          extra:
+              'requestMethod=${err.requestOptions.method}, '
+              'requestUri=${err.requestOptions.uri}, '
+              'requestContentType=$requestContentType, '
+              'requestHeaderKeys=${requestHeaderKeys.join(',')}, '
+              'responseStatus=${err.response?.statusCode}, '
+              'responseRealUri=${err.response?.realUri}, '
+              'loginGetStatus=${loginResp?.statusCode}, '
+              'loginGetUri=${loginResp?.realUri}, '
+              'checkUri=$checkUri, '
+              'postedKeys=${checkPayload?.keys.join(',') ?? '(none)'}, '
+              'responsePreview=${_authResponsePreview(responseBody)}',
+        );
+      }
       throw ApiError(reason: FailReason.errorFetchFromId, extra: err);
     }
   }
@@ -331,7 +528,7 @@ class Learn2018Helper {
 
   /// Login to learn.tsinghua.edu.cn.
   ///
-  /// If [username], [password], or [fingerPrint] are not provided,
+  /// If any credential field is missing,
   /// they will be fetched from the [CredentialProvider].
   Future<void> login([
     String? username,
@@ -340,8 +537,13 @@ class Learn2018Helper {
     String? fingerGenPrint,
     String? fingerGenPrint3,
     String? deviceName,
+    bool singleLoginEnabled = false,
   ]) async {
-    if (username == null || password == null || fingerPrint == null) {
+    if (username == null ||
+        password == null ||
+        fingerPrint == null ||
+        fingerGenPrint == null ||
+        fingerGenPrint3 == null) {
       if (_provider == null) {
         throw const ApiError(reason: FailReason.noCredential);
       }
@@ -352,19 +554,24 @@ class Learn2018Helper {
       fingerGenPrint = cred.fingerGenPrint;
       fingerGenPrint3 = cred.fingerGenPrint3;
       deviceName = cred.deviceName;
+      singleLoginEnabled = cred.singleLoginEnabled;
       if (username == null || password == null || fingerPrint == null) {
         throw const ApiError(reason: FailReason.noCredential);
       }
     }
+
+    final resolvedFingerGenPrint = fingerGenPrint!;
+    final resolvedFingerGenPrint3 = fingerGenPrint3!;
 
     // Get roaming ticket
     final ticket = await getRoamingTicket(
       username,
       password,
       fingerPrint,
-      fingerGenPrint: fingerGenPrint ?? '',
-      fingerGenPrint3: fingerGenPrint3 ?? '',
+      fingerGenPrint: resolvedFingerGenPrint,
+      fingerGenPrint3: resolvedFingerGenPrint3,
       deviceName: deviceName ?? '',
+      includeSingleLogin: singleLoginEnabled,
     ); // Roam to learn — use manual redirect tracking to capture
     // session cookies from every 302 hop (see _followRedirectsManually).
     final loginResp = await _followRedirectsManually(
@@ -407,11 +614,14 @@ class Learn2018Helper {
       final resp = await _followRedirectsManually(
         urls.learnStudentCourseListPage(),
       );
-      if (resp.statusCode != 200) {
+      final pageSource = resp.data?.toString() ?? '';
+      if (resp.statusCode != 200 ||
+          !_applyAuthenticatedPageContext(
+            pageUri: resp.realUri,
+            pageSource: pageSource,
+          )) {
         return false;
       }
-
-      await _extractCSRFToken();
       return true;
     } catch (_) {
       return false;
@@ -509,43 +719,33 @@ class Learn2018Helper {
       '[LearnX] _extractCSRFToken: preview=${pageSource.substring(0, pageSource.length.clamp(0, 300))}',
     );
 
-    // Try multiple regex patterns for robustness.
-    String? csrfToken;
+    if (!_applyAuthenticatedPageContext(
+      pageUri: courseListResp.realUri,
+      pageSource: pageSource,
+    )) {
+      throw const ApiError(reason: FailReason.notLoggedIn);
+    }
+  }
 
-    // Pattern 1: &_csrf=TOKEN or ?_csrf=TOKEN (most common, in URL params)
-    final p1 = RegExp(r'[&?]_csrf=([a-zA-Z0-9\-_]+)', multiLine: true);
-    final m1 = p1.firstMatch(pageSource);
-    if (m1 != null) csrfToken = m1.group(1);
-
-    // Pattern 2: name="_csrf" value="TOKEN" (form hidden input)
-    if (csrfToken == null) {
-      final p2 = RegExp(
-        r'''name=['"]_csrf['"]\s+(?:value|content)=['"]([^'"]+)['"]''',
-        multiLine: true,
-      );
-      final m2 = p2.firstMatch(pageSource);
-      if (m2 != null) csrfToken = m2.group(1);
+  bool _applyAuthenticatedPageContext({
+    required Uri? pageUri,
+    required String pageSource,
+  }) {
+    if (!isAuthenticatedLearnPage(pageUri: pageUri, pageSource: pageSource)) {
+      return false;
     }
 
-    // Pattern 3: original strict pattern &_csrf=TOKEN"
-    if (csrfToken == null) {
-      final p3 = RegExp(r'&_csrf=(\S*)"', multiLine: true);
-      final m3 = p3.firstMatch(pageSource);
-      if (m3 != null) csrfToken = m3.group(1);
-    }
-
+    final csrfToken = extractCsrfTokenFromPage(pageSource);
     if (csrfToken == null || csrfToken.isEmpty) {
-      throw ApiError(
-        reason: FailReason.invalidResponse,
-        extra:
-            'cannot fetch CSRF token from source '
-            '(page length: ${pageSource.length}, '
-            'status: ${courseListResp.statusCode})',
-      );
+      return false;
     }
-    _csrfToken = csrfToken;
 
-    // Extract current language.
+    _csrfToken = csrfToken;
+    _updateLanguageFromPage(pageSource);
+    return true;
+  }
+
+  void _updateLanguageFromPage(String pageSource) {
     final langRegex = RegExp(
       r'<script src="/f/wlxt/common/languagejs\?lang=(zh|en)"></script>',
     );
@@ -575,17 +775,6 @@ class Learn2018Helper {
     return responseBody.contains('用户名或密码不正确') ||
         responseBody.contains('密码不正确') ||
         responseBody.contains('请重试');
-  }
-
-  String _defaultTrustedDeviceName() {
-    return switch (defaultTargetPlatform) {
-      TargetPlatform.android => 'Android,LearnY',
-      TargetPlatform.iOS => 'iOS,LearnY',
-      TargetPlatform.macOS => 'macOS,LearnY',
-      TargetPlatform.windows => 'Windows,LearnY',
-      TargetPlatform.linux => 'Linux,LearnY',
-      TargetPlatform.fuchsia => 'Fuchsia,LearnY',
-    };
   }
 
   // -------------------------------------------------------------------
@@ -1404,10 +1593,10 @@ class Learn2018Helper {
       } catch (_) {}
 
       final rawGrade = _toDoubleOrNull(h['cj']);
-      final mappedGradeLevel =
-          rawGrade != null ? gradeLevelMap[rawGrade.toInt()] : null;
-      final grade =
-          rawGrade != null && rawGrade >= 0 ? rawGrade : null;
+      final mappedGradeLevel = rawGrade != null
+          ? gradeLevelMap[rawGrade.toInt()]
+          : null;
+      final grade = rawGrade != null && rawGrade >= 0 ? rawGrade : null;
 
       homeworks.add(
         Homework(
@@ -2082,16 +2271,7 @@ class Learn2018Helper {
   /// 1. Use WebView-based SSO login (bypasses this)
   /// 2. Provide a native SM2 implementation via FFI/plugin
   String _sm2Encrypt(String data, String publicKey) {
-    // TODO: Implement SM2 encryption
-    // Options:
-    //   1. Use pointycastle with SM2 support
-    //   2. Use a Dart SM2 package (e.g. sm_crypto)
-    //   3. Call native code via platform channel
-    //   4. Use the WebView SSO flow instead (recommended for v1)
-    throw UnimplementedError(
-      'SM2 encryption not yet implemented. '
-      'Use WebView-based SSO login flow instead.',
-    );
+    return SM2.encrypt(data, publicKey);
   }
 
   // -------------------------------------------------------------------

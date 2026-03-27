@@ -13,6 +13,7 @@ class StoredCredential {
     this.fingerGenPrint = '',
     this.fingerGenPrint3 = '',
     this.deviceName = '',
+    this.singleLoginEnabled = false,
   });
 
   final String username;
@@ -21,6 +22,7 @@ class StoredCredential {
   final String fingerGenPrint;
   final String fingerGenPrint3;
   final String deviceName;
+  final bool singleLoginEnabled;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'username': username,
@@ -29,6 +31,7 @@ class StoredCredential {
     'fingerGenPrint': fingerGenPrint,
     'fingerGenPrint3': fingerGenPrint3,
     'deviceName': deviceName,
+    'singleLoginEnabled': singleLoginEnabled,
   };
 
   static StoredCredential? fromJsonString(String? raw) {
@@ -44,6 +47,12 @@ class StoredCredential {
       final fingerGenPrint = json['fingerGenPrint'] as String? ?? '';
       final fingerGenPrint3 = json['fingerGenPrint3'] as String? ?? '';
       final deviceName = json['deviceName'] as String? ?? '';
+      final singleLoginRaw = json['singleLoginEnabled'];
+      final singleLoginEnabled = switch (singleLoginRaw) {
+        final bool value => value,
+        final String value => value == 'true' || value == 'on',
+        _ => false,
+      };
 
       if (username.isEmpty || password.isEmpty || fingerPrint.isEmpty) {
         return null;
@@ -56,6 +65,7 @@ class StoredCredential {
         fingerGenPrint: fingerGenPrint,
         fingerGenPrint3: fingerGenPrint3,
         deviceName: deviceName,
+        singleLoginEnabled: singleLoginEnabled,
       );
     } catch (_) {
       return null;

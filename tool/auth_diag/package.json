@@ -1,0 +1,9 @@
+{
+  "name": "learny-auth-diag",
+  "private": true,
+  "type": "module",
+  "description": "Local auth diagnostics for LearnY",
+  "dependencies": {
+    "playwright-core": "^1.53.0"
+  }
+}

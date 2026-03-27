@@ -9,10 +9,7 @@ import 'sso_session_recovery_service.dart';
 enum SessionRecoveryMethod { ssoCookie, secureCredential }
 
 class SessionRecoveryResult {
-  const SessionRecoveryResult._({
-    required this.recovered,
-    this.method,
-  });
+  const SessionRecoveryResult._({required this.recovered, this.method});
 
   const SessionRecoveryResult.success(SessionRecoveryMethod method)
     : this._(recovered: true, method: method);
@@ -59,16 +56,23 @@ class SessionRecoveryCoordinator {
   Future<SessionRecoveryResult> _runRecovery(Learn2018Helper apiClient) async {
     try {
       if (await _ssoRecoveryService.tryRecover(apiClient)) {
+        debugPrint('[LearnY] Session recovery succeeded via SSO cookie');
         return const SessionRecoveryResult.success(
           SessionRecoveryMethod.ssoCookie,
         );
       }
 
       if (!_isAutoReloginEnabled()) {
+        debugPrint(
+          '[LearnY] Session recovery skipped secure relogin: feature disabled',
+        );
         return const SessionRecoveryResult.failed();
       }
 
       if (await _authReloginService.tryRelogin(apiClient)) {
+        debugPrint(
+          '[LearnY] Session recovery succeeded via secure credential relogin',
+        );
         return const SessionRecoveryResult.success(
           SessionRecoveryMethod.secureCredential,
         );
@@ -82,11 +86,12 @@ class SessionRecoveryCoordinator {
   }
 }
 
-final sessionRecoveryCoordinatorProvider =
-    Provider<SessionRecoveryCoordinator>((ref) {
-      return SessionRecoveryCoordinator(
-        ssoRecoveryService: ref.watch(ssoSessionRecoveryServiceProvider),
-        authReloginService: ref.watch(authReloginServiceProvider),
-        isAutoReloginEnabled: () => ref.read(autoReloginEnabledProvider),
-      );
-    });
+final sessionRecoveryCoordinatorProvider = Provider<SessionRecoveryCoordinator>(
+  (ref) {
+    return SessionRecoveryCoordinator(
+      ssoRecoveryService: ref.watch(ssoSessionRecoveryServiceProvider),
+      authReloginService: ref.watch(authReloginServiceProvider),
+      isAutoReloginEnabled: () => ref.read(autoReloginEnabledProvider),
+    );
+  },
+);

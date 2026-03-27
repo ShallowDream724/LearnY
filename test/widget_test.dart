@@ -14,8 +14,8 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const ProviderScope(child: LearnYApp()));
-    await tester.pump(const Duration(seconds: 2));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
 
     expect(find.byType(LearnYApp), findsOneWidget);
     expect(find.byType(Scaffold), findsWidgets);

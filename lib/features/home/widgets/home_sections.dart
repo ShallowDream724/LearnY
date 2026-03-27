@@ -137,18 +137,27 @@ class HomeUrgentAssignmentsSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final assignments = ref.watch(
-      homeDataProvider.select((async) => async.valueOrNull?.urgentAssignments),
+    final deadlineData = ref.watch(
+      homeDataProvider.select((async) {
+        final data = async.valueOrNull;
+        if (data == null) {
+          return null;
+        }
+        return (data.urgentAssignments, data.pendingAssignments);
+      }),
     );
 
-    if (assignments == null || assignments.isEmpty) {
+    if (deadlineData == null) {
       return const SizedBox.shrink();
     }
+
+    final (assignments, pendingAssignments) = deadlineData;
 
     return Column(
       children: [
         UrgentDeadlineBanner(
           assignments: assignments,
+          pendingAssignments: pendingAssignments,
           onTap: (hw) => context.push(
             Routes.homeworkDetail(
               homeworkId: hw.id,

@@ -17,11 +17,13 @@ import '../../../core/utils/deadline_time.dart';
 
 class UrgentDeadlineBanner extends ConsumerStatefulWidget {
   final List<HomeworkSummary> assignments;
+  final int pendingAssignments;
   final void Function(HomeworkSummary hw)? onTap;
 
   const UrgentDeadlineBanner({
     super.key,
     required this.assignments,
+    required this.pendingAssignments,
     this.onTap,
   });
 
@@ -153,7 +155,7 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final c = context.colors;
     final assignments = widget.assignments;
-    if (assignments.isEmpty) return const SizedBox.shrink();
+    final hasUrgentAssignments = assignments.isNotEmpty;
 
     final thresholdHours = ref.watch(deadlineThresholdHoursProvider);
     final backgroundColors = isDark
@@ -180,6 +182,12 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
     final controlIconColor = isDark
         ? const Color(0xFFE5B779)
         : const Color(0xFFB5710D);
+    final emptyStateText = widget.pendingAssignments > 0
+        ? '当前还有 ${widget.pendingAssignments} 项待交，但都不在 ${thresholdHours}h 阈值内。'
+        : '当前没有待交作业，你仍可在这里调整提醒阈值。';
+    final emptyStateHint = widget.pendingAssignments > 0
+        ? '如需更早提醒，可以适当调大阈值。'
+        : '后续有新作业时，会按这里的阈值提醒。';
 
     return Container(
       decoration: BoxDecoration(
@@ -208,28 +216,42 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
             padding: const EdgeInsets.fromLTRB(16, 14, 12, 8),
             child: Row(
               children: [
-                // Pulsing dot
-                AnimatedBuilder(
-                  animation: _pulseController,
-                  builder: (context, child) => Opacity(
-                    opacity: 0.5 + 0.5 * _pulseController.value,
-                    child: Transform.scale(
-                      scale: 0.85 + 0.15 * _pulseController.value,
-                      child: Container(
+                // Status dot
+                hasUrgentAssignments
+                    ? AnimatedBuilder(
+                        animation: _pulseController,
+                        builder: (context, child) => Opacity(
+                          opacity: 0.5 + 0.5 * _pulseController.value,
+                          child: Transform.scale(
+                            scale: 0.85 + 0.15 * _pulseController.value,
+                            child: child,
+                          ),
+                        ),
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFFF9F0A),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      )
+                    : Container(
                         width: 8,
                         height: 8,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFFF9F0A),
+                        decoration: BoxDecoration(
+                          color: controlIconColor.withAlpha(150),
                           shape: BoxShape.circle,
                         ),
                       ),
-                    ),
-                  ),
-                ),
                 const SizedBox(width: 8),
                 // Title
                 Text(
-                  '${assignments.length} 个作业即将截止',
+                  hasUrgentAssignments
+                      ? '${assignments.length} 个作业即将截止'
+                      : widget.pendingAssignments > 0
+                      ? '当前阈值内暂无截止作业'
+                      : '当前没有待交作业',
                   style: AppTypography.labelMedium.copyWith(
                     color: titleColor,
                     fontWeight: FontWeight.w600,
@@ -278,126 +300,154 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
             ),
           ),
 
-          // ── Assignment items — ALL shown, no folding ──
-          ...assignments.asMap().entries.map((entry) {
-            final index = entry.key;
-            final hw = entry.value;
-            final isLast = index == assignments.length - 1;
-            final tier = _tier(hw);
-            final color = _tierColor(tier);
-            final dateSub = _formatDateSub(hw);
+          if (!hasUrgentAssignments)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 2, 16, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    emptyStateText,
+                    style: AppTypography.bodyMedium.copyWith(
+                      color: isDark ? c.text : const Color(0xFF1C1C1E),
+                      fontWeight: FontWeight.w500,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    emptyStateHint,
+                    style: AppTypography.bodySmall.copyWith(
+                      color: secondaryTextColor,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            ...assignments.asMap().entries.map((entry) {
+              final index = entry.key;
+              final hw = entry.value;
+              final isLast = index == assignments.length - 1;
+              final tier = _tier(hw);
+              final color = _tierColor(tier);
+              final dateSub = _formatDateSub(hw);
 
-            return InkWell(
-              onTap: () => widget.onTap?.call(hw),
-              child: Container(
-                padding: EdgeInsets.fromLTRB(16, 11, 16, isLast ? 14 : 11),
-                decoration: BoxDecoration(
-                  border: isLast
-                      ? null
-                      : Border(bottom: BorderSide(color: dividerColor)),
-                ),
-                child: Row(
-                  children: [
-                    // Sequence number
-                    SizedBox(
-                      width: 18,
-                      child: Text(
-                        '${index + 1}',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontFamily: 'JetBrains Mono',
-                          fontFamilyFallback: const ['monospace'],
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: color.withAlpha(
-                            tier == _UrgencyTier.critical
-                                ? 153 // 0.6
-                                : tier == _UrgencyTier.warning
-                                ? 128 // 0.5
-                                : 89, // 0.35
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    // Content
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            hw.courseName,
-                            style: AppTypography.bodySmall.copyWith(
-                              color: secondaryTextColor,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              letterSpacing: 0.2,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            hw.title,
-                            style: AppTypography.bodyMedium.copyWith(
-                              color: isDark ? c.text : const Color(0xFF1C1C1E),
-                              fontWeight: FontWeight.w600,
-                              fontSize: 15,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    // Time display
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          _formatCountdown(hw),
+              return InkWell(
+                onTap: () => widget.onTap?.call(hw),
+                child: Container(
+                  padding: EdgeInsets.fromLTRB(16, 11, 16, isLast ? 14 : 11),
+                  decoration: BoxDecoration(
+                    border: isLast
+                        ? null
+                        : Border(bottom: BorderSide(color: dividerColor)),
+                  ),
+                  child: Row(
+                    children: [
+                      // Sequence number
+                      SizedBox(
+                        width: 18,
+                        child: Text(
+                          '${index + 1}',
+                          textAlign: TextAlign.center,
                           style: TextStyle(
                             fontFamily: 'JetBrains Mono',
                             fontFamilyFallback: const ['monospace'],
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: -0.5,
-                            color: color,
-                          ),
-                        ),
-                        if (dateSub.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            dateSub,
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
-                              color: tertiaryTextColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: color.withAlpha(
+                              tier == _UrgencyTier.critical
+                                  ? 153 // 0.6
+                                  : tier == _UrgencyTier.warning
+                                  ? 128 // 0.5
+                                  : 89, // 0.35
                             ),
                           ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      // Content
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              hw.courseName,
+                              style: AppTypography.bodySmall.copyWith(
+                                color: secondaryTextColor,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                letterSpacing: 0.2,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              hw.title,
+                              style: AppTypography.bodyMedium.copyWith(
+                                color: isDark
+                                    ? c.text
+                                    : const Color(0xFF1C1C1E),
+                                fontWeight: FontWeight.w600,
+                                fontSize: 15,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      // Time display
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            _formatCountdown(hw),
+                            style: TextStyle(
+                              fontFamily: 'JetBrains Mono',
+                              fontFamilyFallback: const ['monospace'],
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: -0.5,
+                              color: color,
+                            ),
+                          ),
+                          if (dateSub.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              dateSub,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                                color: tertiaryTextColor,
+                              ),
+                            ),
+                          ],
+                          // Progress bar for critical items
+                          if (tier == _UrgencyTier.critical &&
+                              !hw.isOverdue) ...[
+                            const SizedBox(height: 3),
+                            _ProgressBar(remaining: hw.timeRemaining),
+                          ],
                         ],
-                        // Progress bar for critical items
-                        if (tier == _UrgencyTier.critical && !hw.isOverdue) ...[
-                          const SizedBox(height: 3),
-                          _ProgressBar(remaining: hw.timeRemaining),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(width: 4),
-                    // Chevron
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      size: 16,
-                      color: isDark
-                          ? const Color(0xFF48484A)
-                          : const Color(0xFFD0C0B0),
-                    ),
-                  ],
+                      ),
+                      const SizedBox(width: 4),
+                      // Chevron
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        size: 16,
+                        color: isDark
+                            ? const Color(0xFF48484A)
+                            : const Color(0xFFD0C0B0),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            );
-          }),
+              );
+            }),
         ],
       ),
     );

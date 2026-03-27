@@ -494,16 +494,16 @@ class CourseHomeworksTab extends ConsumerWidget {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
             itemCount: homeworks.length,
-          itemBuilder: (context, index) {
-            final homework = homeworks[index];
-            final statusColor = _statusColor(homework);
-            final statusText = _statusText(homework);
-            final gradeDisplay = resolveHomeworkGradeDisplay(
-              grade: homework.grade,
-              gradeLevel: homework.gradeLevel,
-            );
+            itemBuilder: (context, index) {
+              final homework = homeworks[index];
+              final statusColor = _statusColor(homework);
+              final statusText = _statusText(homework);
+              final gradeDisplay = resolveHomeworkGradeDisplay(
+                grade: homework.grade,
+                gradeLevel: homework.gradeLevel,
+              );
 
-            return Padding(
+              return Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Material(
                   color: c.surface,
@@ -579,7 +579,9 @@ class CourseHomeworksTab extends ConsumerWidget {
                                 Text(
                                   gradeDisplay.primaryLabel!,
                                   style: AppTypography.titleSmall.copyWith(
-                                    color: _gradeColor(gradeDisplay.numericGrade),
+                                    color: _gradeColor(
+                                      gradeDisplay.numericGrade,
+                                    ),
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),

@@ -18,6 +18,7 @@ dependencies:
   dio: ^5.7.0
   cookie_jar: ^4.0.8
   dio_cookie_manager: ^3.1.1
+  dart_sm: ^0.1.5
 
   # HTML parsing (for learn API)
   html: ^0.15.5

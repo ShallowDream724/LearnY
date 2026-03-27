@@ -29,6 +29,8 @@ String idLogin() =>
 
 String idLoginCheck() => '$idPrefix/do/off/ui/auth/login/check';
 
+String idLoginCheckSingle() => '$idPrefix/do/off/ui/auth/login/checkSingle';
+
 String learnAuthRoam(String ticket) =>
     '$learnPrefix/b/j_spring_security_thauth_roaming_entry?ticket=$ticket';
 
@@ -58,11 +60,7 @@ String learnCurrentSemester() =>
 // Course list
 // ---------------------------------------------------------------------------
 
-String learnCourseList(
-  String semester,
-  CourseType courseType,
-  Language lang,
-) {
+String learnCourseList(String semester, CourseType courseType, Language lang) {
   if (courseType == CourseType.student) {
     return '$learnPrefix/b/wlxt/kc/v_wlkc_xs_xkb_kcb_extend/student/loadCourseBySemesterId/$semester/${lang.value}';
   } else {
@@ -166,7 +164,7 @@ const String learnHomeworkListExcellent =
 
 /// The 3 homework list endpoints with their known status.
 final List<({String url, bool submitted, bool graded})>
-    learnHomeworkListSource = [
+learnHomeworkListSource = [
   (url: learnHomeworkListNew, submitted: false, graded: false),
   (url: learnHomeworkListSubmitted, submitted: true, graded: false),
   (url: learnHomeworkListGraded, submitted: true, graded: true),
@@ -178,8 +176,7 @@ String learnHomeworkPage(String courseID, String id) =>
 String learnHomeworkExcellentPage(String courseID, String id) =>
     '$learnPrefix/f/wlxt/kczy/zy/student/viewYxzy?wlkcid=$courseID&xszyid=$id';
 
-const String learnHomeworkDetail =
-    '$learnPrefix/b/wlxt/kczy/zy/student/detail';
+const String learnHomeworkDetail = '$learnPrefix/b/wlxt/kczy/zy/student/detail';
 
 Map<String, String> learnHomeworkDetailFormData(String baseId) {
   return {'id': baseId};
@@ -283,11 +280,9 @@ String learnFavoriteRemove(String id) =>
 String learnFavoriteList({ContentType? type}) =>
     '$learnPrefix/b/xt/wlkc_xsscb/student/pageList?ywlx=${type != null ? contentTypeMap[type] : 'ALL'}';
 
-const String learnFavoritePin =
-    '$learnPrefix/b/xt/wlkc_xsscb/student/addZd';
+const String learnFavoritePin = '$learnPrefix/b/xt/wlkc_xsscb/student/addZd';
 
-const String learnFavoriteUnpin =
-    '$learnPrefix/b/xt/wlkc_xsscb/student/delZd';
+const String learnFavoriteUnpin = '$learnPrefix/b/xt/wlkc_xsscb/student/delZd';
 
 Map<String, String> learnFavoritePinUnpinFormData(String id) {
   return {'ywid': id};
@@ -297,19 +292,14 @@ Map<String, String> learnFavoritePinUnpinFormData(String id) {
 // Comments
 // ---------------------------------------------------------------------------
 
-const String learnCommentSet =
-    '$learnPrefix/b/wlxt/xt/wlkc_xsbjb/add';
+const String learnCommentSet = '$learnPrefix/b/wlxt/xt/wlkc_xsbjb/add';
 
 Map<String, String> learnCommentSetFormData(
   ContentType type,
   String id,
   String content,
 ) {
-  return {
-    'ywlx': contentTypeMap[type] ?? '',
-    'ywid': id,
-    'bznr': content,
-  };
+  return {'ywlx': contentTypeMap[type] ?? '', 'ywid': id, 'bznr': content};
 }
 
 String learnCommentList({ContentType? type}) =>
@@ -335,8 +325,7 @@ Map<String, String> learnPageListFormData({String? courseID}) {
 // Sort courses
 // ---------------------------------------------------------------------------
 
-const String learnSortCourses =
-    '$learnPrefix/b/wlxt/kc/wlkc_kcpxb/addorUpdate';
+const String learnSortCourses = '$learnPrefix/b/wlxt/kc/wlkc_kcpxb/addorUpdate';
 
 // ---------------------------------------------------------------------------
 // Registrar (教务 — for calendar)
