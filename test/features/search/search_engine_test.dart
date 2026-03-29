@@ -40,7 +40,9 @@ void main() {
         key: 'course:tuli',
         kind: SearchResultKind.course,
         title: '土力学',
-        fields: const [SearchField('土力学', weight: 4, isPrimary: true)],
+        fields: const [
+          SearchField('土力学', weight: 4, isPrimary: true, enablePhonetic: true),
+        ],
       ),
     ];
 
@@ -114,13 +116,27 @@ void main() {
         key: 'course:both',
         kind: SearchResultKind.course,
         title: '土力学有限元',
-        fields: const [SearchField('土力学有限元', weight: 4, isPrimary: true)],
+        fields: const [
+          SearchField(
+            '土力学有限元',
+            weight: 4,
+            isPrimary: true,
+            enablePhonetic: true,
+          ),
+        ],
       ),
       buildDocument(
         key: 'course:single',
         kind: SearchResultKind.course,
         title: '土力学实验',
-        fields: const [SearchField('土力学实验', weight: 4, isPrimary: true)],
+        fields: const [
+          SearchField(
+            '土力学实验',
+            weight: 4,
+            isPrimary: true,
+            enablePhonetic: true,
+          ),
+        ],
       ),
     ];
 

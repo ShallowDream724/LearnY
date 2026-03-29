@@ -24,12 +24,11 @@ class SearchRepository {
 
   static const SearchEngine _engine = SearchEngine();
 
-  Future<List<SearchResult>> search({
-    required String semesterId,
-    required String query,
-  }) async {
+  Future<List<SearchDocument>> loadCorpus({required String semesterId}) async {
     final coursesFuture = _database.getCoursesBySemester(semesterId);
-    final notificationsFuture = _database.getNotificationsBySemester(semesterId);
+    final notificationsFuture = _database.getNotificationsBySemester(
+      semesterId,
+    );
     final homeworksFuture = _database.getHomeworksBySemester(semesterId);
     final filesFuture = _database.getFilesBySemester(semesterId);
     final bookmarkKeysFuture = _bookmarks.watchKeys().first;
@@ -37,7 +36,7 @@ class SearchRepository {
 
     final courses = await coursesFuture;
     if (courses.isEmpty) {
-      return const <SearchResult>[];
+      return const <SearchDocument>[];
     }
 
     final courseMap = {for (final course in courses) course.id: course.name};
@@ -88,7 +87,22 @@ class SearchRepository {
       ),
     ];
 
+    return documents;
+  }
+
+  List<SearchResult> searchDocuments({
+    required List<SearchDocument> documents,
+    required String query,
+  }) {
     return _engine.search(documents: documents, query: query);
+  }
+
+  Future<List<SearchResult>> search({
+    required String semesterId,
+    required String query,
+  }) async {
+    final documents = await loadCorpus(semesterId: semesterId);
+    return searchDocuments(documents: documents, query: query);
   }
 
   Future<List<String>> loadRecentSearches() async {

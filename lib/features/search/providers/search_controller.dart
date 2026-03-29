@@ -4,12 +4,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/providers.dart';
+import 'search_engine.dart';
 import 'search_models.dart';
 import 'search_repository.dart';
 
 class SearchController extends StateNotifier<SearchState> {
   SearchController(this._ref, this._repository) : super(const SearchState()) {
     _loadRecentSearches();
+    unawaited(_warmUpDocuments());
   }
 
   final Ref _ref;
@@ -17,6 +19,20 @@ class SearchController extends StateNotifier<SearchState> {
 
   Timer? _debounce;
   int _searchGeneration = 0;
+  Future<List<SearchDocument>>? _documentsFuture;
+  String? _documentsSemesterId;
+
+  Future<void> _warmUpDocuments() async {
+    final semesterId = _ref.read(currentSemesterIdProvider);
+    if (semesterId == null) {
+      return;
+    }
+    try {
+      await _ensureDocuments(semesterId);
+    } catch (_) {
+      // Warm-up failures should not block opening the search screen.
+    }
+  }
 
   Future<void> _loadRecentSearches() async {
     try {
@@ -25,6 +41,18 @@ class SearchController extends StateNotifier<SearchState> {
     } catch (error, stackTrace) {
       debugPrint('Failed to load recent searches: $error\n$stackTrace');
     }
+  }
+
+  Future<List<SearchDocument>> _ensureDocuments(String semesterId) {
+    final cached = _documentsFuture;
+    if (cached != null && _documentsSemesterId == semesterId) {
+      return cached;
+    }
+
+    final future = _repository.loadCorpus(semesterId: semesterId);
+    _documentsSemesterId = semesterId;
+    _documentsFuture = future;
+    return future;
   }
 
   void onQueryChanged(String rawQuery) {
@@ -80,8 +108,9 @@ class SearchController extends StateNotifier<SearchState> {
     }
 
     try {
-      final results = await _repository.search(
-        semesterId: semesterId,
+      final documents = await _ensureDocuments(semesterId);
+      final results = _repository.searchDocuments(
+        documents: documents,
         query: query,
       );
       if (generation != _searchGeneration) {
@@ -96,6 +125,9 @@ class SearchController extends StateNotifier<SearchState> {
       );
       unawaited(_persistRecentSearch(query, generation));
     } catch (error, stackTrace) {
+      if (_documentsSemesterId == semesterId) {
+        _documentsFuture = null;
+      }
       debugPrint('Search failed for "$query": $error\n$stackTrace');
       if (generation != _searchGeneration) {
         return;

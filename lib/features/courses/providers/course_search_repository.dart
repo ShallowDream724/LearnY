@@ -15,10 +15,9 @@ class CourseSearchRepository {
 
   static const SearchEngine _engine = SearchEngine();
 
-  Future<List<SearchResult>> search({
+  Future<List<SearchDocument>> loadCorpus({
     required String courseId,
     required String courseName,
-    required String query,
   }) async {
     final db.AppDatabase database = _ref.read(databaseProvider);
     final bookmarkKeysFuture = _ref
@@ -43,10 +42,7 @@ class CourseSearchRepository {
 
     final documents = <SearchDocument>[
       for (final notification in notifications) ...[
-        buildNotificationSearchDocument(
-          notification,
-          courseName: courseName,
-        ),
+        buildNotificationSearchDocument(notification, courseName: courseName),
         ...[
           buildNotificationAttachmentSearchDocument(
             notification,
@@ -75,7 +71,26 @@ class CourseSearchRepository {
       ),
     ];
 
+    return documents;
+  }
+
+  List<SearchResult> searchDocuments({
+    required List<SearchDocument> documents,
+    required String query,
+  }) {
     return _engine.search(documents: documents, query: query);
+  }
+
+  Future<List<SearchResult>> search({
+    required String courseId,
+    required String courseName,
+    required String query,
+  }) async {
+    final documents = await loadCorpus(
+      courseId: courseId,
+      courseName: courseName,
+    );
+    return searchDocuments(documents: documents, query: query);
   }
 }
 

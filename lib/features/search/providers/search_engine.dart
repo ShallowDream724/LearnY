@@ -7,11 +7,13 @@ class SearchField {
     this.text, {
     required this.weight,
     this.isPrimary = false,
+    this.enablePhonetic = false,
   });
 
   final String text;
   final double weight;
   final bool isPrimary;
+  final bool enablePhonetic;
 }
 
 class SearchDocument {
@@ -19,7 +21,10 @@ class SearchDocument {
     required this.result,
     required this.fields,
     this.fileExtension,
-  }) : _indexedFields = fields.map(_IndexedSearchField.fromField).toList();
+  }) : _indexedFields = fields
+           .map(_IndexedSearchField.fromField)
+           .whereType<_IndexedSearchField>()
+           .toList(growable: false);
 
   final SearchResult result;
   final List<SearchField> fields;
@@ -119,15 +124,14 @@ class SearchEngine {
           ),
           results: bucketMatches
               .map(
-                (match) =>
-                    match.document.result.copyWith(
-                      section: buildRelatedSectionMeta(
-                        idSuffix: idSuffix,
-                        title: title,
-                        kind: sectionKind,
-                        order: order,
-                      ),
-                    ),
+                (match) => match.document.result.copyWith(
+                  section: buildRelatedSectionMeta(
+                    idSuffix: idSuffix,
+                    title: title,
+                    kind: sectionKind,
+                    order: order,
+                  ),
+                ),
               )
               .toList(growable: false),
         ),
@@ -183,7 +187,8 @@ class SearchEngine {
         title: '相关通知',
         sectionKind: SearchResultKind.notification,
         order: 200,
-        predicate: (document) => document.result.kind == SearchResultKind.notification,
+        predicate: (document) =>
+            document.result.kind == SearchResultKind.notification,
       );
     }
 
@@ -193,7 +198,8 @@ class SearchEngine {
         title: '相关作业',
         sectionKind: SearchResultKind.homework,
         order: 210,
-        predicate: (document) => document.result.kind == SearchResultKind.homework,
+        predicate: (document) =>
+            document.result.kind == SearchResultKind.homework,
       );
     }
 
@@ -203,7 +209,8 @@ class SearchEngine {
         title: '相关文件',
         sectionKind: SearchResultKind.courseFile,
         order: 220,
-        predicate: (document) => document.result.kind == SearchResultKind.courseFile,
+        predicate: (document) =>
+            document.result.kind == SearchResultKind.courseFile,
       );
     }
 
@@ -230,7 +237,8 @@ class SearchEngine {
         sectionKind: SearchResultKind.homeworkSubmittedAttachment,
         order: 320,
         predicate: (document) =>
-            document.result.kind == SearchResultKind.homeworkSubmittedAttachment,
+            document.result.kind ==
+            SearchResultKind.homeworkSubmittedAttachment,
       );
       addBucket(
         idSuffix: 'grade-attachments',
@@ -389,23 +397,31 @@ class _IndexedSearchField {
     required this.initials,
   });
 
-  factory _IndexedSearchField.fromField(SearchField field) {
+  static _IndexedSearchField? fromField(SearchField field) {
     final normalized = _normalizeText(field.text);
+    if (normalized.isEmpty) {
+      return null;
+    }
+
     final compact = _compactText(normalized);
-    final containsChinese = _containsChinese(field.text);
+    final phoneticSource = field.enablePhonetic
+        ? _trimPhoneticSource(field.text)
+        : '';
+    final containsChinese =
+        phoneticSource.isNotEmpty && _containsChinese(phoneticSource);
     final pinyin = containsChinese
         ? _compactText(
             PinyinHelper.getPinyinE(
-              field.text,
+              phoneticSource,
               separator: '',
               defPinyin: '',
               format: PinyinFormat.WITHOUT_TONE,
             ),
           )
-        : compact;
+        : '';
     final initials = containsChinese
-        ? _compactText(PinyinHelper.getShortPinyin(field.text))
-        : compact;
+        ? _compactText(PinyinHelper.getShortPinyin(phoneticSource))
+        : '';
     return _IndexedSearchField(
       weight: field.weight,
       isPrimary: field.isPrimary,
@@ -499,7 +515,8 @@ double _scoreTokenAgainstField(String token, _IndexedSearchField field) {
   if (compactToken.length >= 2 && field.initials.startsWith(compactToken)) {
     return field.weight * 3.5;
   }
-  if (compactToken.length >= 2 && _isSubsequence(compactToken, field.initials)) {
+  if (compactToken.length >= 2 &&
+      _isSubsequence(compactToken, field.initials)) {
     return field.weight * 2.8;
   }
   if (compactToken.length >= 3 && _isSubsequence(compactToken, field.compact)) {
@@ -508,7 +525,10 @@ double _scoreTokenAgainstField(String token, _IndexedSearchField field) {
   return 0;
 }
 
-bool _matchesContentRefinement(SearchDocument document, List<String> contentTokens) {
+bool _matchesContentRefinement(
+  SearchDocument document,
+  List<String> contentTokens,
+) {
   if (contentTokens.isEmpty) {
     return true;
   }
@@ -548,7 +568,9 @@ int _compareScoredDocuments(_ScoredDocument left, _ScoredDocument right) {
     return scoreOrder;
   }
 
-  final titleOrder = left.document.result.title.compareTo(right.document.result.title);
+  final titleOrder = left.document.result.title.compareTo(
+    right.document.result.title,
+  );
   if (titleOrder != 0) {
     return titleOrder;
   }
@@ -587,6 +609,14 @@ String _compactText(String value) =>
     _normalizeText(value).replaceAll(_compactPattern, '');
 
 bool _containsChinese(String value) => _hanPattern.hasMatch(value);
+
+String _trimPhoneticSource(String value) {
+  final trimmed = value.trim();
+  if (trimmed.length <= _maxPhoneticSourceLength) {
+    return trimmed;
+  }
+  return trimmed.substring(0, _maxPhoneticSourceLength);
+}
 
 bool _isSubsequence(String needle, String haystack) {
   if (needle.isEmpty) {
@@ -672,11 +702,7 @@ const _fileTokens = <String>{
   'documents',
 };
 
-const _attachmentTokens = <String>{
-  '附件',
-  'attachment',
-  'attachments',
-};
+const _attachmentTokens = <String>{'附件', 'attachment', 'attachments'};
 
 const _imageIntentTokens = <String>{
   '图片',
@@ -732,14 +758,7 @@ const _extensionAliases = <String, String>{
   '.heic': 'heic',
 };
 
-const _imageExtensions = <String>{
-  'jpg',
-  'jpeg',
-  'png',
-  'gif',
-  'webp',
-  'heic',
-};
+const _imageExtensions = <String>{'jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'};
 
 final _tokenSplitPattern = RegExp(r'[\s\u3000,，、;；:：|/\\]+');
 final _nestedTokenPattern = RegExp(r'[_\-+.]+');
@@ -748,3 +767,4 @@ final _trimPunctuationPattern = RegExp(
 );
 final _compactPattern = RegExp(r'[^0-9a-z\u3400-\u9fff]+');
 final _hanPattern = RegExp(r'[\u3400-\u9fff]');
+const _maxPhoneticSourceLength = 96;

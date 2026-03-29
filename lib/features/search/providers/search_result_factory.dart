@@ -17,10 +17,15 @@ SearchDocument buildCourseSearchDocument(db.Course course) {
       section: buildExactSectionMeta(SearchResultKind.course),
     ),
     fields: [
-      SearchField(course.name, weight: 4, isPrimary: true),
-      SearchField(course.chineseName, weight: 3.6),
+      SearchField(
+        course.name,
+        weight: 4,
+        isPrimary: true,
+        enablePhonetic: true,
+      ),
+      SearchField(course.chineseName, weight: 3.6, enablePhonetic: true),
       SearchField(course.englishName, weight: 3.2),
-      SearchField(course.teacherName, weight: 2.4),
+      SearchField(course.teacherName, weight: 2.4, enablePhonetic: true),
       SearchField(course.courseNumber, weight: 2),
     ],
   );
@@ -30,7 +35,9 @@ SearchDocument buildNotificationSearchDocument(
   db.Notification notification, {
   required String courseName,
 }) {
-  final attachment = FileAttachment.tryParseJsonString(notification.attachmentJson);
+  final attachment = FileAttachment.tryParseJsonString(
+    notification.attachmentJson,
+  );
   return SearchDocument(
     result: SearchResult(
       key: 'notification:${notification.id}',
@@ -46,11 +53,16 @@ SearchDocument buildNotificationSearchDocument(
       section: buildExactSectionMeta(SearchResultKind.notification),
     ),
     fields: [
-      SearchField(notification.title, weight: 4, isPrimary: true),
+      SearchField(
+        notification.title,
+        weight: 4,
+        isPrimary: true,
+        enablePhonetic: true,
+      ),
       SearchField(notification.content, weight: 3.4),
-      SearchField(notification.publisher, weight: 2.2),
-      SearchField(courseName, weight: 2.5),
-      SearchField(attachment?.name ?? '', weight: 2.6),
+      SearchField(notification.publisher, weight: 2.2, enablePhonetic: true),
+      SearchField(courseName, weight: 2.5, enablePhonetic: true),
+      SearchField(attachment?.name ?? '', weight: 2.6, enablePhonetic: true),
     ],
   );
 }
@@ -61,7 +73,9 @@ SearchDocument? buildNotificationAttachmentSearchDocument(
   required Set<String> bookmarkKeys,
   required Set<String> cachedAssetKeys,
 }) {
-  final attachment = FileAttachment.tryParseJsonString(notification.attachmentJson);
+  final attachment = FileAttachment.tryParseJsonString(
+    notification.attachmentJson,
+  );
   if (attachment == null || attachment.name.isEmpty) {
     return null;
   }
@@ -91,10 +105,15 @@ SearchDocument? buildNotificationAttachmentSearchDocument(
     ),
     fileExtension: _normalizeExtension(attachment.fileType),
     fields: [
-      SearchField(attachment.name, weight: 4, isPrimary: true),
-      SearchField(notification.title, weight: 3.2),
+      SearchField(
+        attachment.name,
+        weight: 4,
+        isPrimary: true,
+        enablePhonetic: true,
+      ),
+      SearchField(notification.title, weight: 3.2, enablePhonetic: true),
       SearchField(notification.content, weight: 2.8),
-      SearchField(courseName, weight: 2.4),
+      SearchField(courseName, weight: 2.4, enablePhonetic: true),
       SearchField('通知附件', weight: 2.8),
       SearchField(attachment.fileType, weight: 2.2),
     ],
@@ -124,13 +143,19 @@ SearchDocument buildHomeworkSearchDocument(
       section: buildExactSectionMeta(SearchResultKind.homework),
     ),
     fields: [
-      SearchField(homework.title, weight: 4, isPrimary: true),
+      SearchField(
+        homework.title,
+        weight: 4,
+        isPrimary: true,
+        enablePhonetic: true,
+      ),
       SearchField(homework.description ?? '', weight: 3.2),
-      SearchField(courseName, weight: 2.4),
+      SearchField(courseName, weight: 2.4, enablePhonetic: true),
       SearchField(homework.gradeContent ?? '', weight: 2.3),
       SearchField(homework.submittedContent ?? '', weight: 2.2),
       SearchField(homework.answerContent ?? '', weight: 2.1),
-      for (final name in attachmentNames) SearchField(name, weight: 2.5),
+      for (final name in attachmentNames)
+        SearchField(name, weight: 2.5, enablePhonetic: true),
     ],
   );
 }
@@ -186,7 +211,8 @@ SearchDocument buildCourseFileSearchDocument(
   required Set<String> cachedAssetKeys,
 }) {
   final isDownloaded =
-      file.localDownloadState == 'downloaded' || cachedAssetKeys.contains(file.id);
+      file.localDownloadState == 'downloaded' ||
+      cachedAssetKeys.contains(file.id);
   return SearchDocument(
     result: SearchResult(
       key: 'courseFile:${file.id}',
@@ -208,11 +234,11 @@ SearchDocument buildCourseFileSearchDocument(
     ),
     fileExtension: _normalizeExtension(file.fileType),
     fields: [
-      SearchField(file.title, weight: 4, isPrimary: true),
+      SearchField(file.title, weight: 4, isPrimary: true, enablePhonetic: true),
       SearchField(file.description, weight: 3.1),
-      SearchField(courseName, weight: 2.4),
+      SearchField(courseName, weight: 2.4, enablePhonetic: true),
       SearchField(file.fileType, weight: 2.5),
-      SearchField(file.categoryTitle ?? '', weight: 2.2),
+      SearchField(file.categoryTitle ?? '', weight: 2.2, enablePhonetic: true),
       SearchField(file.comment ?? '', weight: 1.8),
     ],
   );
@@ -257,10 +283,15 @@ Iterable<SearchDocument> _buildHomeworkAttachmentDocument({
     ),
     fileExtension: _normalizeExtension(attachment.fileType),
     fields: [
-      SearchField(attachment.name, weight: 4, isPrimary: true),
-      SearchField(homework.title, weight: 3.2),
+      SearchField(
+        attachment.name,
+        weight: 4,
+        isPrimary: true,
+        enablePhonetic: true,
+      ),
+      SearchField(homework.title, weight: 3.2, enablePhonetic: true),
       SearchField(homework.description ?? '', weight: 2.6),
-      SearchField(courseName, weight: 2.4),
+      SearchField(courseName, weight: 2.4, enablePhonetic: true),
       SearchField(label, weight: 2.8),
       SearchField(homework.gradeContent ?? '', weight: 2.1),
       SearchField(homework.submittedContent ?? '', weight: 2.0),
@@ -270,7 +301,12 @@ Iterable<SearchDocument> _buildHomeworkAttachmentDocument({
   );
 }
 
-List<String> _collectAttachmentNames(String? first, String? second, String? third, String? fourth) {
+List<String> _collectAttachmentNames(
+  String? first,
+  String? second,
+  String? third,
+  String? fourth,
+) {
   final names = <String>[];
   for (final rawJson in [first, second, third, fourth]) {
     final attachment = FileAttachment.tryParseJsonString(rawJson);

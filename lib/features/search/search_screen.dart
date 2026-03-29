@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -342,73 +341,80 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   ) {
     final c = context.colors;
     final split = splitSearchResultGroups(groups);
+    final items = _buildListItems(
+      resultCount: searchState.results.length,
+      split: split,
+    );
 
-    final children = <Widget>[
-      Text(
-        '找到 ${searchState.results.length} 个结果',
-        style: AppTypography.bodySmall.copyWith(color: c.tertiary),
-      ).animate().fadeIn(duration: 200.ms),
-      const SizedBox(height: 16),
-      ..._buildGroupCards(split.keywordGroups),
-    ];
-
-    if (split.hasRelatedGroups) {
-      children.add(
-        Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Text(
-            '相关结果',
-            style: AppTypography.labelMedium.copyWith(color: c.tertiary),
-          ),
-        ),
-      );
-      children.addAll(_buildGroupCards(split.relatedGroups));
-    }
-
-    return ListView(
+    return ListView.builder(
       controller: _scrollController,
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-      children: children,
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        final item = items[index];
+        return switch (item) {
+          _SearchSummaryItem(:final count) => Text(
+            '找到 $count 个结果',
+            style: AppTypography.bodySmall.copyWith(color: c.tertiary),
+          ),
+          _SearchSectionMarkerItem() => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Text(
+              '相关结果',
+              style: AppTypography.labelMedium.copyWith(color: c.tertiary),
+            ),
+          ),
+          _SearchSpacerItem(:final height) => SizedBox(height: height),
+          _SearchGroupHeaderItem(:final group) => Container(
+            key: _keyForSection(group.section.id),
+            child: SearchSectionHeader(
+              section: group.section,
+              count: group.results.length,
+              collapsed: _isCollapsed(group.section.id),
+              onTap: () => _toggleSection(group.section.id),
+            ),
+          ),
+          _SearchResultItem(:final result) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: SearchResultTile(
+              result: result,
+              onTap: () => _onResultTap(result),
+            ),
+          ),
+        };
+      },
     );
   }
 
-  List<Widget> _buildGroupCards(List<SearchResultGroup> groups) {
-    return groups
-        .map((group) {
-          return Container(
-            key: _keyForSection(group.section.id),
-            child: Column(
-              children: [
-                SearchSectionHeader(
-                  section: group.section,
-                  count: group.results.length,
-                  collapsed: _isCollapsed(group.section.id),
-                  onTap: () => _toggleSection(group.section.id),
-                ),
-                if (!_isCollapsed(group.section.id)) ...[
-                  const SizedBox(height: 8),
-                  ...group.results.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final result = entry.value;
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child:
-                          SearchResultTile(
-                                result: result,
-                                onTap: () => _onResultTap(result),
-                              )
-                              .animate(delay: (24 * index).ms)
-                              .fadeIn(duration: 180.ms),
-                    );
-                  }),
-                  const SizedBox(height: 12),
-                ] else
-                  const SizedBox(height: 8),
-              ],
-            ),
-          );
-        })
-        .toList(growable: false);
+  List<_SearchListItem> _buildListItems({
+    required int resultCount,
+    required SearchResultGroupSplit split,
+  }) {
+    final items = <_SearchListItem>[
+      _SearchSummaryItem(resultCount),
+      const _SearchSpacerItem(16),
+    ];
+
+    void appendGroups(List<SearchResultGroup> groups) {
+      for (final group in groups) {
+        items.add(_SearchGroupHeaderItem(group));
+        if (_isCollapsed(group.section.id)) {
+          items.add(const _SearchSpacerItem(8));
+          continue;
+        }
+        items.add(const _SearchSpacerItem(8));
+        items.addAll(group.results.map(_SearchResultItem.new));
+        items.add(const _SearchSpacerItem(12));
+      }
+    }
+
+    appendGroups(split.keywordGroups);
+    if (split.hasRelatedGroups) {
+      items.add(const _SearchSectionMarkerItem());
+      appendGroups(split.relatedGroups);
+    }
+
+    return items;
   }
 }
 
@@ -448,4 +454,36 @@ class _SearchField extends StatelessWidget {
       ),
     );
   }
+}
+
+sealed class _SearchListItem {
+  const _SearchListItem();
+}
+
+final class _SearchSummaryItem extends _SearchListItem {
+  const _SearchSummaryItem(this.count);
+
+  final int count;
+}
+
+final class _SearchSectionMarkerItem extends _SearchListItem {
+  const _SearchSectionMarkerItem();
+}
+
+final class _SearchGroupHeaderItem extends _SearchListItem {
+  const _SearchGroupHeaderItem(this.group);
+
+  final SearchResultGroup group;
+}
+
+final class _SearchResultItem extends _SearchListItem {
+  const _SearchResultItem(this.result);
+
+  final SearchResult result;
+}
+
+final class _SearchSpacerItem extends _SearchListItem {
+  const _SearchSpacerItem(this.height);
+
+  final double height;
 }
