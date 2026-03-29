@@ -1,83 +1,81 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/design/colors.dart';
-import '../../../core/database/database.dart';
+import '../../../core/database/database.dart' as db;
+import '../../../core/files/cached_asset_repository.dart';
 import '../../../core/files/file_bookmark_repository.dart';
 import '../../../core/providers/providers.dart';
+import '../../search/providers/search_engine.dart';
 import '../../search/providers/search_models.dart';
+import '../../search/providers/search_result_factory.dart';
 
 class CourseSearchRepository {
   const CourseSearchRepository(this._ref);
 
   final Ref _ref;
 
+  static const SearchEngine _engine = SearchEngine();
+
   Future<List<SearchResult>> search({
     required String courseId,
     required String courseName,
     required String query,
   }) async {
-    final database = _ref.read(databaseProvider);
-    final bookmarkKeys = await _ref
+    final db.AppDatabase database = _ref.read(databaseProvider);
+    final bookmarkKeysFuture = _ref
         .read(fileBookmarkRepositoryProvider)
         .watchKeys()
         .first;
+    final cachedAssetsFuture = _ref
+        .read(cachedAssetRepositoryProvider)
+        .getAllAssets();
+    final notificationsFuture = database.getNotificationsByCourse(courseId);
+    final homeworksFuture = database.getHomeworksByCourse(courseId);
+    final filesFuture = database.getFilesByCourse(courseId);
 
-    final notificationsFuture = database.searchNotificationsByCourseIds([
-      courseId,
-    ], query);
-    final homeworksFuture = database.searchHomeworksByCourseIds([
-      courseId,
-    ], query);
-    final filesFuture = database.searchFilesByCourseIds([courseId], query);
-
+    final bookmarkKeys = await bookmarkKeysFuture;
+    final cachedAssetKeys = (await cachedAssetsFuture)
+        .where((asset) => asset.courseId == courseId)
+        .map((asset) => asset.assetKey)
+        .toSet();
     final notifications = await notificationsFuture;
     final homeworks = await homeworksFuture;
     final files = await filesFuture;
 
-    return [
-      ...notifications.map(
-        (notification) => SearchResult(
-          category: SearchCategory.notification,
-          id: notification.id,
-          courseId: courseId,
+    final documents = <SearchDocument>[
+      for (final notification in notifications) ...[
+        buildNotificationSearchDocument(
+          notification,
           courseName: courseName,
-          title: notification.title,
-          subtitle: notification.publisher.isEmpty
-              ? courseName
-              : notification.publisher,
-          icon: Icons.notifications_rounded,
-          accentColor: AppColors.info,
         ),
-      ),
-      ...homeworks.map(
-        (homework) => SearchResult(
-          category: SearchCategory.homework,
-          id: homework.id,
-          courseId: courseId,
+        ...[
+          buildNotificationAttachmentSearchDocument(
+            notification,
+            courseName: courseName,
+            bookmarkKeys: bookmarkKeys,
+            cachedAssetKeys: cachedAssetKeys,
+          ),
+        ].whereType<SearchDocument>(),
+      ],
+      for (final homework in homeworks) ...[
+        buildHomeworkSearchDocument(homework, courseName: courseName),
+        ...buildHomeworkAttachmentSearchDocuments(
+          homework,
           courseName: courseName,
-          title: homework.title,
-          subtitle: courseName,
-          icon: Icons.assignment_rounded,
-          accentColor: AppColors.warning,
+          bookmarkKeys: bookmarkKeys,
+          cachedAssetKeys: cachedAssetKeys,
         ),
-      ),
+      ],
       ...files.map(
-        (file) => SearchResult(
-          category: SearchCategory.file,
-          id: file.id,
-          courseId: courseId,
+        (file) => buildCourseFileSearchDocument(
+          file,
           courseName: courseName,
-          title: file.title,
-          subtitle: file.size.isEmpty
-              ? courseName
-              : '$courseName · ${file.size}',
-          icon: Icons.insert_drive_file_rounded,
-          accentColor: const Color(0xFF8B5CF6),
-          isFavorite: bookmarkKeys.contains(file.id),
+          bookmarkKeys: bookmarkKeys,
+          cachedAssetKeys: cachedAssetKeys,
         ),
       ),
     ];
+
+    return _engine.search(documents: documents, query: query);
   }
 }
 

@@ -2,6 +2,7 @@ library;
 
 export 'app_session_coordinator.dart';
 export 'auth_controller.dart';
+export 'auth_relogin_models.dart';
 export 'auth_relogin_service.dart';
 export 'auth_router_refresh_notifier.dart';
 export 'auth_session_repository.dart';

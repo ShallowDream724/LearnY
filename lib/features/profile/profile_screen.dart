@@ -28,6 +28,7 @@ class ProfileScreen extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
     final autoReloginEnabled = ref.watch(autoReloginEnabledProvider);
     final hasStoredCredential = ref.watch(storedCredentialAvailabilityProvider);
+    final autoReloginStatus = ref.watch(autoReloginStatusProvider);
     final favoriteCount =
         ref.watch(bookmarkedFileCountProvider).valueOrNull ?? 0;
     final profileIdentity = ref.watch(profileIdentityProvider).valueOrNull;
@@ -166,6 +167,7 @@ class ProfileScreen extends ConsumerWidget {
                       subtitle: _buildAutoReloginSubtitle(
                         enabled: autoReloginEnabled,
                         hasStoredCredential: hasStoredCredential.valueOrNull,
+                        status: autoReloginStatus,
                       ),
                       value: autoReloginEnabled,
                       textColor: c.text,
@@ -329,17 +331,53 @@ class ProfileScreen extends ConsumerWidget {
   String _buildAutoReloginSubtitle({
     required bool enabled,
     required bool? hasStoredCredential,
+    required AutoReloginStatusSnapshot status,
   }) {
     if (!enabled) {
+      if (status.isLoaded &&
+          status.phase == AutoReloginStatusPhase.degraded &&
+          status.failureDisplayLabel != null) {
+        return '关闭 · 上次失败：${status.failureDisplayLabel!}';
+      }
       return '关闭';
     }
-    if (hasStoredCredential == null) {
+    if (hasStoredCredential == null || !status.isLoaded) {
       return '读取中...';
     }
     if (!hasStoredCredential) {
-      return '需重新配置';
+      if (status.failureDisplayLabel == null) {
+        return '需重新配置';
+      }
+      return '需重新配置\n最近失败：${status.failureDisplayLabel!}';
     }
-    return '已开启';
+    if (status.phase == AutoReloginStatusPhase.degraded &&
+        status.failureDisplayLabel != null) {
+      final verifiedAt = status.lastVerifiedAt;
+      if (verifiedAt == null) {
+        return '最近失败：${status.failureDisplayLabel!}';
+      }
+      return '最近失败：${status.failureDisplayLabel!}\n上次验证：${_formatStatusTime(verifiedAt)}';
+    }
+    final verifiedAt = status.lastVerifiedAt;
+    if (verifiedAt == null) {
+      return '待验证';
+    }
+
+    final primary = '已验证 · ${_formatStatusTime(verifiedAt)}';
+    final recoveryMethod = status.recoveryMethodDisplayLabel;
+    final recoveryAt = status.lastRecoveryAt;
+    if (recoveryMethod == null || recoveryAt == null) {
+      return primary;
+    }
+    return '$primary\n最近恢复：$recoveryMethod · ${_formatStatusTime(recoveryAt)}';
+  }
+
+  String _formatStatusTime(DateTime time) {
+    final mm = time.month.toString().padLeft(2, '0');
+    final dd = time.day.toString().padLeft(2, '0');
+    final hh = time.hour.toString().padLeft(2, '0');
+    final minute = time.minute.toString().padLeft(2, '0');
+    return '$mm-$dd $hh:$minute';
   }
 
   Future<void> _handleAutoReloginToggle(
@@ -350,6 +388,7 @@ class ProfileScreen extends ConsumerWidget {
     if (!enabled) {
       await ref.read(authReloginServiceProvider).clearStoredCredential();
       await ref.read(autoReloginEnabledProvider.notifier).setEnabled(false);
+      await ref.read(autoReloginStatusProvider.notifier).recordDisabled();
       ref.invalidate(storedCredentialAvailabilityProvider);
       if (context.mounted) {
         AppToast.showInfo(context, message: '已关闭自动重新登录');
@@ -371,7 +410,7 @@ class ProfileScreen extends ConsumerWidget {
       ),
     );
     if (configured == true && context.mounted) {
-      AppToast.showSuccess(context, message: '已启用自动重新登录');
+      AppToast.showSuccess(context, message: '已启用并验证自动重新登录');
     }
   }
 
@@ -552,6 +591,8 @@ class _SettingsSwitchTile extends StatelessWidget {
                 Text(
                   subtitle,
                   style: AppTypography.bodySmall.copyWith(color: subColor),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),

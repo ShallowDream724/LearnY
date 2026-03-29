@@ -225,9 +225,12 @@ Future<int> runAuthDiagnostics(List<String> args) async {
       }
 
       final helper = _newHelper();
+      final singleLoginEnabled =
+          (effectiveAuthFields['singleLogin'] ?? '').trim().isNotEmpty;
       logger.info(
         'fresh auth fields=${jsonEncode(effectiveAuthFields.map((key, value) => MapEntry(key, _mask(value))))}',
       );
+      logger.info('fresh singleLoginEnabled=$singleLoginEnabled');
       final ticket = await helper.getRoamingTicket(
         username,
         password,
@@ -235,6 +238,7 @@ Future<int> runAuthDiagnostics(List<String> args) async {
         fingerGenPrint: effectiveAuthFields['fingerGenPrint'] ?? '',
         fingerGenPrint3: effectiveAuthFields['fingerGenPrint3'] ?? '',
         deviceName: effectiveAuthFields['deviceName'] ?? '',
+        includeSingleLogin: singleLoginEnabled,
       );
       logger.info('fresh roaming ticket=${_mask(ticket)}');
       await helper.loginWithTicket(ticket);

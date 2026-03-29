@@ -4,6 +4,17 @@ extension HomeworkDao on AppDatabase {
   Future<List<Homework>> getHomeworksByCourse(String courseId) =>
       (select(homeworks)..where((t) => t.courseId.equals(courseId))).get();
 
+  Future<List<Homework>> getHomeworksBySemester(String semesterId) {
+    final query =
+        select(
+            homeworks,
+          ).join([innerJoin(courses, courses.id.equalsExp(homeworks.courseId))])
+          ..where(courses.semesterId.equals(semesterId))
+          ..orderBy([OrderingTerm.asc(homeworks.deadline)]);
+
+    return query.map((row) => row.readTable(homeworks)).get();
+  }
+
   Future<Homework?> getHomeworkById(String id) =>
       (select(homeworks)..where((t) => t.id.equals(id))).getSingleOrNull();
 

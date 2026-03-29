@@ -4,6 +4,17 @@ extension FileDao on AppDatabase {
   Future<List<CourseFile>> getFilesByCourse(String courseId) =>
       (select(courseFiles)..where((t) => t.courseId.equals(courseId))).get();
 
+  Future<List<CourseFile>> getFilesBySemester(String semesterId) {
+    final query =
+        select(courseFiles).join([
+            innerJoin(courses, courses.id.equalsExp(courseFiles.courseId)),
+          ])
+          ..where(courses.semesterId.equals(semesterId))
+          ..orderBy([OrderingTerm.desc(courseFiles.uploadTime)]);
+
+    return query.map((row) => row.readTable(courseFiles)).get();
+  }
+
   Future<void> upsertFile(CourseFilesCompanion entry) =>
       into(courseFiles).insertOnConflictUpdate(entry);
 

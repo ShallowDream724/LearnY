@@ -87,7 +87,10 @@ void main() {
         registry.describe(fileName: 'slides.pdf').capability,
         FilePreviewCapability.pdf,
       );
-      expect(registry.describe(fileName: 'slides.pdf').canInlinePreview, isTrue);
+      expect(
+        registry.describe(fileName: 'slides.pdf').canInlinePreview,
+        isTrue,
+      );
       expect(
         registry.describe(fileName: 'photo.JPG').capability,
         FilePreviewCapability.image,
@@ -104,7 +107,7 @@ void main() {
       );
       expect(
         registry.describe(fileName: 'lecture.docx').canInlinePreview,
-        isTrue,
+        isFalse,
       );
       expect(
         registry.describe(fileName: 'grades.xlsx').capability,
@@ -112,7 +115,7 @@ void main() {
       );
       expect(
         registry.describe(fileName: 'grades.xlsx').canInlinePreview,
-        isTrue,
+        isFalse,
       );
       expect(
         registry.describe(fileName: 'courseware.pptx').capability,
@@ -122,12 +125,32 @@ void main() {
         registry.describe(fileName: 'courseware.pptx').canInlinePreview,
         isFalse,
       );
+      expect(
+        registry.describe(fileName: 'materials.zip').capability,
+        FilePreviewCapability.archive,
+      );
+      expect(
+        registry.describe(fileName: 'materials.zip').canInlinePreview,
+        isTrue,
+      );
+      expect(
+        registry.describe(fileName: 'legacy.doc').capability,
+        FilePreviewCapability.document,
+      );
+      expect(
+        registry.describe(fileName: 'legacy.xls').capability,
+        FilePreviewCapability.spreadsheet,
+      );
+      expect(
+        registry.describe(fileName: 'legacy.ppt').capability,
+        FilePreviewCapability.presentation,
+      );
     });
 
     test('falls back to no preview for unsupported formats', () {
       final descriptor = registry.describe(
-        fileName: 'archive.zip',
-        fileType: 'zip',
+        fileName: 'legacy.rar',
+        fileType: 'rar',
       );
 
       expect(descriptor.capability, FilePreviewCapability.none);

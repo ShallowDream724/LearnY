@@ -14,7 +14,7 @@ void main() {
         final helper = _RecordingLearnHelper();
         final service = AuthReloginService(vault, helperFactory: () => helper);
 
-        await service.saveVerifiedCredential(
+        final result = await service.saveVerifiedCredential(
           username: '2024000000',
           password: 'secret',
           fingerPrint: 'fp',
@@ -23,6 +23,7 @@ void main() {
           deviceName: 'Android,LearnY',
         );
 
+        expect(result.succeeded, isTrue);
         expect(helper.calls, hasLength(1));
         expect(helper.calls.single.username, '2024000000');
         expect(helper.calls.single.password, 'secret');
@@ -39,14 +40,14 @@ void main() {
     );
 
     test(
-      'saveEnrolledCredential persists trusted-browser state without verify',
+      'saveEnrolledCredential verifies before persisting trusted-browser state',
       () async {
         final storage = _MemorySecureStorage();
         final vault = CredentialVault(storage);
         final helper = _RecordingLearnHelper();
         final service = AuthReloginService(vault, helperFactory: () => helper);
 
-        await service.saveEnrolledCredential(
+        final result = await service.saveEnrolledCredential(
           username: '2024000000',
           password: 'secret',
           fingerPrint: 'fp',
@@ -56,7 +57,8 @@ void main() {
           singleLoginEnabled: true,
         );
 
-        expect(helper.calls, isEmpty);
+        expect(result.succeeded, isTrue);
+        expect(helper.calls, hasLength(1));
 
         final saved = await vault.read();
         expect(saved, isNotNull);
@@ -84,7 +86,7 @@ void main() {
 
       final didRelogin = await service.tryRelogin(apiClient);
 
-      expect(didRelogin, isTrue);
+      expect(didRelogin.succeeded, isTrue);
       expect(apiClient.calls, hasLength(1));
       expect(apiClient.calls.single.singleLoginEnabled, isTrue);
     });

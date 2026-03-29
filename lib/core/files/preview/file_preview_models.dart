@@ -1,6 +1,6 @@
-import 'dart:typed_data';
-
 import '../file_preview_registry.dart';
+
+enum ArchiveNameDecodingMode { standard, compatibility }
 
 sealed class PreparedFilePreview {
   const PreparedFilePreview({required this.descriptor});
@@ -37,28 +37,15 @@ final class TextPreparedFilePreview extends PreparedFilePreview {
   final bool isTruncated;
 }
 
-enum HtmlPreparedFilePreviewKind { document, spreadsheet }
-
-final class HtmlPreparedFilePreview extends PreparedFilePreview {
-  const HtmlPreparedFilePreview({
+final class ArchivePreparedFilePreview extends PreparedFilePreview {
+  const ArchivePreparedFilePreview({
     required super.descriptor,
-    required this.kind,
-    required this.htmlBody,
+    required this.document,
     this.note,
   });
 
-  final HtmlPreparedFilePreviewKind kind;
-  final String htmlBody;
+  final ArchivePreviewDocument document;
   final String? note;
-}
-
-final class PresentationPreparedFilePreview extends PreparedFilePreview {
-  const PresentationPreparedFilePreview({
-    required super.descriptor,
-    required this.document,
-  });
-
-  final PresentationPreviewDocument document;
 }
 
 final class UnsupportedPreparedFilePreview extends PreparedFilePreview {
@@ -70,124 +57,51 @@ final class UnsupportedPreparedFilePreview extends PreparedFilePreview {
   final String message;
 }
 
-class PresentationPreviewDocument {
-  const PresentationPreviewDocument({
-    required this.slideWidth,
-    required this.slideHeight,
-    required this.slides,
+class ArchivePreviewDocument {
+  const ArchivePreviewDocument({
+    required this.entries,
+    required this.fileCount,
+    required this.directoryCount,
+    required this.compressedSizeBytes,
+    required this.uncompressedSizeBytes,
+    required this.nameDecodingMode,
+    required this.canCompatibilityOpen,
   });
 
-  final double slideWidth;
-  final double slideHeight;
-  final List<PresentationPreviewSlide> slides;
+  final List<ArchivePreviewEntry> entries;
+  final int fileCount;
+  final int directoryCount;
+  final int compressedSizeBytes;
+  final int uncompressedSizeBytes;
+  final ArchiveNameDecodingMode nameDecodingMode;
+  final bool canCompatibilityOpen;
 }
 
-class PresentationPreviewSlide {
-  const PresentationPreviewSlide({
-    required this.index,
-    required this.label,
-    required this.elements,
-    this.backgroundColorArgb,
-    this.defaultTextColorArgb,
+class ArchivePreviewEntry {
+  const ArchivePreviewEntry({
+    required this.path,
+    required this.displayName,
+    required this.parentPath,
+    required this.depth,
+    required this.isDirectory,
+    required this.uncompressedSizeBytes,
+    required this.compressedSizeBytes,
+    required this.previewDescriptor,
+    required this.childCount,
+    this.archiveFileIndex,
   });
 
-  final int index;
-  final String label;
-  final List<PresentationPreviewElement> elements;
-  final int? backgroundColorArgb;
-  final int? defaultTextColorArgb;
-}
+  final String path;
+  final String displayName;
+  final String parentPath;
+  final int depth;
+  final bool isDirectory;
+  final int uncompressedSizeBytes;
+  final int compressedSizeBytes;
+  final FilePreviewDescriptor? previewDescriptor;
+  final int childCount;
+  final int? archiveFileIndex;
 
-sealed class PresentationPreviewElement {
-  const PresentationPreviewElement({
-    required this.x,
-    required this.y,
-    required this.width,
-    required this.height,
-  });
-
-  final double x;
-  final double y;
-  final double width;
-  final double height;
-}
-
-enum PresentationTextRole { title, subtitle, body, caption }
-
-enum PresentationTextAlign { start, center, end, justify }
-
-final class PresentationTextElement extends PresentationPreviewElement {
-  const PresentationTextElement({
-    required super.x,
-    required super.y,
-    required super.width,
-    required super.height,
-    required this.role,
-    required this.paragraphs,
-    this.fillColorArgb,
-    this.borderColorArgb,
-  });
-
-  final PresentationTextRole role;
-  final List<PresentationTextParagraph> paragraphs;
-  final int? fillColorArgb;
-  final int? borderColorArgb;
-}
-
-class PresentationTextParagraph {
-  const PresentationTextParagraph({
-    required this.text,
-    required this.align,
-    required this.level,
-    required this.bullet,
-    this.fontSizePt,
-    this.colorArgb,
-    this.bold = false,
-  });
-
-  final String text;
-  final PresentationTextAlign align;
-  final int level;
-  final bool bullet;
-  final double? fontSizePt;
-  final int? colorArgb;
-  final bool bold;
-}
-
-final class PresentationImageElement extends PresentationPreviewElement {
-  const PresentationImageElement({
-    required super.x,
-    required super.y,
-    required super.width,
-    required super.height,
-    required this.bytes,
-    required this.mimeType,
-    this.borderColorArgb,
-  });
-
-  final Uint8List bytes;
-  final String mimeType;
-  final int? borderColorArgb;
-}
-
-final class PresentationTableElement extends PresentationPreviewElement {
-  const PresentationTableElement({
-    required super.x,
-    required super.y,
-    required super.width,
-    required super.height,
-    required this.rows,
-    this.fillColorArgb,
-    this.borderColorArgb,
-  });
-
-  final List<PresentationTableRow> rows;
-  final int? fillColorArgb;
-  final int? borderColorArgb;
-}
-
-class PresentationTableRow {
-  const PresentationTableRow({required this.cells});
-
-  final List<String> cells;
+  bool get isFile => !isDirectory;
+  bool get canInlinePreview => previewDescriptor?.canInlinePreview ?? false;
 }

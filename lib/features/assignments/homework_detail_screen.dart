@@ -25,6 +25,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/api/urls.dart' as urls;
 import '../../core/design/app_theme_colors.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/responsive.dart';
@@ -106,6 +107,9 @@ class HomeworkDetailScreen extends ConsumerWidget {
         }
 
         final canSubmit = !hw.graded;
+        final homeworkHtmlBaseUri = Uri.parse(
+          urls.learnHomeworkPage(courseId, hw.id),
+        );
         final hasHomeworkAttachment =
             hw.attachmentJson != null && hw.attachmentJson!.isNotEmpty;
         final hasSubmittedAttachment =
@@ -114,21 +118,19 @@ class HomeworkDetailScreen extends ConsumerWidget {
         final hasAnswerAttachment =
             hw.answerAttachmentJson != null &&
             hw.answerAttachmentJson!.isNotEmpty;
-        final showRequirementSection =
-            (hw.description != null && hw.description!.isNotEmpty) ||
-            hasHomeworkAttachment;
+        final showDescription = hasMeaningfulHomeworkHtml(hw.description);
+        final showRequirementSection = showDescription || hasHomeworkAttachment;
         final showSubmittedContent = hasMeaningfulHomeworkHtml(
           hw.submittedContent,
         );
+        final showAnswerContent = hasMeaningfulHomeworkHtml(hw.answerContent);
         final showSubmissionSection =
             hw.submitted &&
             (showSubmittedContent ||
                 hw.submitTime != null ||
                 hw.isLateSubmission ||
                 hasSubmittedAttachment);
-        final showAnswerSection =
-            (hw.answerContent != null && hw.answerContent!.isNotEmpty) ||
-            hasAnswerAttachment;
+        final showAnswerSection = showAnswerContent || hasAnswerAttachment;
         final homeworkAttachmentEntry = _attachmentEntry(
           label: '作业附件',
           rawJson: hw.attachmentJson,
@@ -207,11 +209,13 @@ class HomeworkDetailScreen extends ConsumerWidget {
                                         CrossAxisAlignment.start,
                                     children: [
                                       if (hw.description != null &&
-                                          hw.description!.isNotEmpty)
-                                        HomeworkHtmlText(html: hw.description!),
+                                          showDescription)
+                                        HomeworkHtmlText(
+                                          html: hw.description!,
+                                          baseUri: homeworkHtmlBaseUri,
+                                        ),
                                       if (hasHomeworkAttachment) ...[
-                                        if (hw.description != null &&
-                                            hw.description!.isNotEmpty)
+                                        if (showDescription)
                                           const SizedBox(height: 12),
                                         FileAttachmentCard(
                                           entry: homeworkAttachmentEntry,
@@ -241,6 +245,7 @@ class HomeworkDetailScreen extends ConsumerWidget {
                                       if (showSubmittedContent)
                                         HomeworkHtmlText(
                                           html: hw.submittedContent!,
+                                          baseUri: homeworkHtmlBaseUri,
                                         ),
                                       if (hw.submitTime != null) ...[
                                         if (showSubmittedContent)
@@ -285,6 +290,7 @@ class HomeworkDetailScreen extends ConsumerWidget {
                                   homework: hw,
                                   courseId: courseId,
                                   courseName: courseName,
+                                  htmlBaseUri: homeworkHtmlBaseUri,
                                 )
                                 .animate(delay: 300.ms)
                                 .fadeIn(duration: 300.ms)
@@ -300,14 +306,13 @@ class HomeworkDetailScreen extends ConsumerWidget {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      if (hw.answerContent != null &&
-                                          hw.answerContent!.isNotEmpty)
+                                      if (showAnswerContent)
                                         HomeworkHtmlText(
                                           html: hw.answerContent!,
+                                          baseUri: homeworkHtmlBaseUri,
                                         ),
                                       if (hasAnswerAttachment) ...[
-                                        if (hw.answerContent != null &&
-                                            hw.answerContent!.isNotEmpty)
+                                        if (showAnswerContent)
                                           const SizedBox(height: 12),
                                         FileAttachmentCard(
                                           entry: answerAttachmentEntry,

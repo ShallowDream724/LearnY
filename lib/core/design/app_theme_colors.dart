@@ -35,6 +35,7 @@ class AppThemeColors {
   Color get tertiary =>
       isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
   Color get infoAccent => isDark ? AppColors.info : const Color(0xFF007AFF);
+  Color get success => AppColors.success;
 }
 
 /// Convenience extension for quick access to semantic colors.

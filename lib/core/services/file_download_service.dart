@@ -30,6 +30,7 @@ import '../database/database.dart';
 import '../files/cached_asset_repository.dart';
 import '../files/file_access_resolver.dart';
 import '../files/file_models.dart';
+import '../files/preview/archive_preview_service.dart';
 import '../files/file_repository.dart';
 import '../providers/providers.dart';
 import 'file_cache_policy_service.dart';
@@ -448,11 +449,27 @@ class FileDownloadNotifier
   /// Delete a downloaded file and reset state.
   Future<void> deleteFile(String assetKey) async {
     final localPath = await _resolveLocalPath(assetKey);
+    String? courseId;
+    if (localPath != null) {
+      final file = await _ref
+          .read(cachedAssetRepositoryProvider)
+          .getAsset(assetKey);
+      courseId = file?.courseId;
+    }
     if (localPath != null) {
       final file = File(localPath);
       if (await file.exists()) {
         await file.delete();
       }
+    }
+
+    if (courseId != null && courseId.isNotEmpty) {
+      await _ref
+          .read(archivePreviewServiceProvider)
+          .clearExtractedContent(
+            courseId: courseId,
+            containerAssetKey: assetKey,
+          );
     }
 
     await _resetDownloadState(assetKey);

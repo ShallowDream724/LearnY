@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
@@ -47,50 +49,52 @@ Future<void> _probeLearnHelper() async {
   await _runProbe('learn_helper_dio', helper.dio, jar: helper.cookieJar);
 }
 
-Future<void> _runProbe(
-  String label,
-  Dio dio, {
-  CookieJar? jar,
-}) async {
+Future<void> _runProbe(String label, Dio dio, {CookieJar? jar}) async {
   final uri = Uri.parse(urls.idLogin());
   try {
-    final beforeCookies =
-        jar == null ? const <dynamic>[] : await jar.loadForRequest(uri);
+    final beforeCookies = jar == null
+        ? const <dynamic>[]
+        : await jar.loadForRequest(uri);
     final response = await dio.get<String>(urls.idLogin());
-    final afterCookies =
-        jar == null ? const <dynamic>[] : await jar.loadForRequest(uri);
+    final afterCookies = jar == null
+        ? const <dynamic>[]
+        : await jar.loadForRequest(uri);
     final body = response.data ?? '';
 
-    print('[$label] status=${response.statusCode}');
-    print('[$label] realUri=${response.realUri}');
-    print(
+    _log('[$label] status=${response.statusCode}');
+    _log('[$label] realUri=${response.realUri}');
+    _log(
       '[$label] requestHeaders=${(response.requestOptions.headers.keys.toList()..sort()).join(',')}',
     );
-    print('[$label] beforeCookies=${beforeCookies.length}');
-    print('[$label] afterCookies=${afterCookies.length}');
+    _log('[$label] beforeCookies=${beforeCookies.length}');
+    _log('[$label] afterCookies=${afterCookies.length}');
     if (afterCookies.isNotEmpty) {
-      print(
+      _log(
         '[$label] cookieNames=${afterCookies.map((cookie) => cookie.name).join(',')}',
       );
     }
-    print(
+    _log(
       '[$label] bodyPreview=${body.replaceAll(RegExp(r'\s+'), ' ').substring(0, body.length.clamp(0, 160))}',
     );
   } catch (error, stackTrace) {
-    print('[$label] error=$error');
+    _log('[$label] error=$error');
     if (error is DioException) {
-      print('[$label] requestUri=${error.requestOptions.uri}');
-      print(
+      _log('[$label] requestUri=${error.requestOptions.uri}');
+      _log(
         '[$label] requestHeaders=${(error.requestOptions.headers.keys.toList()..sort()).join(',')}',
       );
-      print('[$label] contentType=${error.requestOptions.contentType}');
-      print('[$label] responseStatus=${error.response?.statusCode}');
-      print('[$label] responseUri=${error.response?.realUri}');
+      _log('[$label] contentType=${error.requestOptions.contentType}');
+      _log('[$label] responseStatus=${error.response?.statusCode}');
+      _log('[$label] responseUri=${error.response?.realUri}');
       final body = error.response?.data?.toString() ?? '';
-      print(
+      _log(
         '[$label] bodyPreview=${body.replaceAll(RegExp(r'\s+'), ' ').substring(0, body.length.clamp(0, 160))}',
       );
     }
-    print('[$label] stack=$stackTrace');
+    _log('[$label] stack=$stackTrace');
   }
+}
+
+void _log(String message) {
+  stdout.writeln(message);
 }

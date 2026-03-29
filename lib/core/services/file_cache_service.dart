@@ -15,6 +15,7 @@ import '../files/cached_asset_repository.dart';
 import '../files/file_models.dart';
 import '../files/file_repository.dart';
 import '../providers/providers.dart';
+import '../files/preview/archive_preview_service.dart';
 import 'file_cache_policy_service.dart';
 import 'file_download_service.dart';
 
@@ -238,6 +239,9 @@ class FileCacheService {
     }
 
     await cachedAssetRepository.deleteAssetsByCourse(courseId);
+    await _ref
+        .read(archivePreviewServiceProvider)
+        .clearCourseExtractedContent(courseId);
     _ref.read(fileDownloadProvider.notifier).clearTrackedStates({
       ...files.map((file) => file.id),
       ...assetKeys,

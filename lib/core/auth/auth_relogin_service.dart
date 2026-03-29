@@ -8,6 +8,7 @@ import '../api/enums.dart';
 import '../api/learn_api.dart';
 import '../api/models.dart';
 import 'credential_vault.dart';
+import 'auth_relogin_models.dart';
 
 typedef LearnApiFactory = Learn2018Helper Function();
 
@@ -27,26 +28,34 @@ class AuthReloginService {
     return Learn2018Helper(config: HelperConfig(cookieJar: CookieJar()));
   }
 
-  Future<void> enrollCredential({
+  Future<AuthReloginResult> enrollCredential({
     required String username,
     required String password,
   }) async {
     final normalizedUsername = username.trim();
     if (normalizedUsername.isEmpty || password.isEmpty) {
-      throw const ApiError(reason: FailReason.noCredential);
+      return const AuthReloginResult.failure(
+        stage: AuthReloginFailureStage.credentialUnavailable,
+        reason: FailReason.noCredential,
+      );
     }
 
-    final credential = _buildCredential(
+    final credential = _buildCredentialSafely(
       username: normalizedUsername,
       password: password,
       fingerPrint: _generateFingerprint(),
     );
+    if (credential == null) {
+      return const AuthReloginResult.failure(
+        stage: AuthReloginFailureStage.credentialUnavailable,
+        reason: FailReason.noCredential,
+      );
+    }
 
-    await _verifyCredential(credential);
-    await _vault.save(credential);
+    return _verifyAndPersistCredential(credential);
   }
 
-  Future<void> saveEnrolledCredential({
+  Future<AuthReloginResult> saveEnrolledCredential({
     required String username,
     required String password,
     required String fingerPrint,
@@ -55,7 +64,7 @@ class AuthReloginService {
     String deviceName = '',
     bool singleLoginEnabled = false,
   }) async {
-    final credential = _buildCredential(
+    final credential = _buildCredentialSafely(
       username: username,
       password: password,
       fingerPrint: fingerPrint,
@@ -64,11 +73,17 @@ class AuthReloginService {
       deviceName: deviceName,
       singleLoginEnabled: singleLoginEnabled,
     );
+    if (credential == null) {
+      return const AuthReloginResult.failure(
+        stage: AuthReloginFailureStage.credentialUnavailable,
+        reason: FailReason.noCredential,
+      );
+    }
 
-    await _vault.save(credential);
+    return _verifyAndPersistCredential(credential);
   }
 
-  Future<void> saveVerifiedCredential({
+  Future<AuthReloginResult> saveVerifiedCredential({
     required String username,
     required String password,
     required String fingerPrint,
@@ -77,7 +92,7 @@ class AuthReloginService {
     String deviceName = '',
     bool singleLoginEnabled = false,
   }) async {
-    final credential = _buildCredential(
+    return saveEnrolledCredential(
       username: username,
       password: password,
       fingerPrint: fingerPrint,
@@ -86,25 +101,95 @@ class AuthReloginService {
       deviceName: deviceName,
       singleLoginEnabled: singleLoginEnabled,
     );
-
-    await _verifyCredential(credential);
-    await _vault.save(credential);
   }
 
-  Future<bool> tryRelogin(Learn2018Helper apiClient) async {
+  Future<AuthReloginResult> tryRelogin(Learn2018Helper apiClient) async {
     final credential = await _vault.read();
     if (credential == null) {
       debugPrint('[LearnY] Secure credential relogin skipped: no credential');
-      return false;
+      return const AuthReloginResult.failure(
+        stage: AuthReloginFailureStage.credentialUnavailable,
+        reason: FailReason.noCredential,
+      );
     }
 
+    return _attemptLogin(
+      apiClient,
+      credential,
+      attemptCount: 1,
+      flowLabel: 'Secure credential relogin',
+    );
+  }
+
+  Future<void> clearStoredCredential() {
+    return _vault.clear();
+  }
+
+  Future<AuthReloginResult> _verifyAndPersistCredential(
+    StoredCredential credential,
+  ) async {
+    final verification = await _verifyCredentialWithRetry(credential);
+    if (!verification.succeeded) {
+      return verification;
+    }
+
+    await _vault.save(credential);
+    return verification;
+  }
+
+  Future<AuthReloginResult> _verifyCredentialWithRetry(
+    StoredCredential credential,
+  ) async {
+    final delays = <Duration>[
+      Duration.zero,
+      const Duration(milliseconds: 900),
+      const Duration(milliseconds: 1800),
+    ];
+
+    AuthReloginResult? lastResult;
+    for (var attempt = 0; attempt < delays.length; attempt++) {
+      final delay = delays[attempt];
+      if (delay > Duration.zero) {
+        await Future<void>.delayed(delay);
+      }
+
+      final helper = _helperFactory();
+      final result = await _attemptLogin(
+        helper,
+        credential,
+        attemptCount: attempt + 1,
+        flowLabel: 'Enrollment verification',
+      );
+      if (result.succeeded) {
+        return result;
+      }
+      lastResult = result;
+      if (!result.shouldRetry) {
+        break;
+      }
+    }
+
+    return lastResult ??
+        const AuthReloginResult.failure(
+          stage: AuthReloginFailureStage.unknown,
+        );
+  }
+
+  Future<AuthReloginResult> _attemptLogin(
+    Learn2018Helper helper,
+    StoredCredential credential, {
+    required int attemptCount,
+    required String flowLabel,
+  }) async {
+    final usesTrustedBrowser = credential.fingerGenPrint.trim().isNotEmpty;
     try {
       debugPrint(
-        '[LearnY] Secure credential relogin started '
-        '(trusted=${credential.fingerGenPrint.trim().isNotEmpty}, '
+        '[LearnY] $flowLabel started '
+        '(attempt=$attemptCount, '
+        'trusted=$usesTrustedBrowser, '
         'singleLogin=${credential.singleLoginEnabled})',
       );
-      await apiClient.login(
+      await helper.login(
         credential.username,
         credential.password,
         credential.fingerPrint,
@@ -113,30 +198,26 @@ class AuthReloginService {
         credential.deviceName,
         credential.singleLoginEnabled,
       );
-      debugPrint('[LearnY] Secure credential relogin completed');
-      return true;
+      debugPrint('[LearnY] $flowLabel completed (attempt=$attemptCount)');
+      return AuthReloginResult.success(
+        attemptCount: attemptCount,
+        usedTrustedBrowser: usesTrustedBrowser,
+      );
     } catch (error, stackTrace) {
-      debugPrint('[LearnY] Secure credential relogin failed: $error');
+      final result = AuthReloginResult.fromError(
+        error,
+        attemptCount: attemptCount,
+        usedTrustedBrowser: usesTrustedBrowser,
+      );
+      debugPrint(
+        '[LearnY] $flowLabel failed '
+        '(attempt=$attemptCount, stage=${result.failureStage?.name}, '
+        'reason=${result.reason?.name ?? 'unknown'})',
+      );
+      debugPrint('$error');
       debugPrint('$stackTrace');
-      return false;
+      return result;
     }
-  }
-
-  Future<void> clearStoredCredential() {
-    return _vault.clear();
-  }
-
-  Future<void> _verifyCredential(StoredCredential credential) async {
-    final helper = _helperFactory();
-    await helper.login(
-      credential.username,
-      credential.password,
-      credential.fingerPrint,
-      credential.fingerGenPrint,
-      credential.fingerGenPrint3,
-      credential.deviceName,
-      credential.singleLoginEnabled,
-    );
   }
 
   StoredCredential _buildCredential({
@@ -165,6 +246,30 @@ class AuthReloginService {
       deviceName: deviceName.trim(),
       singleLoginEnabled: singleLoginEnabled,
     );
+  }
+
+  StoredCredential? _buildCredentialSafely({
+    required String username,
+    required String password,
+    required String fingerPrint,
+    String fingerGenPrint = '',
+    String fingerGenPrint3 = '',
+    String deviceName = '',
+    bool singleLoginEnabled = false,
+  }) {
+    try {
+      return _buildCredential(
+        username: username,
+        password: password,
+        fingerPrint: fingerPrint,
+        fingerGenPrint: fingerGenPrint,
+        fingerGenPrint3: fingerGenPrint3,
+        deviceName: deviceName,
+        singleLoginEnabled: singleLoginEnabled,
+      );
+    } on ApiError {
+      return null;
+    }
   }
 
   String _generateFingerprint() {

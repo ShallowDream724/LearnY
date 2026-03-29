@@ -14,7 +14,7 @@ abstract class AppSessionCoordinatorDelegate {
 
   void markSessionHealthy();
   void markSessionExpired(String? message);
-  Future<bool> recoverSession();
+  Future<SessionRecoveryResult> recoverSession();
   Future<void> syncAll();
 }
 
@@ -38,11 +38,10 @@ class RiverpodAppSessionCoordinatorDelegate
   }
 
   @override
-  Future<bool> recoverSession() async {
-    final result = await _ref
+  Future<SessionRecoveryResult> recoverSession() {
+    return _ref
         .read(sessionRecoveryCoordinatorProvider)
         .recoverSession(apiClient: _ref.read(apiClientProvider));
-    return result.recovered;
   }
 
   @override
@@ -171,9 +170,11 @@ class AppSessionCoordinator {
     String? errorMessage,
     required bool resyncOnSuccess,
   }) async {
-    final recovered = await _delegate.recoverSession();
-    if (!recovered) {
-      _delegate.markSessionExpired(errorMessage);
+    final result = await _delegate.recoverSession();
+    if (!result.recovered) {
+      _delegate.markSessionExpired(
+        result.sessionExpiredMessage(fallbackMessage: errorMessage),
+      );
       return;
     }
 

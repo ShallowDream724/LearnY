@@ -1,6 +1,7 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:learn_y/core/api/learn_api.dart';
+import 'package:learn_y/core/auth/auth_relogin_models.dart';
 import 'package:learn_y/core/auth/auth_relogin_service.dart';
 import 'package:learn_y/core/auth/credential_vault.dart';
 import 'package:learn_y/core/auth/session_recovery_coordinator.dart';
@@ -11,8 +12,12 @@ void main() {
     test('prefers SSO cookie recovery before secure credential relogin', () async {
       final coordinator = SessionRecoveryCoordinator(
         ssoRecoveryService: _FakeSsoRecoveryService(result: true),
-        authReloginService: _FakeAuthReloginService(result: true),
+        authReloginService: _FakeAuthReloginService(
+          result: const AuthReloginResult.success(),
+        ),
         isAutoReloginEnabled: () => true,
+        onRecoverySuccess: (_) async {},
+        onSecureReloginFailure: (_) async {},
       );
 
       final result = await coordinator.recoverSession(
@@ -26,8 +31,12 @@ void main() {
     test('uses secure credential relogin when SSO recovery fails', () async {
       final coordinator = SessionRecoveryCoordinator(
         ssoRecoveryService: _FakeSsoRecoveryService(result: false),
-        authReloginService: _FakeAuthReloginService(result: true),
+        authReloginService: _FakeAuthReloginService(
+          result: const AuthReloginResult.success(),
+        ),
         isAutoReloginEnabled: () => true,
+        onRecoverySuccess: (_) async {},
+        onSecureReloginFailure: (_) async {},
       );
 
       final result = await coordinator.recoverSession(
@@ -39,11 +48,15 @@ void main() {
     });
 
     test('does not attempt secure credential relogin when disabled', () async {
-      final authReloginService = _FakeAuthReloginService(result: true);
+      final authReloginService = _FakeAuthReloginService(
+        result: const AuthReloginResult.success(),
+      );
       final coordinator = SessionRecoveryCoordinator(
         ssoRecoveryService: _FakeSsoRecoveryService(result: false),
         authReloginService: authReloginService,
         isAutoReloginEnabled: () => false,
+        onRecoverySuccess: (_) async {},
+        onSecureReloginFailure: (_) async {},
       );
 
       final result = await coordinator.recoverSession(
@@ -73,11 +86,11 @@ class _FakeAuthReloginService extends AuthReloginService {
         _NoopCredentialVault(),
       );
 
-  final bool result;
+  final AuthReloginResult result;
   int tryReloginCalls = 0;
 
   @override
-  Future<bool> tryRelogin(Learn2018Helper apiClient) async {
+  Future<AuthReloginResult> tryRelogin(Learn2018Helper apiClient) async {
     tryReloginCalls++;
     return result;
   }

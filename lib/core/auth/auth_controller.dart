@@ -134,6 +134,7 @@ class AuthController extends StateNotifier<AuthState> {
   Future<void> logout() async {
     await _credentialVault.clear();
     await _ref.read(autoReloginEnabledProvider.notifier).setEnabled(false);
+    await _ref.read(autoReloginStatusProvider.notifier).reset();
     await _repository.logout();
     _ref.read(currentSemesterIdProvider.notifier).state = null;
     state = const AuthState.signedOut();

@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 
 const URLS = {
@@ -129,6 +130,15 @@ function findBrowser(browserArg) {
   }
 
   throw new Error(`Could not resolve browser executable for "${browserArg}"`);
+}
+
+function resolveProfileDir(browserArg) {
+  const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+  const browserLabel =
+    browserArg === 'chrome' || browserArg === 'edge'
+      ? browserArg
+      : path.basename(browserArg, path.extname(browserArg)).toLowerCase();
+  return path.join(scriptDir, '.profile', browserLabel);
 }
 
 function pickEnv(name, optional = false) {
@@ -360,12 +370,14 @@ async function main() {
 
   await ensureParent(options.output);
 
-  const browser = await chromium.launch({
+  const profileDir = resolveProfileDir(options.browser);
+  await fs.mkdir(profileDir, { recursive: true });
+
+  const context = await chromium.launchPersistentContext(profileDir, {
     executablePath,
     headless: false,
   });
-  const context = await browser.newContext();
-  const page = await context.newPage();
+  const page = context.pages()[0] ?? (await context.newPage());
 
   await context.route(
     /https:\/\/learn\.tsinghua\.edu\.cn\/b\/j_spring_security_thauth_roaming_entry\?ticket=/,
@@ -664,6 +676,7 @@ async function main() {
   });
 
   log('Opening identity login page in a real browser');
+  log(`Using persistent browser profile: ${profileDir}`);
   await page.goto(URLS.idLogin, {
     waitUntil: 'domcontentloaded',
     timeout: options.timeoutMs,
@@ -720,7 +733,6 @@ async function main() {
   log(`Wrote capture file to ${options.output}`);
 
   await context.close();
-  await browser.close();
 }
 
 main().catch((error) => {

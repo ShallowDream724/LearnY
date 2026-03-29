@@ -3,7 +3,7 @@
 // UX Design Decisions:
 // - Full-screen page (pushed above shell) for focused reading
 // - Auto-marks notification as read locally when opened
-// - HTML content stripped to styled text (with "open in browser" for complex HTML)
+// - HTML content rendered natively, including authenticated inline images
 // - Attachment card with file type icon, size, and download button
 // - Top action: mark unread / read
 // - Responsive: constrained width on tablets for readability
@@ -21,6 +21,7 @@ import '../../core/design/typography.dart';
 import '../../core/database/database.dart' as db;
 import '../../core/files/file_models.dart';
 import '../../core/files/widgets/file_attachment_card.dart';
+import '../../core/html/authenticated_html_content.dart';
 import '../../core/router/router.dart';
 import '../../core/utils/notification_read_state.dart';
 import 'providers/notification_actions.dart';
@@ -53,25 +54,17 @@ class _NotificationDetailScreenState
     });
   }
 
-  Future<void> _toggleReadState(
-    db.Notification notification,
-  ) async {
+  Future<void> _toggleReadState(db.Notification notification) async {
     final nextReadState = !notification.isEffectivelyRead;
 
     try {
       await ref
           .read(notificationActionsProvider)
-          .setReadState(
-            notificationId: notification.id,
-            isRead: nextReadState,
-          );
+          .setReadState(notificationId: notification.id, isRead: nextReadState);
       if (!mounted) {
         return;
       }
-      AppToast.showSuccess(
-        context,
-        message: nextReadState ? '已标为已读' : '已标为未读',
-      );
+      AppToast.showSuccess(context, message: nextReadState ? '已标为已读' : '已标为未读');
     } catch (_) {
       if (mounted) {
         AppToast.showError(
@@ -150,6 +143,7 @@ class _NotificationDetailScreenState
             courseId: widget.courseId,
             courseName: widget.courseName,
           );
+          final hasContent = hasVisibleHtmlContent(notification.content);
 
           return CustomScrollView(
             slivers: [
@@ -296,7 +290,7 @@ class _NotificationDetailScreenState
                           const SizedBox(height: 20),
 
                           // ── Content body ──
-                          if (notification.content.isNotEmpty)
+                          if (hasContent)
                             _ContentBody(
                               htmlContent: notification.content,
                             ).animate(delay: 200.ms).fadeIn(duration: 300.ms)
@@ -389,15 +383,7 @@ class _NotificationDetailScreenState
 //  HTML Content Renderer
 // ─────────────────────────────────────────────
 
-/// Renders notification HTML content as styled text.
-///
-/// Why not use flutter_html or webview?
-/// - flutter_html adds a heavy dependency
-/// - webview is overkill for simple announcement text
-/// - Most notification content is simple HTML (<p>, <br>, <b>, <a>)
-///
-/// We strip HTML tags and render as clean text with proper spacing.
-/// Complex HTML (tables, images) falls back to "open in browser".
+/// Renders notification HTML content with authenticated inline image support.
 class _ContentBody extends StatelessWidget {
   final String htmlContent;
 
@@ -407,52 +393,13 @@ class _ContentBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
 
-    // Strip HTML tags to get plain text
-    final text = _stripHtml(htmlContent);
-
-    if (text.trim().isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return SelectableText(
-      text,
-      style: AppTypography.bodyLarge.copyWith(
+    return AuthenticatedHtmlContent(
+      html: htmlContent,
+      textStyle: AppTypography.bodyLarge.copyWith(
         color: c.text,
         height: 1.8,
         letterSpacing: 0.1,
       ),
     );
-  }
-
-  /// Strips HTML tags and converts common HTML entities to readable text.
-  /// Preserves paragraph breaks.
-  String _stripHtml(String html) {
-    // Replace block elements with newlines
-    var text = html
-        .replaceAll(RegExp(r'<br\s*/?>'), '\n')
-        .replaceAll(RegExp(r'</p>'), '\n\n')
-        .replaceAll(RegExp(r'</div>'), '\n')
-        .replaceAll(RegExp(r'</li>'), '\n')
-        .replaceAll(RegExp(r'</tr>'), '\n')
-        .replaceAll(RegExp(r'<li[^>]*>'), '  \u2022 '); // bullet for list items
-
-    // Strip remaining tags
-    text = text.replaceAll(RegExp(r'<[^>]+>'), '');
-
-    // Decode HTML entities
-    text = text
-        .replaceAll('&amp;', '&')
-        .replaceAll('&lt;', '<')
-        .replaceAll('&gt;', '>')
-        .replaceAll('&quot;', '"')
-        .replaceAll('&#39;', "'")
-        .replaceAll('&nbsp;', ' ')
-        .replaceAll('&mdash;', '\u2014')
-        .replaceAll('&ndash;', '\u2013')
-        .replaceAll('&hellip;', '\u2026');
-
-    // Clean up excessive whitespace
-    text = text.replaceAll(RegExp(r'\n{3,}'), '\n\n');
-    return text.trim();
   }
 }

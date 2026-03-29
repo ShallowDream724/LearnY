@@ -7,6 +7,7 @@ import '../../../core/design/typography.dart';
 import '../../../core/database/database.dart' as db;
 import '../../../core/files/file_models.dart';
 import '../../../core/files/widgets/file_attachment_card.dart';
+import '../../../core/html/authenticated_html_content.dart';
 import '../../../core/router/router.dart';
 import '../../../core/utils/deadline_time.dart';
 import '../../../core/utils/homework_grade_display.dart';
@@ -193,11 +194,13 @@ class HomeworkGradeSection extends StatelessWidget {
     required this.homework,
     required this.courseId,
     required this.courseName,
+    this.htmlBaseUri,
   });
 
   final db.Homework homework;
   final String courseId;
   final String courseName;
+  final Uri? htmlBaseUri;
 
   @override
   Widget build(BuildContext context) {
@@ -337,8 +340,7 @@ class HomeworkGradeSection extends StatelessWidget {
               ),
             ],
           ),
-          if (homework.gradeContent != null &&
-              homework.gradeContent!.isNotEmpty) ...[
+          if (hasMeaningfulHomeworkHtml(homework.gradeContent)) ...[
             const SizedBox(height: 16),
             Divider(color: c.border, height: 1),
             const SizedBox(height: 12),
@@ -347,7 +349,10 @@ class HomeworkGradeSection extends StatelessWidget {
               style: AppTypography.labelMedium.copyWith(color: c.subtitle),
             ),
             const SizedBox(height: 8),
-            HomeworkHtmlText(html: homework.gradeContent!),
+            HomeworkHtmlText(
+              html: homework.gradeContent!,
+              baseUri: htmlBaseUri,
+            ),
           ],
           if (homework.gradeAttachmentJson != null &&
               homework.gradeAttachmentJson!.isNotEmpty) ...[
@@ -459,31 +464,28 @@ class HomeworkMetaChip extends StatelessWidget {
 }
 
 class HomeworkHtmlText extends StatelessWidget {
-  const HomeworkHtmlText({super.key, required this.html});
+  const HomeworkHtmlText({super.key, required this.html, this.baseUri});
 
   final String html;
+  final Uri? baseUri;
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
 
-    return SelectableText(
-      _stripHomeworkHtml(html),
-      style: AppTypography.bodyMedium.copyWith(color: c.text, height: 1.7),
+    return AuthenticatedHtmlContent(
+      html: html,
+      baseUri: baseUri,
+      textStyle: AppTypography.bodyMedium.copyWith(color: c.text, height: 1.7),
     );
   }
 }
 
 bool hasMeaningfulHomeworkHtml(String? html) {
-  if (html == null) {
-    return false;
-  }
-  final text = _stripHomeworkHtml(html);
-  if (text.isEmpty) {
-    return false;
-  }
-  final placeholderOnly = RegExp(r'^[\s\u00A0\u200B>\-–—→➡➔➜➝]+$');
-  return !placeholderOnly.hasMatch(text);
+  return hasVisibleHtmlContent(
+    html,
+    placeholderOnly: RegExp(r'^[\s\u00A0\u200B>\-–—→➡➔➜➝]+$'),
+  );
 }
 
 String formatHomeworkFullTime(String time) {
@@ -491,26 +493,4 @@ String formatHomeworkFullTime(String time) {
   if (d == null) return time;
   return '${d.year}/${d.month}/${d.day} '
       '${formatHourMinuteLabel(d)}';
-}
-
-String _stripHomeworkHtml(String html) {
-  var text = html
-      .replaceAll(RegExp(r'<br\s*/?>'), '\n')
-      .replaceAll(RegExp(r'</p>'), '\n\n')
-      .replaceAll(RegExp(r'</div>'), '\n')
-      .replaceAll(RegExp(r'</li>'), '\n')
-      .replaceAll(RegExp(r'<li[^>]*>'), '  • ');
-
-  text = text.replaceAll(RegExp(r'<[^>]+>'), '');
-
-  text = text
-      .replaceAll('&amp;', '&')
-      .replaceAll('&lt;', '<')
-      .replaceAll('&gt;', '>')
-      .replaceAll('&quot;', '"')
-      .replaceAll('&#39;', "'")
-      .replaceAll('&nbsp;', ' ');
-
-  text = text.replaceAll(RegExp(r'\n{3,}'), '\n\n');
-  return text.trim();
 }

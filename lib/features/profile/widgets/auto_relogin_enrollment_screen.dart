@@ -61,6 +61,17 @@ class _AutoReloginEnrollmentScreenState
   }
 
   Future<void> _prepareFreshLoginPage() async {
+    _capturedFormData = null;
+    _capturedTrustedFingerGenPrint = null;
+    _capturedSingleLoginEnabled = false;
+    _trustedBrowserCaptureCompleter = null;
+    _didAttemptAutoSubmit = false;
+    try {
+      await _webViewController.clearLocalStorage();
+    } catch (error, stackTrace) {
+      debugPrint('[LearnY] Failed to clear WebView local storage: $error');
+      debugPrint('$stackTrace');
+    }
     await _cookieManager.clearCookies();
     await _webViewController.loadRequest(Uri.parse(urls.idLogin()));
   }
@@ -193,6 +204,11 @@ class _AutoReloginEnrollmentScreenState
       await ref.read(ssoLoginCoordinatorProvider).consumeTicket(ticket);
       await _persistEnrolledCredential(capturedFormData);
     } on _EnrollmentTrustMissingException {
+      await _recordEnrollmentFailure(
+        const AuthReloginResult.failure(
+          stage: AuthReloginFailureStage.trustedBrowserState,
+        ),
+      );
       if (!mounted) {
         return;
       }
@@ -206,11 +222,12 @@ class _AutoReloginEnrollmentScreenState
         return;
       }
       setState(() {
-        _errorMessage = _mapVerificationApiError(error.error);
+        _errorMessage = error.result.enrollmentFailureMessage;
         _isProcessingTicket = false;
         _isPageLoading = false;
       });
     } on ApiError catch (error) {
+      await _recordEnrollmentFailure(AuthReloginResult.fromApiError(error));
       if (!mounted) {
         return;
       }
@@ -222,6 +239,7 @@ class _AutoReloginEnrollmentScreenState
     } catch (error, stackTrace) {
       debugPrint('[LearnY] Auto relogin enrollment failed: $error');
       debugPrint('$stackTrace');
+      await _recordEnrollmentFailure(AuthReloginResult.fromError(error));
       if (!mounted) {
         return;
       }
@@ -279,6 +297,11 @@ class _AutoReloginEnrollmentScreenState
           );
       await _persistEnrolledCredential(capturedFormData);
     } on _EnrollmentTrustMissingException {
+      await _recordEnrollmentFailure(
+        const AuthReloginResult.failure(
+          stage: AuthReloginFailureStage.trustedBrowserState,
+        ),
+      );
       if (!mounted) {
         return;
       }
@@ -292,11 +315,12 @@ class _AutoReloginEnrollmentScreenState
         return;
       }
       setState(() {
-        _errorMessage = _mapVerificationApiError(error.error);
+        _errorMessage = error.result.enrollmentFailureMessage;
         _isProcessingTicket = false;
         _isPageLoading = false;
       });
     } on ApiError catch (error) {
+      await _recordEnrollmentFailure(AuthReloginResult.fromApiError(error));
       if (!mounted) {
         return;
       }
@@ -308,6 +332,7 @@ class _AutoReloginEnrollmentScreenState
     } catch (error, stackTrace) {
       debugPrint('[LearnY] Auto relogin enrollment fallback failed: $error');
       debugPrint('$stackTrace');
+      await _recordEnrollmentFailure(AuthReloginResult.fromError(error));
       if (!mounted) {
         return;
       }
@@ -330,7 +355,7 @@ class _AutoReloginEnrollmentScreenState
     }
 
     try {
-      await ref
+      final result = await ref
           .read(authReloginServiceProvider)
           .saveEnrolledCredential(
             username: resolvedUsername,
@@ -341,11 +366,21 @@ class _AutoReloginEnrollmentScreenState
             deviceName: resolvedFields.deviceName,
             singleLoginEnabled: resolvedFields.singleLoginEnabled,
           );
-    } on ApiError catch (error) {
-      throw _EnrollmentVerificationException(error);
+      if (!result.succeeded) {
+        await _recordEnrollmentFailure(result);
+        throw _EnrollmentVerificationException(result);
+      }
+    } catch (error) {
+      if (error is _EnrollmentVerificationException) {
+        rethrow;
+      }
+      final result = AuthReloginResult.fromError(error);
+      await _recordEnrollmentFailure(result);
+      throw _EnrollmentVerificationException(result);
     }
 
     await ref.read(autoReloginEnabledProvider.notifier).setEnabled(true);
+    await ref.read(autoReloginStatusProvider.notifier).recordVerified();
     ref.invalidate(storedCredentialAvailabilityProvider);
 
     if (!mounted) {
@@ -401,7 +436,7 @@ class _AutoReloginEnrollmentScreenState
 
     final completer = _trustedBrowserCaptureCompleter ??= Completer<void>();
     try {
-      await completer.future.timeout(const Duration(seconds: 2));
+      await completer.future.timeout(const Duration(seconds: 5));
     } on TimeoutException {
       debugPrint(
         '[LearnY] Trusted-browser capture did not arrive before timeout',
@@ -467,14 +502,13 @@ class _AutoReloginEnrollmentScreenState
     };
   }
 
-  String _mapVerificationApiError(ApiError error) {
-    return switch (error.reason) {
-      FailReason.badCredential => '自动重新登录验证失败：统一身份账号或密码不正确',
-      FailReason.errorRoaming => '自动重新登录验证失败：学堂会话建立失败，请稍后重试',
-      FailReason.invalidResponse ||
-      FailReason.errorFetchFromId => '自动重新登录验证失败：统一身份认证验证失败，请稍后重试',
-      _ => '自动重新登录验证失败，请稍后重试',
-    };
+  Future<void> _recordEnrollmentFailure(AuthReloginResult result) {
+    return ref
+        .read(autoReloginStatusProvider.notifier)
+        .recordFailureResult(
+          result,
+          source: AutoReloginFailureSource.enrollment,
+        );
   }
 
   String _buildInjectionScript({required bool shouldAutoSubmit}) {
@@ -501,6 +535,16 @@ class _AutoReloginEnrollmentScreenState
 
         const send = function(type, data) {
           channel.postMessage(JSON.stringify({ type: type, data: data }));
+        };
+
+        const dispatchValueChange = function(element) {
+          if (!element) {
+            return;
+          }
+          try {
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+          } catch (_) {}
         };
 
         const looksLikeSaveFingerUrl = function(url) {
@@ -570,23 +614,64 @@ class _AutoReloginEnrollmentScreenState
           }
           if (passwordInput) {
             passwordInput.value = password;
-            passwordInput.dispatchEvent(new Event('input', { bubbles: true }));
-            passwordInput.dispatchEvent(new Event('change', { bubbles: true }));
+            dispatchValueChange(passwordInput);
           }
-          if (singleLoginInput && !singleLoginInput.checked) {
-            singleLoginInput.click();
+          ensureSingleLoginSelection(singleLoginInput && singleLoginInput.form);
+        };
+
+        const ensureSingleLoginSelection = function(form) {
+          const singleLoginInput = document.querySelector('[name="singleLogin"]');
+          if (!singleLoginInput) {
+            return true;
           }
-          if (singleLoginInput && !singleLoginInput.checked) {
-            singleLoginInput.checked = true;
-            singleLoginInput.dispatchEvent(new Event('input', { bubbles: true }));
-            singleLoginInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+          const resolvedForm = form || singleLoginInput.form || document.getElementById('theform');
+          const syncHiddenField = function(forcePresent) {
+            if (!resolvedForm) {
+              return false;
+            }
+            let hiddenField = resolvedForm.querySelector('input[data-learny-force-single-login="1"]');
+            const hasFormValue = new FormData(resolvedForm).has('singleLogin');
+            if (forcePresent && !hasFormValue) {
+              if (!hiddenField) {
+                hiddenField = document.createElement('input');
+                hiddenField.type = 'hidden';
+                hiddenField.name = 'singleLogin';
+                hiddenField.value = 'on';
+                hiddenField.setAttribute('data-learny-force-single-login', '1');
+                resolvedForm.appendChild(hiddenField);
+              } else {
+                hiddenField.value = 'on';
+              }
+              return true;
+            }
+            if (!forcePresent && hiddenField) {
+              hiddenField.remove();
+            }
+            return hasFormValue;
+          };
+
+          if (!singleLoginInput.checked) {
+            try {
+              singleLoginInput.click();
+            } catch (_) {}
           }
+          if (!singleLoginInput.checked) {
+            try {
+              singleLoginInput.checked = true;
+            } catch (_) {}
+            dispatchValueChange(singleLoginInput);
+          }
+
+          const hasFormValueAfterToggle = syncHiddenField(!singleLoginInput.checked);
+          return singleLoginInput.checked || hasFormValueAfterToggle;
         };
 
         const capture = function(form) {
           if (!form) {
             return;
           }
+          ensureSingleLoginSelection(form);
           const payload = {};
           const formData = new FormData(form);
           for (const entry of formData.entries()) {
@@ -704,12 +789,51 @@ class _AutoReloginEnrollmentScreenState
           window.jQuery.fn.submit.__learnyCaptured = true;
         };
 
+        const tryAutoSubmit = function() {
+          if (!shouldAutoSubmit || window.__learnyAutoSubmitTriggered) {
+            return;
+          }
+
+          const captcha = document.getElementById('c_code');
+          const captchaVisible = captcha && !captcha.classList.contains('hidden');
+          if (captchaVisible) {
+            return;
+          }
+
+          const form = document.getElementById('theform');
+          if (!ensureSingleLoginSelection(form)) {
+            return;
+          }
+
+          if (form && document.querySelector('[name="singleLogin"]')) {
+            const hasSingleLoginValue = new FormData(form).has('singleLogin');
+            if (!hasSingleLoginValue) {
+              return;
+            }
+          }
+
+          window.__learnyAutoSubmitTriggered = true;
+          setTimeout(function() {
+            if (typeof doLogin === 'function') {
+              doLogin();
+              return;
+            }
+            const loginButton = document.querySelector(
+              'a.btn.btn-lg.btn-primary.btn-block'
+            );
+            if (loginButton) {
+              loginButton.click();
+            }
+          }, 250);
+        };
+
         populate();
         hookNativeForm();
         hookJQuery();
         hookXhr();
         hookFetch();
         autoConfirmTrustedBrowser();
+        tryAutoSubmit();
 
         if (!window.__learnyCaptureObserver) {
           window.__learnyCaptureObserver = new MutationObserver(function() {
@@ -719,31 +843,12 @@ class _AutoReloginEnrollmentScreenState
             hookXhr();
             hookFetch();
             autoConfirmTrustedBrowser();
+            tryAutoSubmit();
           });
           window.__learnyCaptureObserver.observe(document.documentElement, {
             childList: true,
             subtree: true,
           });
-        }
-
-        if (shouldAutoSubmit && !window.__learnyAutoSubmitTriggered) {
-          const captcha = document.getElementById('c_code');
-          const captchaVisible = captcha && !captcha.classList.contains('hidden');
-          if (!captchaVisible) {
-            window.__learnyAutoSubmitTriggered = true;
-            setTimeout(function() {
-              if (typeof doLogin === 'function') {
-                doLogin();
-                return;
-              }
-              const loginButton = document.querySelector(
-                'a.btn.btn-lg.btn-primary.btn-block'
-              );
-              if (loginButton) {
-                loginButton.click();
-              }
-            }, 250);
-          }
         }
 
         return true;
@@ -766,7 +871,7 @@ class _AutoReloginEnrollmentScreenState
           children: [
             const Text('验证统一身份'),
             Text(
-              _isProcessingTicket ? '正在保存安全凭据...' : '如出现验证码，请在页面中完成',
+              _isProcessingTicket ? '正在校验静默重登...' : '如出现验证码，请在页面中完成',
               style: AppTypography.bodySmall.copyWith(
                 color: _isProcessingTicket ? AppColors.primary : c.subtitle,
               ),
@@ -811,7 +916,7 @@ class _AutoReloginEnrollmentScreenState
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          '正在建立学堂会话并保存安全凭据...',
+                          '正在验证静默重登并保存安全凭据...',
                           style: AppTypography.bodyMedium.copyWith(
                             color: c.subtitle,
                           ),
@@ -828,9 +933,9 @@ class _AutoReloginEnrollmentScreenState
 }
 
 class _EnrollmentVerificationException implements Exception {
-  const _EnrollmentVerificationException(this.error);
+  const _EnrollmentVerificationException(this.result);
 
-  final ApiError error;
+  final AuthReloginResult result;
 }
 
 class _EnrollmentTrustMissingException implements Exception {

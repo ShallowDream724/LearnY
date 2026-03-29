@@ -48,5 +48,16 @@ void main() {
 
       expect(formData['singleLogin'], 'on');
     });
+
+    test('normalizes SM2 identity password to 04-prefixed ciphertext', () {
+      const publicKey =
+          '0432C4AE2C1F1981195F9904466A39C9948FE30BBFF2660BE1715A4589334C74C7'
+          'BC3736A2F4F6779C59BDCEE36B692153D0A9877CC62A474002DF32E52139F0A0';
+
+      final encrypted = encryptIdentityPassword('abc', publicKey);
+
+      expect(encrypted.startsWith('04'), isTrue);
+      expect(encrypted.length, 130 + 64 + ('abc'.length * 2));
+    });
   });
 }

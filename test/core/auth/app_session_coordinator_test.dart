@@ -1,7 +1,9 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:learn_y/core/auth/app_session_coordinator.dart';
+import 'package:learn_y/core/auth/auth_relogin_models.dart';
 import 'package:learn_y/core/auth/auth_controller.dart';
+import 'package:learn_y/core/auth/session_recovery_coordinator.dart';
 import 'package:learn_y/core/providers/sync_models.dart';
 
 void main() {
@@ -78,7 +80,7 @@ void main() {
 
       await Future<void>.delayed(Duration.zero);
       expect(delegate.recoveryCalls, 1);
-      expect(delegate.markExpiredMessages, ['cookie expired']);
+      expect(delegate.markExpiredMessages, ['会话已过期，可继续查看缓存数据']);
     });
 
     test(
@@ -119,7 +121,9 @@ void main() {
     test('recovers and re-syncs after session expiry when recovery succeeds', () async {
       final delegate = _FakeCoordinatorDelegate(
         authState: const AuthState.authenticated(username: 'demo'),
-        recoveryResult: true,
+        recoveryResult: const SessionRecoveryResult.success(
+          SessionRecoveryMethod.secureCredential,
+        ),
       );
       final coordinator = AppSessionCoordinator(delegate);
 
@@ -143,13 +147,15 @@ void main() {
 class _FakeCoordinatorDelegate implements AppSessionCoordinatorDelegate {
   _FakeCoordinatorDelegate({
     required this.authState,
-    this.recoveryResult = false,
+    this.recoveryResult = const SessionRecoveryResult.failed(
+      failureStage: SessionRecoveryFailureStage.autoReloginDisabled,
+    ),
   });
 
   @override
   AuthState authState;
 
-  final bool recoveryResult;
+  final SessionRecoveryResult recoveryResult;
   int syncCalls = 0;
   int markHealthyCalls = 0;
   int recoveryCalls = 0;
@@ -171,9 +177,9 @@ class _FakeCoordinatorDelegate implements AppSessionCoordinatorDelegate {
   }
 
   @override
-  Future<bool> recoverSession() async {
+  Future<SessionRecoveryResult> recoverSession() async {
     recoveryCalls++;
-    if (recoveryResult) {
+    if (recoveryResult.recovered) {
       authState = AuthState.authenticated(username: authState.username ?? 'demo');
     }
     return recoveryResult;

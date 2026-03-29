@@ -195,6 +195,15 @@ Map<String, String> buildIdentityCheckHeaders({required String referer}) {
   return {'Origin': urls.idPrefix, 'Referer': referer};
 }
 
+@visibleForTesting
+String encryptIdentityPassword(String password, String publicKey) {
+  final encrypted = SM2.encrypt(password, publicKey);
+  if (encrypted.startsWith('04')) {
+    return encrypted;
+  }
+  return '04$encrypted';
+}
+
 String _authResponsePreview(String responseBody, {int maxLength = 240}) {
   final normalized = responseBody.replaceAll(RegExp(r'\s+'), ' ').trim();
   if (normalized.length <= maxLength) {
@@ -475,7 +484,12 @@ class Learn2018Helper {
       final ticket = _extractRoamingTicket(respBody);
       if (ticket == null || ticket.isEmpty) {
         if (_looksLikeBadCredentialResponse(respBody)) {
-          throw const ApiError(reason: FailReason.badCredential);
+          throw ApiError(
+            reason: FailReason.badCredential,
+            extra:
+                'checkStatus=${checkResp.statusCode}, '
+                'responsePreview=${_authResponsePreview(respBody)}',
+          );
         }
         throw ApiError(
           reason: FailReason.invalidResponse,
@@ -615,11 +629,19 @@ class Learn2018Helper {
         urls.learnStudentCourseListPage(),
       );
       final pageSource = resp.data?.toString() ?? '';
-      if (resp.statusCode != 200 ||
-          !_applyAuthenticatedPageContext(
-            pageUri: resp.realUri,
-            pageSource: pageSource,
-          )) {
+      final authenticated = _applyAuthenticatedPageContext(
+        pageUri: resp.realUri,
+        pageSource: pageSource,
+      );
+      if (!authenticated) {
+        debugPrint(
+          '[LearnX] attemptSilentSessionRecovery: unauthenticated response '
+          'status=${resp.statusCode}, url=${resp.realUri}, '
+          'looksLikeIdentity=${looksLikeIdentityLoginPage(pageSource)}, '
+          'preview=${_authResponsePreview(pageSource)}',
+        );
+      }
+      if (resp.statusCode != 200 || !authenticated) {
         return false;
       }
       return true;
@@ -774,7 +796,7 @@ class Learn2018Helper {
   bool _looksLikeBadCredentialResponse(String responseBody) {
     return responseBody.contains('用户名或密码不正确') ||
         responseBody.contains('密码不正确') ||
-        responseBody.contains('请重试');
+        responseBody.contains('账号或密码错误');
   }
 
   // -------------------------------------------------------------------
@@ -836,19 +858,24 @@ class Learn2018Helper {
       return infoLines[1];
     }
 
-    for (final selector in const <String>[
-      '.fl.up-img-info p:nth-child(2) label',
-      '.fl.up-img-info p:nth-child(2)',
-      '.up-img-info p:nth-of-type(2) label',
-      '.up-img-info p:nth-of-type(2)',
-      '.up-img-info p + p label',
-      '.up-img-info p + p',
-    ]) {
-      final text = _normalizeDepartmentText(
-        doc.querySelector(selector)?.text ?? '',
-      );
-      if (text.isNotEmpty) {
-        return text;
+    final profileContainer = doc.querySelector('.up-img-info');
+    if (profileContainer != null) {
+      final paragraphs = profileContainer
+          .querySelectorAll('p')
+          .map((node) => _normalizeDepartmentText(node.text))
+          .where((text) => text.isNotEmpty)
+          .toList();
+      if (paragraphs.length >= 2) {
+        return paragraphs[1];
+      }
+
+      final labels = profileContainer
+          .querySelectorAll('label')
+          .map((node) => _normalizeDepartmentText(node.text))
+          .where((text) => text.isNotEmpty)
+          .toList();
+      if (labels.length >= 2) {
+        return labels[1];
       }
     }
 
@@ -2271,7 +2298,7 @@ class Learn2018Helper {
   /// 1. Use WebView-based SSO login (bypasses this)
   /// 2. Provide a native SM2 implementation via FFI/plugin
   String _sm2Encrypt(String data, String publicKey) {
-    return SM2.encrypt(data, publicKey);
+    return encryptIdentityPassword(data, publicKey);
   }
 
   // -------------------------------------------------------------------

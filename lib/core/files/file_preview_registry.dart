@@ -10,6 +10,7 @@ enum FilePreviewCapability {
   document,
   spreadsheet,
   presentation,
+  archive,
   none,
 }
 
@@ -26,9 +27,11 @@ class FilePreviewDescriptor {
     FilePreviewCapability.pdf ||
     FilePreviewCapability.image ||
     FilePreviewCapability.text ||
+    FilePreviewCapability.archive => true,
     FilePreviewCapability.document ||
-    FilePreviewCapability.spreadsheet => true,
-    FilePreviewCapability.presentation || FilePreviewCapability.none => false,
+    FilePreviewCapability.spreadsheet ||
+    FilePreviewCapability.presentation ||
+    FilePreviewCapability.none => false,
   };
 }
 
@@ -75,11 +78,19 @@ class FilePreviewRegistry {
       case 'dart':
         return FilePreviewCapability.text;
       case 'docx':
+      case 'docm':
+      case 'doc':
         return FilePreviewCapability.document;
       case 'xlsx':
+      case 'xlsm':
+      case 'xls':
         return FilePreviewCapability.spreadsheet;
       case 'pptx':
+      case 'pptm':
+      case 'ppt':
         return FilePreviewCapability.presentation;
+      case 'zip':
+        return FilePreviewCapability.archive;
       default:
         return FilePreviewCapability.none;
     }

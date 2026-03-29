@@ -7,6 +7,17 @@ extension NotificationDao on AppDatabase {
   Future<List<Notification>> getNotificationsByCourse(String courseId) =>
       (select(notifications)..where((t) => t.courseId.equals(courseId))).get();
 
+  Future<List<Notification>> getNotificationsBySemester(String semesterId) {
+    final query =
+        select(notifications).join([
+            innerJoin(courses, courses.id.equalsExp(notifications.courseId)),
+          ])
+          ..where(courses.semesterId.equals(semesterId))
+          ..orderBy([OrderingTerm.desc(notifications.publishTime)]);
+
+    return query.map((row) => row.readTable(notifications)).get();
+  }
+
   Future<Notification?> getNotificationById(String id) =>
       (select(notifications)..where((t) => t.id.equals(id))).getSingleOrNull();
 

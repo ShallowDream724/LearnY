@@ -46,6 +46,7 @@ class AppShell extends ConsumerWidget {
           curve: Curves.easeInOut,
           child: isSessionExpired
               ? _SessionExpiredBanner(
+                  message: auth.errorMessage,
                   onLogin: () {
                     context.go(Routes.loginWithReturnTo(currentLocation));
                   },
@@ -361,9 +362,10 @@ class _ShellBranchKeepAliveState extends State<_ShellBranchKeepAlive>
 }
 
 class _SessionExpiredBanner extends StatelessWidget {
+  final String? message;
   final VoidCallback onLogin;
 
-  const _SessionExpiredBanner({required this.onLogin});
+  const _SessionExpiredBanner({required this.message, required this.onLogin});
 
   @override
   Widget build(BuildContext context) {
@@ -379,7 +381,9 @@ class _SessionExpiredBanner extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                '会话已过期，可继续查看缓存数据',
+                message?.trim().isNotEmpty == true
+                    ? message!.trim()
+                    : '会话已过期，可继续查看缓存数据',
                 style: AppTypography.bodySmall.copyWith(
                   color: AppColors.warning,
                   fontWeight: FontWeight.w600,

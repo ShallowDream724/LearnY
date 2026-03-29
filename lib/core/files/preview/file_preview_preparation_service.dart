@@ -4,19 +4,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../file_models.dart';
 import '../file_preview_registry.dart';
+import 'archive_preview_service.dart';
 import 'file_preview_models.dart';
-import 'office_preview_parser.dart';
 
 class FilePreviewPreparationService {
   const FilePreviewPreparationService({
     required FilePreviewRegistry registry,
-    required OfficePreviewParser officeParser,
+    required ArchivePreviewService archiveService,
     this.maxTextCharacters = 100000,
   }) : _registry = registry,
-       _officeParser = officeParser;
+       _archiveService = archiveService;
 
   final FilePreviewRegistry _registry;
-  final OfficePreviewParser _officeParser;
+  final ArchivePreviewService _archiveService;
   final int maxTextCharacters;
 
   Future<PreparedFilePreview> prepare({
@@ -43,19 +43,24 @@ class FilePreviewPreparationService {
             localPath: localPath,
           );
         case FilePreviewCapability.document:
-          return _officeParser.parseDocx(
+          return UnsupportedPreparedFilePreview(
             descriptor: descriptor,
-            localPath: localPath,
+            message: 'Word 文档暂不支持内置预览，请使用外部应用打开。',
           );
         case FilePreviewCapability.spreadsheet:
-          return _officeParser.parseXlsx(
+          return UnsupportedPreparedFilePreview(
             descriptor: descriptor,
-            localPath: localPath,
+            message: '表格文档暂不支持内置预览，请使用外部应用打开。',
           );
         case FilePreviewCapability.presentation:
           return UnsupportedPreparedFilePreview(
             descriptor: descriptor,
             message: '演示文稿暂不支持内置预览，请使用外部应用打开。',
+          );
+        case FilePreviewCapability.archive:
+          return _archiveService.inspect(
+            descriptor: descriptor,
+            localPath: localPath,
           );
         case FilePreviewCapability.none:
           return UnsupportedPreparedFilePreview(
@@ -94,6 +99,6 @@ final filePreviewPreparationServiceProvider =
     Provider<FilePreviewPreparationService>((ref) {
       return FilePreviewPreparationService(
         registry: ref.watch(filePreviewRegistryProvider),
-        officeParser: ref.watch(officePreviewParserProvider),
+        archiveService: ref.watch(archivePreviewServiceProvider),
       );
     });
