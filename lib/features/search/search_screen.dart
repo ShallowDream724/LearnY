@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -135,7 +137,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     ),
                     onTap: () {
                       Navigator.of(context).pop();
-                      _jumpToSection(group.section.id);
+                      unawaited(_jumpToSection(group.section.id, groups));
                     },
                   ),
               ],
@@ -146,19 +148,63 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     );
   }
 
-  void _jumpToSection(String sectionId) {
+  Future<void> _jumpToSection(
+    String sectionId,
+    List<SearchResultGroup> groups,
+  ) async {
     setState(() => _collapsedSections[sectionId] = false);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
+      unawaited(_scrollToSection(sectionId, groups));
+    });
+  }
+
+  Future<void> _scrollToSection(
+    String sectionId,
+    List<SearchResultGroup> groups,
+  ) async {
+    if (!mounted || !_scrollController.hasClients) {
+      return;
+    }
+
+    final visibleContext = _sectionKeys[sectionId]?.currentContext;
+    if (visibleContext != null) {
+      await Scrollable.ensureVisible(
+        visibleContext,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+        alignment: 0.05,
+      );
+      return;
+    }
+
+    final items = _buildListItems(
+      resultCount: 0,
+      split: splitSearchResultGroups(groups),
+    );
+    final targetIndex = _indexOfSection(sectionId, items);
+    if (targetIndex == null) {
+      return;
+    }
+
+    final estimatedOffset = _estimateOffsetToIndex(targetIndex, items);
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final targetOffset = estimatedOffset.clamp(0.0, maxScroll);
+    await _scrollController.animateTo(
+      targetOffset,
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutCubic,
+    );
+    if (!mounted) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       final targetContext = _sectionKeys[sectionId]?.currentContext;
       if (targetContext == null) {
         return;
       }
       Scrollable.ensureVisible(
         targetContext,
-        duration: const Duration(milliseconds: 260),
+        duration: const Duration(milliseconds: 220),
         curve: Curves.easeOutCubic,
         alignment: 0.05,
       );
@@ -416,6 +462,36 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
     return items;
   }
+
+  int? _indexOfSection(String sectionId, List<_SearchListItem> items) {
+    for (var index = 0; index < items.length; index += 1) {
+      final item = items[index];
+      if (item is _SearchGroupHeaderItem &&
+          item.group.section.id == sectionId) {
+        return index;
+      }
+    }
+    return null;
+  }
+
+  double _estimateOffsetToIndex(int targetIndex, List<_SearchListItem> items) {
+    var offset = 0.0;
+    for (var index = 0; index < targetIndex; index += 1) {
+      offset += _estimatedItemHeight(items[index]);
+    }
+    return offset;
+  }
+
+  double _estimatedItemHeight(_SearchListItem item) {
+    return switch (item) {
+      _SearchSummaryItem() => 24,
+      _SearchSectionMarkerItem() => 30,
+      _SearchGroupHeaderItem() => 36,
+      _SearchResultItem(:final result) =>
+        result.isFavorite || result.isDownloaded ? 92 : 80,
+      _SearchSpacerItem(:final height) => height,
+    };
+  }
 }
 
 class _SearchField extends StatelessWidget {
@@ -435,6 +511,7 @@ class _SearchField extends StatelessWidget {
 
     return Container(
       height: 40,
+      alignment: Alignment.center,
       decoration: BoxDecoration(
         color: c.surface,
         borderRadius: BorderRadius.circular(12),
@@ -443,13 +520,22 @@ class _SearchField extends StatelessWidget {
         controller: controller,
         focusNode: focusNode,
         onChanged: onChanged,
+        textAlignVertical: TextAlignVertical.center,
         style: AppTypography.bodyMedium.copyWith(color: c.text),
         decoration: InputDecoration(
+          isCollapsed: true,
           hintText: '搜索课程、通知、作业、文件、附件或拼音...',
           hintStyle: AppTypography.bodyMedium.copyWith(color: c.tertiary),
-          prefixIcon: Icon(Icons.search_rounded, size: 20, color: c.tertiary),
+          prefixIcon: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Icon(Icons.search_rounded, size: 18, color: c.tertiary),
+          ),
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 38,
+            minHeight: 18,
+          ),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 10),
+          contentPadding: const EdgeInsets.only(right: 12),
         ),
       ),
     );
