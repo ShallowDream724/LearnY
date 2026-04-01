@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/cupertino.dart'
+    show CupertinoTheme, CupertinoThemeData, cupertinoTextSelectionControls;
 import 'package:flutter/material.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/design/app_theme_colors.dart';
 import '../../../core/design/app_toast.dart';
-import '../../../core/design/typography.dart';
 import 'file_preview_feedback.dart';
 
 class PdfPreviewSurface extends StatefulWidget {
@@ -167,14 +168,13 @@ class _PdfPreviewSurfaceState extends State<PdfPreviewSurface> {
     BuildContext context,
     PdfViewerContextMenuBuilderParams params,
   ) {
-    final actions = <_PdfSelectionAction>[
+    final items = <ContextMenuButtonItem>[
       if (params.isTextSelectionEnabled &&
           params.textSelectionDelegate.isCopyAllowed &&
           params.textSelectionDelegate.hasSelectedText)
-        _PdfSelectionAction(
-          icon: Icons.content_copy_rounded,
-          label: '复制',
-          onTap: () async {
+        ContextMenuButtonItem(
+          type: ContextMenuButtonType.copy,
+          onPressed: () async {
             final copied = await params.textSelectionDelegate
                 .copyTextSelection();
             params.dismissContextMenu();
@@ -190,29 +190,33 @@ class _PdfPreviewSurfaceState extends State<PdfPreviewSurface> {
         ),
       if (params.isTextSelectionEnabled &&
           !params.textSelectionDelegate.isSelectingAllText)
-        _PdfSelectionAction(
-          icon: Icons.select_all_rounded,
-          label: '全选',
-          onTap: () async {
+        ContextMenuButtonItem(
+          type: ContextMenuButtonType.selectAll,
+          onPressed: () async {
             params.dismissContextMenu();
             await params.textSelectionDelegate.selectAllText();
           },
         ),
-      _PdfSelectionAction(
-        icon: Icons.close_rounded,
+      ContextMenuButtonItem(
         label: '收起',
-        onTap: () async {
+        onPressed: () async {
           params.dismissContextMenu();
           await params.textSelectionDelegate.clearTextSelection();
         },
       ),
     ];
 
-    if (actions.isEmpty) {
+    if (items.isEmpty) {
       return null;
     }
 
-    return _PdfSelectionToolbar(actions: actions);
+    return AdaptiveTextSelectionToolbar.buttonItems(
+      anchors: TextSelectionToolbarAnchors(
+        primaryAnchor: params.anchorA,
+        secondaryAnchor: params.anchorB,
+      ),
+      buttonItems: items,
+    );
   }
 
   Widget _buildSelectionHandle(
@@ -221,64 +225,85 @@ class _PdfPreviewSurfaceState extends State<PdfPreviewSurface> {
     PdfViewerTextSelectionAnchorHandleState state,
   ) {
     final c = context.colors;
-    final gripAlignment = _handleGripAlignment(anchor);
-    final gripSize = switch (state) {
-      PdfViewerTextSelectionAnchorHandleState.dragging => 14.0,
-      PdfViewerTextSelectionAnchorHandleState.hover => 13.0,
-      PdfViewerTextSelectionAnchorHandleState.normal => 12.0,
-    };
-    final accent = c.infoAccent;
-    final fill = switch (state) {
-      PdfViewerTextSelectionAnchorHandleState.dragging => accent,
-      PdfViewerTextSelectionAnchorHandleState.hover => accent.withAlpha(240),
-      PdfViewerTextSelectionAnchorHandleState.normal => accent.withAlpha(228),
-    };
+    final handleType = _selectionHandleType(anchor);
+    final lineExtent = _selectionHandleLineExtent(anchor);
 
-    return SizedBox(
-      width: 28,
-      height: 28,
-      child: Align(
-        alignment: gripAlignment,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          curve: Curves.easeOutCubic,
-          width: gripSize,
-          height: gripSize,
-          decoration: BoxDecoration(
-            color: fill,
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white.withAlpha(230), width: 1.6),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withAlpha(
-                  state == PdfViewerTextSelectionAnchorHandleState.dragging
-                      ? 28
-                      : 18,
-                ),
-                blurRadius:
-                    state == PdfViewerTextSelectionAnchorHandleState.dragging
-                    ? 10
-                    : 7,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-        ),
+    return CupertinoTheme(
+      data: CupertinoThemeData(
+        brightness: context.isDark ? Brightness.dark : Brightness.light,
+        selectionHandleColor: c.infoAccent,
+      ),
+      child: Builder(
+        builder: (context) {
+          return AnimatedScale(
+            duration: const Duration(milliseconds: 120),
+            curve: Curves.easeOutCubic,
+            scale: switch (state) {
+              PdfViewerTextSelectionAnchorHandleState.dragging => 1.08,
+              PdfViewerTextSelectionAnchorHandleState.hover => 1.04,
+              PdfViewerTextSelectionAnchorHandleState.normal => 1,
+            },
+            child: cupertinoTextSelectionControls.buildHandle(
+              context,
+              handleType,
+              lineExtent,
+            ),
+          );
+        },
       ),
     );
   }
 
-  Alignment _handleGripAlignment(PdfTextSelectionAnchor anchor) {
+  Offset _selectionHandleOffset(
+    BuildContext context,
+    PdfTextSelectionAnchor anchor,
+    PdfViewerTextSelectionAnchorHandleState state,
+  ) {
+    final handleType = _selectionHandleType(anchor);
+    final lineExtent = _selectionHandleLineExtent(anchor);
+    final handleSize = cupertinoTextSelectionControls.getHandleSize(lineExtent);
+    final anchorOffset = cupertinoTextSelectionControls.getHandleAnchor(
+      handleType,
+      lineExtent,
+    );
+
     return switch (anchor.direction) {
       PdfTextDirection.ltr || PdfTextDirection.unknown =>
         anchor.type == PdfTextSelectionAnchorType.a
-            ? Alignment.topLeft
-            : Alignment.bottomRight,
+            ? Offset(
+                handleSize.width - anchorOffset.dx,
+                handleSize.height - anchorOffset.dy,
+              )
+            : Offset(-anchorOffset.dx, -anchorOffset.dy),
       PdfTextDirection.rtl || PdfTextDirection.vrtl =>
         anchor.type == PdfTextSelectionAnchorType.a
-            ? Alignment.bottomLeft
-            : Alignment.topRight,
+            ? Offset(-anchorOffset.dx, handleSize.height - anchorOffset.dy)
+            : Offset(handleSize.width - anchorOffset.dx, -anchorOffset.dy),
     };
+  }
+
+  TextSelectionHandleType _selectionHandleType(PdfTextSelectionAnchor anchor) {
+    return switch (anchor.direction) {
+      PdfTextDirection.ltr || PdfTextDirection.unknown =>
+        anchor.type == PdfTextSelectionAnchorType.a
+            ? TextSelectionHandleType.left
+            : TextSelectionHandleType.right,
+      PdfTextDirection.rtl || PdfTextDirection.vrtl =>
+        anchor.type == PdfTextSelectionAnchorType.a
+            ? TextSelectionHandleType.right
+            : TextSelectionHandleType.left,
+    };
+  }
+
+  double _selectionHandleLineExtent(PdfTextSelectionAnchor anchor) {
+    final rect = anchor.rect;
+    final extent = switch (anchor.direction) {
+      PdfTextDirection.vrtl => rect.width,
+      PdfTextDirection.ltr ||
+      PdfTextDirection.rtl ||
+      PdfTextDirection.unknown => rect.height,
+    };
+    return extent.clamp(18.0, 42.0);
   }
 
   Widget _buildMagnifierDecoration(
@@ -383,10 +408,13 @@ class _PdfPreviewSurfaceState extends State<PdfPreviewSurface> {
               enableSelectionHandles: true,
               showContextMenuAutomatically: true,
               buildSelectionHandle: _buildSelectionHandle,
+              calcSelectionHandleOffset: _selectionHandleOffset,
               onTextSelectionChange: _handleSelectionChanged,
               onSelectionHandlePanStart: _handleSelectionPanStart,
               onSelectionHandlePanEnd: _handleSelectionPanEnd,
               magnifier: PdfViewerSelectionMagnifierParams(
+                enabled: true,
+                magnifierSizeThreshold: 120,
                 animationDuration: const Duration(milliseconds: 80),
                 builder: _buildMagnifierDecoration,
               ),
@@ -625,92 +653,4 @@ class _PdfPageChip extends StatelessWidget {
       ),
     );
   }
-}
-
-class _PdfSelectionToolbar extends StatelessWidget {
-  const _PdfSelectionToolbar({required this.actions});
-
-  final List<_PdfSelectionAction> actions;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: Colors.black.withAlpha(214),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withAlpha(20), width: 0.8),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withAlpha(28),
-              blurRadius: 24,
-              offset: const Offset(0, 12),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (var i = 0; i < actions.length; i++) ...[
-                _PdfSelectionToolbarButton(action: actions[i]),
-                if (i != actions.length - 1)
-                  Container(
-                    width: 1,
-                    height: 22,
-                    margin: const EdgeInsets.symmetric(horizontal: 2),
-                    color: Colors.white.withAlpha(18),
-                  ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PdfSelectionToolbarButton extends StatelessWidget {
-  const _PdfSelectionToolbarButton({required this.action});
-
-  final _PdfSelectionAction action;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: () => unawaited(action.onTap()),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(action.icon, size: 16, color: Colors.white),
-            const SizedBox(width: 6),
-            Text(
-              action.label,
-              style: AppTypography.labelMedium.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PdfSelectionAction {
-  const _PdfSelectionAction({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final Future<void> Function() onTap;
 }
