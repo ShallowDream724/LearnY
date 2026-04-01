@@ -210,6 +210,7 @@ class HomeworkGradeSection extends StatelessWidget {
       rawJson: homework.gradeAttachmentJson,
       courseId: courseId,
       courseName: courseName,
+      fallbackKind: FileAttachmentKind.homeworkGrade,
     );
 
     final gradeDisplay = resolveHomeworkGradeDisplay(

@@ -80,12 +80,17 @@ class SearchEngine {
     exactMatches.sort(_compareScoredDocuments);
 
     final results = <SearchResult>[];
+    final exactSections = <SearchResultKind, SearchSectionMeta>{};
+    var nextExactSectionOrder = 0;
     results.addAll(
-      exactMatches.map(
-        (match) => match.document.result.copyWith(
-          section: buildExactSectionMeta(match.document.result.kind),
-        ),
-      ),
+      exactMatches.map((match) {
+        final kind = match.document.result.kind;
+        final section = exactSections.putIfAbsent(
+          kind,
+          () => _buildRankedExactSectionMeta(kind, nextExactSectionOrder++),
+        );
+        return match.document.result.copyWith(section: section);
+      }),
     );
 
     final suggestedBuckets = <_SectionBucket>[];
@@ -556,16 +561,25 @@ double _fallbackSuggestionScore(SearchDocument document, _ParsedQuery query) {
 }
 
 int _compareScoredDocuments(_ScoredDocument left, _ScoredDocument right) {
+  final scoreOrder = right.score.compareTo(left.score);
+  if (scoreOrder != 0) {
+    return scoreOrder;
+  }
+
+  final tokenOrder = right.matchedTokenCount.compareTo(left.matchedTokenCount);
+  if (tokenOrder != 0) {
+    return tokenOrder;
+  }
+
+  if (left.matchedPrimary != right.matchedPrimary) {
+    return right.matchedPrimary ? 1 : -1;
+  }
+
   final sectionOrder = searchResultKindBaseOrder(
     left.document.result.kind,
   ).compareTo(searchResultKindBaseOrder(right.document.result.kind));
   if (sectionOrder != 0) {
     return sectionOrder;
-  }
-
-  final scoreOrder = right.score.compareTo(left.score);
-  if (scoreOrder != 0) {
-    return scoreOrder;
   }
 
   final titleOrder = left.document.result.title.compareTo(
@@ -576,6 +590,20 @@ int _compareScoredDocuments(_ScoredDocument left, _ScoredDocument right) {
   }
 
   return left.document.result.key.compareTo(right.document.result.key);
+}
+
+SearchSectionMeta _buildRankedExactSectionMeta(
+  SearchResultKind kind,
+  int exactGroupOrder,
+) {
+  final label = searchResultKindPresentation(kind).$1;
+  return SearchSectionMeta(
+    id: 'exact:${kind.name}',
+    title: label,
+    resultKind: kind,
+    kind: SearchSectionKind.keyword,
+    order: exactGroupOrder * 10,
+  );
 }
 
 Iterable<String> _tokenize(String rawQuery) sync* {

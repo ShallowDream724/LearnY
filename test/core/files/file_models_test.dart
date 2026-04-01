@@ -3,6 +3,21 @@ import 'package:learn_y/core/database/database.dart' as db;
 import 'package:learn_y/core/files/file_models.dart';
 
 void main() {
+  group('FileAttachment', () {
+    test('applies fallback kind to legacy attachment payloads', () {
+      const rawJson =
+          '{"id":"attachment-legacy","name":"notes.pdf","downloadUrl":"https://example.com/download","previewUrl":"https://example.com/preview","size":"12 KB"}';
+
+      final attachment = FileAttachment.tryParseJsonString(
+        rawJson,
+        fallbackKind: FileAttachmentKind.homeworkSubmitted,
+      );
+
+      expect(attachment, isNotNull);
+      expect(attachment!.kind, FileAttachmentKind.homeworkSubmitted);
+    });
+  });
+
   group('FileDetailRouteData', () {
     test('round-trips attachment routes through JSON', () {
       final routeData = FileDetailRouteData.attachment(
@@ -26,9 +41,32 @@ void main() {
       expect(restored!.courseId, 'course-1');
       expect(restored.courseName, '土力学');
       expect(restored.fileId, isNull);
+      expect(restored.assetKey, 'notification:course-1:attachment-1');
       expect(restored.attachment, isNotNull);
       expect(restored.attachment!.id, 'attachment-1');
       expect(restored.attachment!.kind, FileAttachmentKind.notification);
+    });
+
+    test('round-trips attachment routes through query parameters', () {
+      final routeData = FileDetailRouteData.attachment(
+        attachment: const FileAttachment(
+          id: 'attachment-2',
+          name: 'report.pdf',
+          downloadUrl: 'https://example.com/report',
+          previewUrl: 'https://example.com/report-preview',
+          size: '18 KB',
+          kind: FileAttachmentKind.homeworkSubmitted,
+        ),
+        courseId: 'course-9',
+        courseName: '分子生物学',
+      );
+
+      final restored = FileDetailRouteData.fromQueryParameters(
+        routeData.toQueryParameters(),
+      );
+
+      expect(restored.assetKey, 'homeworkSubmitted:course-9:attachment-2');
+      expect(restored.attachment?.kind, FileAttachmentKind.homeworkSubmitted);
     });
   });
 
@@ -57,6 +95,7 @@ void main() {
       expect(routeData.courseId, 'course-1');
       expect(routeData.courseName, '结构力学');
       expect(routeData.attachment, isNotNull);
+      expect(routeData.assetKey, 'homeworkAttachment:course-1:attachment-2');
       expect(routeData.attachment!.id, 'attachment-2');
       expect(routeData.attachment!.kind, FileAttachmentKind.homeworkAttachment);
     });

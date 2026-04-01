@@ -2,8 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_relogin_models.dart';
+import '../auth/credential_vault.dart';
 import '../database/app_state_keys.dart';
 import '../database/database.dart';
+import '../utils/china_time.dart';
 import 'app_providers.dart';
 
 class AutoReloginPreferenceNotifier extends StateNotifier<bool> {
@@ -30,6 +32,40 @@ final autoReloginEnabledProvider =
       );
     });
 
+class IdentityAccountHintStore {
+  IdentityAccountHintStore(this._db);
+
+  final AppDatabase _db;
+
+  Future<String> read() async {
+    return (await _db.getState(AppStateKeys.identityAccountHint) ?? '').trim();
+  }
+
+  Future<void> save(String username) async {
+    final normalized = username.trim();
+    if (normalized.isEmpty) {
+      await _db.deleteState(AppStateKeys.identityAccountHint);
+      return;
+    }
+    await _db.setState(AppStateKeys.identityAccountHint, normalized);
+  }
+}
+
+final identityAccountHintStoreProvider = Provider<IdentityAccountHintStore>((
+  ref,
+) {
+  return IdentityAccountHintStore(ref.watch(databaseProvider));
+});
+
+final preferredIdentityAccountProvider = FutureProvider<String>((ref) async {
+  final storedCredential = await ref.watch(credentialVaultProvider).read();
+  final credentialUsername = storedCredential?.username.trim() ?? '';
+  if (credentialUsername.isNotEmpty) {
+    return credentialUsername;
+  }
+  return ref.watch(identityAccountHintStoreProvider).read();
+});
+
 class AutoReloginStatusNotifier
     extends StateNotifier<AutoReloginStatusSnapshot> {
   AutoReloginStatusNotifier(this._db)
@@ -51,14 +87,28 @@ class AutoReloginStatusNotifier
     }
   }
 
-  Future<void> recordVerified() async {
+  Future<void> recordProbeStarted() async {
     await _awaitLoaded();
-    return _persist(state.markVerified(DateTime.now()));
+    return _persist(state.markProbeStarted(utcNow()));
+  }
+
+  Future<void> recordEnrollmentSuccess({
+    required AutoReloginProbeMethod probeMethod,
+    required bool trustedBrowserReady,
+  }) async {
+    await _awaitLoaded();
+    return _persist(
+      state.markEnrollmentSuccess(
+        probeMethod: probeMethod,
+        at: utcNow(),
+        trustedBrowserReady: trustedBrowserReady,
+      ),
+    );
   }
 
   Future<void> recordRecoverySuccess(SessionRecoveryMethod method) async {
     await _awaitLoaded();
-    return _persist(state.markRecoverySuccess(method, DateTime.now()));
+    return _persist(state.markRecoverySuccess(method, utcNow()));
   }
 
   Future<void> recordFailureResult(
@@ -74,7 +124,7 @@ class AutoReloginStatusNotifier
         stage: result.failureStage ?? AuthReloginFailureStage.unknown,
         source: source,
         reason: result.reason,
-        at: DateTime.now(),
+        at: utcNow(),
       ),
     );
   }

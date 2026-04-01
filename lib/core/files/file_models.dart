@@ -50,6 +50,24 @@ class FileAttachment {
 
   String cacheKeyForCourse(String courseId) => '${kind.name}:$courseId:$id';
 
+  FileAttachment copyWith({
+    String? id,
+    String? name,
+    String? downloadUrl,
+    String? previewUrl,
+    String? size,
+    FileAttachmentKind? kind,
+  }) {
+    return FileAttachment(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      downloadUrl: downloadUrl ?? this.downloadUrl,
+      previewUrl: previewUrl ?? this.previewUrl,
+      size: size ?? this.size,
+      kind: kind ?? this.kind,
+    );
+  }
+
   String get fileType {
     final dotIndex = name.lastIndexOf('.');
     if (dotIndex == -1 || dotIndex >= name.length - 1) {
@@ -96,7 +114,10 @@ class FileAttachment {
     );
   }
 
-  static FileAttachment? tryParseJsonString(String? rawJson) {
+  static FileAttachment? tryParseJsonString(
+    String? rawJson, {
+    FileAttachmentKind? fallbackKind,
+  }) {
     if (rawJson == null || rawJson.isEmpty) {
       return null;
     }
@@ -104,16 +125,32 @@ class FileAttachment {
     try {
       final decoded = jsonDecode(rawJson);
       if (decoded is Map<String, dynamic>) {
-        return FileAttachment.fromJson(decoded);
+        return _withFallbackKind(
+          FileAttachment.fromJson(decoded),
+          fallbackKind,
+        );
       }
       if (decoded is Map) {
-        return FileAttachment.fromJson(
-          decoded.map((key, value) => MapEntry(key.toString(), value)),
+        return _withFallbackKind(
+          FileAttachment.fromJson(
+            decoded.map((key, value) => MapEntry(key.toString(), value)),
+          ),
+          fallbackKind,
         );
       }
     } catch (_) {}
 
     return null;
+  }
+
+  static FileAttachment _withFallbackKind(
+    FileAttachment attachment,
+    FileAttachmentKind? fallbackKind,
+  ) {
+    if (fallbackKind == null || attachment.kind != FileAttachmentKind.generic) {
+      return attachment;
+    }
+    return attachment.copyWith(kind: fallbackKind);
   }
 }
 
@@ -130,12 +167,16 @@ class FileAttachmentEntry {
     required String? rawJson,
     required String courseId,
     required String courseName,
+    FileAttachmentKind? fallbackKind,
   }) {
     return FileAttachmentEntry._(
       label: label,
       courseId: courseId,
       courseName: courseName,
-      attachment: FileAttachment.tryParseJsonString(rawJson),
+      attachment: FileAttachment.tryParseJsonString(
+        rawJson,
+        fallbackKind: fallbackKind,
+      ),
     );
   }
 
@@ -182,6 +223,7 @@ class FileDetailRouteData {
     required this.courseName,
     this.fileId,
     this.attachment,
+    this.assetKey,
   });
 
   factory FileDetailRouteData.courseFile({
@@ -200,11 +242,13 @@ class FileDetailRouteData {
     required FileAttachment attachment,
     required String courseId,
     required String courseName,
+    String? assetKey,
   }) {
     return FileDetailRouteData._(
       courseId: courseId,
       courseName: courseName,
       attachment: attachment,
+      assetKey: assetKey ?? attachment.cacheKeyForCourse(courseId),
     );
   }
 
@@ -212,6 +256,7 @@ class FileDetailRouteData {
   final String courseId;
   final String courseName;
   final FileAttachment? attachment;
+  final String? assetKey;
 
   Map<String, dynamic> toJson() {
     return {
@@ -219,12 +264,20 @@ class FileDetailRouteData {
       'courseId': courseId,
       'courseName': courseName,
       'attachment': attachment?.toJson(),
+      'assetKey': assetKey,
     };
   }
 
   String toJsonString() => jsonEncode(toJson());
 
   bool get isCourseFile => fileId != null && fileId!.isNotEmpty;
+
+  String? get resolvedAssetKey {
+    if (isCourseFile) {
+      return fileId;
+    }
+    return assetKey ?? attachment?.cacheKeyForCourse(courseId);
+  }
 
   Map<String, String> toQueryParameters() {
     final params = <String, String>{
@@ -239,12 +292,16 @@ class FileDetailRouteData {
         utf8.encode(attachment!.toJsonString()),
       );
     }
+    if (assetKey != null && assetKey!.isNotEmpty) {
+      params['assetKey'] = assetKey!;
+    }
     return params;
   }
 
   static FileDetailRouteData fromQueryParameters(Map<String, String> query) {
     final courseId = query['courseId'] ?? '';
     final courseName = query['courseName'] ?? '';
+    final assetKey = query['assetKey'];
     final attachmentToken = query['attachment'];
     if (attachmentToken != null && attachmentToken.isNotEmpty) {
       try {
@@ -255,6 +312,7 @@ class FileDetailRouteData {
             attachment: attachment,
             courseId: courseId,
             courseName: courseName,
+            assetKey: assetKey,
           );
         }
       } catch (_) {}
@@ -281,6 +339,7 @@ class FileDetailRouteData {
       courseId: (json['courseId'] ?? '').toString(),
       courseName: (json['courseName'] ?? '').toString(),
       attachment: attachment,
+      assetKey: json['assetKey']?.toString(),
     );
   }
 
@@ -452,6 +511,7 @@ class FileDetailItem {
       ),
       courseId: courseId,
       courseName: courseName,
+      assetKey: cacheKey,
     );
   }
 }

@@ -150,7 +150,10 @@ final fileDetailItemProvider =
         final cachedAssetRepository = ref.watch(cachedAssetRepositoryProvider);
         final attachment = routeData.attachment!;
         return cachedAssetRepository
-            .watchAsset(attachment.cacheKeyForCourse(routeData.courseId))
+            .watchAsset(
+              routeData.resolvedAssetKey ??
+                  attachment.cacheKeyForCourse(routeData.courseId),
+            )
             .map(
               (cachedAsset) => FileDetailItem.fromAttachment(
                 attachment: attachment,

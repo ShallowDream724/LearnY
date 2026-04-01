@@ -37,6 +37,7 @@ SearchDocument buildNotificationSearchDocument(
 }) {
   final attachment = FileAttachment.tryParseJsonString(
     notification.attachmentJson,
+    fallbackKind: FileAttachmentKind.notification,
   );
   return SearchDocument(
     result: SearchResult(
@@ -75,6 +76,7 @@ SearchDocument? buildNotificationAttachmentSearchDocument(
 }) {
   final attachment = FileAttachment.tryParseJsonString(
     notification.attachmentJson,
+    fallbackKind: FileAttachmentKind.notification,
   );
   if (attachment == null || attachment.name.isEmpty) {
     return null;
@@ -99,6 +101,7 @@ SearchDocument? buildNotificationAttachmentSearchDocument(
         attachment: attachment,
         courseId: notification.courseId,
         courseName: courseName,
+        assetKey: assetKey,
       ),
       isFavorite: bookmarkKeys.contains(assetKey),
       isDownloaded: cachedAssetKeys.contains(assetKey),
@@ -253,7 +256,10 @@ Iterable<SearchDocument> _buildHomeworkAttachmentDocument({
   required Set<String> bookmarkKeys,
   required Set<String> cachedAssetKeys,
 }) sync* {
-  final attachment = FileAttachment.tryParseJsonString(rawJson);
+  final attachment = FileAttachment.tryParseJsonString(
+    rawJson,
+    fallbackKind: _attachmentKindForSearchResult(kind),
+  );
   if (attachment == null || attachment.name.isEmpty) {
     return;
   }
@@ -277,6 +283,7 @@ Iterable<SearchDocument> _buildHomeworkAttachmentDocument({
         attachment: attachment,
         courseId: homework.courseId,
         courseName: courseName,
+        assetKey: assetKey,
       ),
       isFavorite: bookmarkKeys.contains(assetKey),
       isDownloaded: cachedAssetKeys.contains(assetKey),
@@ -333,4 +340,19 @@ String? _normalizeExtension(String? rawExtension) {
     return null;
   }
   return rawExtension.replaceFirst('.', '').trim().toLowerCase();
+}
+
+FileAttachmentKind _attachmentKindForSearchResult(SearchResultKind kind) {
+  return switch (kind) {
+    SearchResultKind.notificationAttachment => FileAttachmentKind.notification,
+    SearchResultKind.homeworkAttachment =>
+      FileAttachmentKind.homeworkAttachment,
+    SearchResultKind.homeworkSubmittedAttachment =>
+      FileAttachmentKind.homeworkSubmitted,
+    SearchResultKind.homeworkGradeAttachment =>
+      FileAttachmentKind.homeworkGrade,
+    SearchResultKind.homeworkAnswerAttachment =>
+      FileAttachmentKind.homeworkAnswer,
+    _ => FileAttachmentKind.generic,
+  };
 }

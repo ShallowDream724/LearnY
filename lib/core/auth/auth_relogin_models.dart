@@ -5,7 +5,9 @@ import '../api/models.dart';
 
 enum SessionRecoveryMethod { ssoCookie, secureCredential }
 
-enum AutoReloginStatusPhase { disabled, verified, degraded }
+enum AutoReloginProbeMethod { secureCredential }
+
+enum AutoReloginStatusPhase { disabled, needsSetup, probing, ready, degraded }
 
 enum AutoReloginFailureSource { enrollment, sessionRecovery }
 
@@ -112,7 +114,7 @@ class AuthReloginResult {
 
   String get enrollmentFailureMessage {
     if (succeeded) {
-      return '自动重新登录验证成功';
+      return '自动重新登录已就绪';
     }
 
     return switch (reason) {
@@ -148,7 +150,12 @@ class AutoReloginStatusSnapshot {
   const AutoReloginStatusSnapshot._({
     required this.isLoaded,
     required this.phase,
-    this.lastVerifiedAt,
+    required this.enabledByUser,
+    required this.hasStoredCredential,
+    required this.trustedBrowserReady,
+    this.lastConfiguredAt,
+    this.lastProbeAt,
+    this.lastProbeMethod,
     this.lastRecoveryAt,
     this.lastRecoveryMethod,
     this.lastFailureAt,
@@ -161,17 +168,30 @@ class AutoReloginStatusSnapshot {
     : this._(
         isLoaded: false,
         phase: AutoReloginStatusPhase.disabled,
+        enabledByUser: false,
+        hasStoredCredential: false,
+        trustedBrowserReady: false,
       );
 
   const AutoReloginStatusSnapshot.disabled()
     : this._(
         isLoaded: true,
         phase: AutoReloginStatusPhase.disabled,
+        enabledByUser: false,
+        hasStoredCredential: false,
+        trustedBrowserReady: false,
       );
+
+  static const Object _unset = Object();
 
   final bool isLoaded;
   final AutoReloginStatusPhase phase;
-  final DateTime? lastVerifiedAt;
+  final bool enabledByUser;
+  final bool hasStoredCredential;
+  final bool trustedBrowserReady;
+  final DateTime? lastConfiguredAt;
+  final DateTime? lastProbeAt;
+  final AutoReloginProbeMethod? lastProbeMethod;
   final DateTime? lastRecoveryAt;
   final SessionRecoveryMethod? lastRecoveryMethod;
   final DateTime? lastFailureAt;
@@ -187,6 +207,13 @@ class AutoReloginStatusSnapshot {
     return describeAuthReloginFailure(stage: stage, reason: lastFailureReason);
   }
 
+  String? get probeMethodDisplayLabel {
+    return switch (lastProbeMethod) {
+      AutoReloginProbeMethod.secureCredential => '安全凭据',
+      null => null,
+    };
+  }
+
   String? get recoveryMethodDisplayLabel {
     return switch (lastRecoveryMethod) {
       SessionRecoveryMethod.ssoCookie => 'SSO 漫游',
@@ -195,13 +222,33 @@ class AutoReloginStatusSnapshot {
     };
   }
 
-  AutoReloginStatusSnapshot markVerified(DateTime at) {
-    return AutoReloginStatusSnapshot._(
+  AutoReloginStatusSnapshot markProbeStarted(DateTime at) {
+    return copyWith(
       isLoaded: true,
-      phase: AutoReloginStatusPhase.verified,
-      lastVerifiedAt: at,
-      lastRecoveryAt: lastRecoveryAt,
-      lastRecoveryMethod: lastRecoveryMethod,
+      phase: AutoReloginStatusPhase.probing,
+      enabledByUser: true,
+      lastConfiguredAt: lastConfiguredAt ?? at,
+      lastFailureAt: null,
+      lastFailureStage: null,
+      lastFailureReason: null,
+      lastFailureSource: null,
+    );
+  }
+
+  AutoReloginStatusSnapshot markEnrollmentSuccess({
+    required AutoReloginProbeMethod probeMethod,
+    required DateTime at,
+    required bool trustedBrowserReady,
+  }) {
+    return copyWith(
+      isLoaded: true,
+      phase: AutoReloginStatusPhase.ready,
+      enabledByUser: true,
+      hasStoredCredential: true,
+      trustedBrowserReady: trustedBrowserReady,
+      lastConfiguredAt: at,
+      lastProbeAt: at,
+      lastProbeMethod: probeMethod,
       lastFailureAt: null,
       lastFailureStage: null,
       lastFailureReason: null,
@@ -214,10 +261,9 @@ class AutoReloginStatusSnapshot {
     DateTime at,
   ) {
     final clearsFailure = method == SessionRecoveryMethod.secureCredential;
-    return AutoReloginStatusSnapshot._(
+    return copyWith(
       isLoaded: true,
-      phase: clearsFailure ? AutoReloginStatusPhase.verified : phase,
-      lastVerifiedAt: lastVerifiedAt,
+      phase: clearsFailure ? AutoReloginStatusPhase.ready : phase,
       lastRecoveryAt: at,
       lastRecoveryMethod: method,
       lastFailureAt: clearsFailure ? null : lastFailureAt,
@@ -233,12 +279,12 @@ class AutoReloginStatusSnapshot {
     FailReason? reason,
     required DateTime at,
   }) {
-    return AutoReloginStatusSnapshot._(
+    return copyWith(
       isLoaded: true,
-      phase: AutoReloginStatusPhase.degraded,
-      lastVerifiedAt: lastVerifiedAt,
-      lastRecoveryAt: lastRecoveryAt,
-      lastRecoveryMethod: lastRecoveryMethod,
+      phase: enabledByUser
+          ? AutoReloginStatusPhase.degraded
+          : AutoReloginStatusPhase.needsSetup,
+      enabledByUser: true,
       lastFailureAt: at,
       lastFailureStage: stage,
       lastFailureReason: reason,
@@ -247,12 +293,12 @@ class AutoReloginStatusSnapshot {
   }
 
   AutoReloginStatusSnapshot markDisabled() {
-    return AutoReloginStatusSnapshot._(
+    return copyWith(
       isLoaded: true,
       phase: AutoReloginStatusPhase.disabled,
-      lastVerifiedAt: lastVerifiedAt,
-      lastRecoveryAt: lastRecoveryAt,
-      lastRecoveryMethod: lastRecoveryMethod,
+      enabledByUser: false,
+      hasStoredCredential: false,
+      trustedBrowserReady: false,
       lastFailureAt: null,
       lastFailureStage: null,
       lastFailureReason: null,
@@ -264,13 +310,70 @@ class AutoReloginStatusSnapshot {
     return const AutoReloginStatusSnapshot.disabled();
   }
 
+  AutoReloginStatusSnapshot copyWith({
+    bool? isLoaded,
+    AutoReloginStatusPhase? phase,
+    bool? enabledByUser,
+    bool? hasStoredCredential,
+    bool? trustedBrowserReady,
+    Object? lastConfiguredAt = _unset,
+    Object? lastProbeAt = _unset,
+    Object? lastProbeMethod = _unset,
+    Object? lastRecoveryAt = _unset,
+    Object? lastRecoveryMethod = _unset,
+    Object? lastFailureAt = _unset,
+    Object? lastFailureStage = _unset,
+    Object? lastFailureReason = _unset,
+    Object? lastFailureSource = _unset,
+  }) {
+    return AutoReloginStatusSnapshot._(
+      isLoaded: isLoaded ?? this.isLoaded,
+      phase: phase ?? this.phase,
+      enabledByUser: enabledByUser ?? this.enabledByUser,
+      hasStoredCredential: hasStoredCredential ?? this.hasStoredCredential,
+      trustedBrowserReady: trustedBrowserReady ?? this.trustedBrowserReady,
+      lastConfiguredAt: identical(lastConfiguredAt, _unset)
+          ? this.lastConfiguredAt
+          : lastConfiguredAt as DateTime?,
+      lastProbeAt: identical(lastProbeAt, _unset)
+          ? this.lastProbeAt
+          : lastProbeAt as DateTime?,
+      lastProbeMethod: identical(lastProbeMethod, _unset)
+          ? this.lastProbeMethod
+          : lastProbeMethod as AutoReloginProbeMethod?,
+      lastRecoveryAt: identical(lastRecoveryAt, _unset)
+          ? this.lastRecoveryAt
+          : lastRecoveryAt as DateTime?,
+      lastRecoveryMethod: identical(lastRecoveryMethod, _unset)
+          ? this.lastRecoveryMethod
+          : lastRecoveryMethod as SessionRecoveryMethod?,
+      lastFailureAt: identical(lastFailureAt, _unset)
+          ? this.lastFailureAt
+          : lastFailureAt as DateTime?,
+      lastFailureStage: identical(lastFailureStage, _unset)
+          ? this.lastFailureStage
+          : lastFailureStage as AuthReloginFailureStage?,
+      lastFailureReason: identical(lastFailureReason, _unset)
+          ? this.lastFailureReason
+          : lastFailureReason as FailReason?,
+      lastFailureSource: identical(lastFailureSource, _unset)
+          ? this.lastFailureSource
+          : lastFailureSource as AutoReloginFailureSource?,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'phase': phase.name,
-      'lastVerifiedAt': lastVerifiedAt?.toIso8601String(),
-      'lastRecoveryAt': lastRecoveryAt?.toIso8601String(),
+      'enabledByUser': enabledByUser,
+      'hasStoredCredential': hasStoredCredential,
+      'trustedBrowserReady': trustedBrowserReady,
+      'lastConfiguredAt': lastConfiguredAt?.toUtc().toIso8601String(),
+      'lastProbeAt': lastProbeAt?.toUtc().toIso8601String(),
+      'lastProbeMethod': lastProbeMethod?.name,
+      'lastRecoveryAt': lastRecoveryAt?.toUtc().toIso8601String(),
       'lastRecoveryMethod': lastRecoveryMethod?.name,
-      'lastFailureAt': lastFailureAt?.toIso8601String(),
+      'lastFailureAt': lastFailureAt?.toUtc().toIso8601String(),
       'lastFailureStage': lastFailureStage?.name,
       'lastFailureReason': lastFailureReason?.name,
       'lastFailureSource': lastFailureSource?.name,
@@ -286,14 +389,32 @@ class AutoReloginStatusSnapshot {
 
     try {
       final json = jsonDecode(raw) as Map<String, dynamic>;
+      final parsedPhase = _parseStatusPhase(json['phase'] as String?);
+      final legacyProbeAt = _parseDateTime(json['lastVerifiedAt']);
+      final probeAt = _parseDateTime(json['lastProbeAt']) ?? legacyProbeAt;
+      final configuredAt = _parseDateTime(json['lastConfiguredAt']) ?? probeAt;
+      final hasStoredCredential =
+          _parseBool(json['hasStoredCredential']) ??
+          (parsedPhase == AutoReloginStatusPhase.ready ||
+              parsedPhase == AutoReloginStatusPhase.degraded ||
+              probeAt != null);
+
       return AutoReloginStatusSnapshot._(
         isLoaded: true,
-        phase: _enumByName(
-              AutoReloginStatusPhase.values,
-              json['phase'] as String?,
+        phase: parsedPhase,
+        enabledByUser:
+            _parseBool(json['enabledByUser']) ??
+            parsedPhase != AutoReloginStatusPhase.disabled,
+        hasStoredCredential: hasStoredCredential,
+        trustedBrowserReady: _parseBool(json['trustedBrowserReady']) ?? false,
+        lastConfiguredAt: configuredAt,
+        lastProbeAt: probeAt,
+        lastProbeMethod:
+            _enumByName(
+              AutoReloginProbeMethod.values,
+              json['lastProbeMethod'] as String?,
             ) ??
-            AutoReloginStatusPhase.disabled,
-        lastVerifiedAt: _parseDateTime(json['lastVerifiedAt']),
+            (probeAt != null ? AutoReloginProbeMethod.secureCredential : null),
         lastRecoveryAt: _parseDateTime(json['lastRecoveryAt']),
         lastRecoveryMethod: _enumByName(
           SessionRecoveryMethod.values,
@@ -347,8 +468,8 @@ String describeAuthReloginFailure({
 AuthReloginFailureStage _mapFailReasonToStage(FailReason reason) {
   return switch (reason) {
     FailReason.noCredential => AuthReloginFailureStage.credentialUnavailable,
-    FailReason.badCredential ||
-    FailReason.errorFetchFromId => AuthReloginFailureStage.identityAuthentication,
+    FailReason.badCredential || FailReason.errorFetchFromId =>
+      AuthReloginFailureStage.identityAuthentication,
     FailReason.errorRoaming ||
     FailReason.notLoggedIn => AuthReloginFailureStage.learnSessionBootstrap,
     FailReason.invalidResponse ||
@@ -359,11 +480,40 @@ AuthReloginFailureStage _mapFailReasonToStage(FailReason reason) {
   };
 }
 
+AutoReloginStatusPhase _parseStatusPhase(String? raw) {
+  switch (raw) {
+    case 'verified':
+      return AutoReloginStatusPhase.ready;
+    case 'needs_setup':
+      return AutoReloginStatusPhase.needsSetup;
+    case 'needsSetup':
+      return AutoReloginStatusPhase.needsSetup;
+    case 'probing':
+      return AutoReloginStatusPhase.probing;
+    case 'ready':
+      return AutoReloginStatusPhase.ready;
+    case 'degraded':
+      return AutoReloginStatusPhase.degraded;
+    case 'disabled':
+    default:
+      return AutoReloginStatusPhase.disabled;
+  }
+}
+
 DateTime? _parseDateTime(Object? raw) {
   if (raw is! String || raw.trim().isEmpty) {
     return null;
   }
   return DateTime.tryParse(raw);
+}
+
+bool? _parseBool(Object? raw) {
+  return switch (raw) {
+    final bool value => value,
+    final String value => value == 'true' || value == '1' || value == 'on',
+    final num value => value != 0,
+    _ => null,
+  };
 }
 
 T? _enumByName<T extends Enum>(List<T> values, String? raw) {

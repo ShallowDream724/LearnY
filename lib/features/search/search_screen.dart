@@ -221,10 +221,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       backgroundColor: c.bg,
       appBar: AppBar(
         titleSpacing: 0,
-        title: _SearchField(
-          controller: _controller,
-          focusNode: _focusNode,
-          onChanged: _onSearchChanged,
+        title: Padding(
+          padding: const EdgeInsets.only(right: 12),
+          child: _SearchField(
+            controller: _controller,
+            focusNode: _focusNode,
+            onChanged: _onSearchChanged,
+          ),
         ),
         actions: [
           if (groups.isNotEmpty)
@@ -511,7 +514,6 @@ class _SearchField extends StatelessWidget {
 
     return Container(
       height: 40,
-      alignment: Alignment.center,
       decoration: BoxDecoration(
         color: c.surface,
         borderRadius: BorderRadius.circular(12),
@@ -520,22 +522,13 @@ class _SearchField extends StatelessWidget {
         controller: controller,
         focusNode: focusNode,
         onChanged: onChanged,
-        textAlignVertical: TextAlignVertical.center,
         style: AppTypography.bodyMedium.copyWith(color: c.text),
         decoration: InputDecoration(
-          isCollapsed: true,
           hintText: '搜索课程、通知、作业、文件、附件或拼音...',
           hintStyle: AppTypography.bodyMedium.copyWith(color: c.tertiary),
-          prefixIcon: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Icon(Icons.search_rounded, size: 18, color: c.tertiary),
-          ),
-          prefixIconConstraints: const BoxConstraints(
-            minWidth: 38,
-            minHeight: 18,
-          ),
+          prefixIcon: Icon(Icons.search_rounded, size: 20, color: c.tertiary),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.only(right: 12),
+          contentPadding: const EdgeInsets.symmetric(vertical: 10),
         ),
       ),
     );

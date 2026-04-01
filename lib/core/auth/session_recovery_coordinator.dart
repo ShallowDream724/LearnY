@@ -5,6 +5,7 @@ import '../api/learn_api.dart';
 import '../providers/auth_preferences_provider.dart';
 import 'auth_relogin_models.dart';
 import 'auth_relogin_service.dart';
+import 'auto_relogin_capability_store.dart';
 import 'sso_session_recovery_service.dart';
 
 enum SessionRecoveryFailureStage {
@@ -57,7 +58,8 @@ class SessionRecoveryCoordinator {
     required SsoSessionRecoveryService ssoRecoveryService,
     required AuthReloginService authReloginService,
     required bool Function() isAutoReloginEnabled,
-    required Future<void> Function(SessionRecoveryMethod method) onRecoverySuccess,
+    required Future<void> Function(SessionRecoveryMethod method)
+    onRecoverySuccess,
     required Future<void> Function(AuthReloginResult result)
     onSecureReloginFailure,
   }) : _ssoRecoveryService = ssoRecoveryService,
@@ -101,7 +103,9 @@ class SessionRecoveryCoordinator {
           SessionRecoveryMethod.ssoCookie,
         );
       }
-      debugPrint('[LearnY] Session recovery via SSO cookie did not restore session');
+      debugPrint(
+        '[LearnY] Session recovery via SSO cookie did not restore session',
+      );
     } catch (error, stackTrace) {
       debugPrint('[LearnY] Session recovery via SSO cookie failed: $error');
       debugPrint('$stackTrace');
@@ -147,23 +151,16 @@ class SessionRecoveryCoordinator {
 
 final sessionRecoveryCoordinatorProvider = Provider<SessionRecoveryCoordinator>(
   (ref) {
+    final capabilityStore = ref.watch(autoReloginCapabilityStoreProvider);
     return SessionRecoveryCoordinator(
       ssoRecoveryService: ref.watch(ssoSessionRecoveryServiceProvider),
       authReloginService: ref.watch(authReloginServiceProvider),
       isAutoReloginEnabled: () => ref.read(autoReloginEnabledProvider),
-      onRecoverySuccess: (method) {
-        return ref
-            .read(autoReloginStatusProvider.notifier)
-            .recordRecoverySuccess(method);
-      },
-      onSecureReloginFailure: (result) {
-        return ref
-            .read(autoReloginStatusProvider.notifier)
-            .recordFailureResult(
-              result,
-              source: AutoReloginFailureSource.sessionRecovery,
-            );
-      },
+      onRecoverySuccess: capabilityStore.recordRecoverySuccess,
+      onSecureReloginFailure: (result) => capabilityStore.recordFailure(
+        result,
+        source: AutoReloginFailureSource.sessionRecovery,
+      ),
     );
   },
 );

@@ -40,7 +40,7 @@ void main() {
     );
 
     test(
-      'saveEnrolledCredential verifies before persisting trusted-browser state',
+      'saveEnrolledCredential mirrors trusted-browser token into fingerGenPrint3',
       () async {
         final storage = _MemorySecureStorage();
         final vault = CredentialVault(storage);
@@ -59,11 +59,43 @@ void main() {
 
         expect(result.succeeded, isTrue);
         expect(helper.calls, hasLength(1));
+        expect(helper.calls.single.fingerGenPrint, 'trusted-token');
+        expect(helper.calls.single.fingerGenPrint3, 'trusted-token');
 
         final saved = await vault.read();
         expect(saved, isNotNull);
         expect(saved!.fingerGenPrint, 'trusted-token');
+        expect(saved.fingerGenPrint3, 'trusted-token');
         expect(saved.singleLoginEnabled, isTrue);
+      },
+    );
+
+    test(
+      'tryRelogin repairs legacy trusted-browser credential missing fingerGenPrint3',
+      () async {
+        final storage = _MemorySecureStorage();
+        final vault = CredentialVault(storage);
+        final apiClient = _RecordingLearnHelper();
+        final service = AuthReloginService(vault);
+
+        await vault.save(
+          const StoredCredential(
+            username: '2024000000',
+            password: 'secret',
+            fingerPrint: 'fp',
+            fingerGenPrint: 'trusted-token',
+            deviceName: 'Android,LearnY',
+            singleLoginEnabled: true,
+          ),
+        );
+
+        final didRelogin = await service.tryRelogin(apiClient);
+
+        expect(didRelogin.succeeded, isTrue);
+        expect(apiClient.calls, hasLength(1));
+        expect(apiClient.calls.single.fingerGenPrint, 'trusted-token');
+        expect(apiClient.calls.single.fingerGenPrint3, 'trusted-token');
+        expect(apiClient.calls.single.singleLoginEnabled, isTrue);
       },
     );
 
@@ -89,6 +121,7 @@ void main() {
       expect(didRelogin.succeeded, isTrue);
       expect(apiClient.calls, hasLength(1));
       expect(apiClient.calls.single.singleLoginEnabled, isTrue);
+      expect(apiClient.calls.single.fingerGenPrint3, 'trusted-token');
     });
   });
 }

@@ -1,4 +1,4 @@
-const Duration _shanghaiOffset = Duration(hours: 8);
+import 'china_time.dart';
 
 String formatHourMinuteLabel(DateTime time) {
   final hour = time.hour.toString().padLeft(2, '0');
@@ -6,36 +6,10 @@ String formatHourMinuteLabel(DateTime time) {
   return '$hour:$minute';
 }
 
-DateTime nowInShanghai() => _asShanghaiWallClock(DateTime.now());
+DateTime nowInShanghai() => nowInChinaTime();
 
-DateTime? tryParseEpochMillisToLocal(String? raw) {
-  if (raw == null || raw.isEmpty) {
-    return null;
-  }
-
-  final ms = int.tryParse(raw);
-  if (ms == null) {
-    return null;
-  }
-
-  return _asShanghaiWallClock(
-    DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true),
-  );
-}
-
-DateTime _asShanghaiWallClock(DateTime instant) {
-  final shanghai = instant.toUtc().add(_shanghaiOffset);
-  return DateTime(
-    shanghai.year,
-    shanghai.month,
-    shanghai.day,
-    shanghai.hour,
-    shanghai.minute,
-    shanghai.second,
-    shanghai.millisecond,
-    shanghai.microsecond,
-  );
-}
+DateTime? tryParseEpochMillisToLocal(String? raw) =>
+    tryParseEpochMillisToChinaWallClock(raw);
 
 int calendarDayDifference(DateTime from, DateTime to) {
   final fromDate = DateTime(from.year, from.month, from.day);

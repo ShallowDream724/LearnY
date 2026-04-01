@@ -13,6 +13,7 @@ import '../../core/design/colors.dart';
 import '../../core/design/typography.dart';
 import '../../core/providers/providers.dart';
 import '../../core/router/router.dart';
+import '../../core/utils/china_time.dart';
 import '../files/providers/file_bookmark_providers.dart';
 import 'providers/profile_identity_provider.dart';
 import 'widgets/auto_relogin_enrollment_screen.dart';
@@ -334,15 +335,13 @@ class ProfileScreen extends ConsumerWidget {
     required AutoReloginStatusSnapshot status,
   }) {
     if (!enabled) {
-      if (status.isLoaded &&
-          status.phase == AutoReloginStatusPhase.degraded &&
-          status.failureDisplayLabel != null) {
-        return '关闭 · 上次失败：${status.failureDisplayLabel!}';
-      }
       return '关闭';
     }
     if (hasStoredCredential == null || !status.isLoaded) {
       return '读取中...';
+    }
+    if (status.phase == AutoReloginStatusPhase.probing) {
+      return '正在验证';
     }
     if (!hasStoredCredential) {
       if (status.failureDisplayLabel == null) {
@@ -350,34 +349,41 @@ class ProfileScreen extends ConsumerWidget {
       }
       return '需重新配置\n最近失败：${status.failureDisplayLabel!}';
     }
-    if (status.phase == AutoReloginStatusPhase.degraded &&
-        status.failureDisplayLabel != null) {
-      final verifiedAt = status.lastVerifiedAt;
-      if (verifiedAt == null) {
-        return '最近失败：${status.failureDisplayLabel!}';
-      }
-      return '最近失败：${status.failureDisplayLabel!}\n上次验证：${_formatStatusTime(verifiedAt)}';
+    if (status.phase == AutoReloginStatusPhase.needsSetup) {
+      return status.failureDisplayLabel == null
+          ? '需配置'
+          : '需配置\n最近失败：${status.failureDisplayLabel!}';
     }
-    final verifiedAt = status.lastVerifiedAt;
-    if (verifiedAt == null) {
+
+    final probeAt = status.lastProbeAt;
+    if (probeAt == null) {
       return '待验证';
     }
 
-    final primary = '已验证 · ${_formatStatusTime(verifiedAt)}';
+    final lines = <String>['已就绪', '最近校验：${_buildProbeLabel(status, probeAt)}'];
+    if (status.phase == AutoReloginStatusPhase.degraded &&
+        status.failureDisplayLabel != null) {
+      lines.insert(0, '最近失败：${status.failureDisplayLabel!}');
+    }
+
     final recoveryMethod = status.recoveryMethodDisplayLabel;
     final recoveryAt = status.lastRecoveryAt;
-    if (recoveryMethod == null || recoveryAt == null) {
-      return primary;
+    if (recoveryMethod != null && recoveryAt != null) {
+      lines.add('最近恢复：$recoveryMethod · ${_formatStatusTime(recoveryAt)}');
     }
-    return '$primary\n最近恢复：$recoveryMethod · ${_formatStatusTime(recoveryAt)}';
+    return lines.join('\n');
+  }
+
+  String _buildProbeLabel(AutoReloginStatusSnapshot status, DateTime probeAt) {
+    final method = status.probeMethodDisplayLabel;
+    if (method == null) {
+      return _formatStatusTime(probeAt);
+    }
+    return '$method · ${_formatStatusTime(probeAt)}';
   }
 
   String _formatStatusTime(DateTime time) {
-    final mm = time.month.toString().padLeft(2, '0');
-    final dd = time.day.toString().padLeft(2, '0');
-    final hh = time.hour.toString().padLeft(2, '0');
-    final minute = time.minute.toString().padLeft(2, '0');
-    return '$mm-$dd $hh:$minute';
+    return formatMonthDayHourMinuteInChina(time);
   }
 
   Future<void> _handleAutoReloginToggle(
@@ -386,31 +392,45 @@ class ProfileScreen extends ConsumerWidget {
     required bool enabled,
   }) async {
     if (!enabled) {
-      await ref.read(authReloginServiceProvider).clearStoredCredential();
-      await ref.read(autoReloginEnabledProvider.notifier).setEnabled(false);
-      await ref.read(autoReloginStatusProvider.notifier).recordDisabled();
-      ref.invalidate(storedCredentialAvailabilityProvider);
+      await ref.read(autoReloginCapabilityStoreProvider).disable();
       if (context.mounted) {
         AppToast.showInfo(context, message: '已关闭自动重新登录');
       }
       return;
     }
 
+    final initialUsername = await ref.read(
+      preferredIdentityAccountProvider.future,
+    );
+    if (!context.mounted) {
+      return;
+    }
     final input = await showDialog<AutoReloginSetupInput>(
       context: context,
-      builder: (_) => const AutoReloginSetupDialog(),
+      builder: (_) => AutoReloginSetupDialog(initialUsername: initialUsername),
     );
     if (input == null || !context.mounted) {
       return;
     }
+    await ref.read(identityAccountHintStoreProvider).save(input.username);
+    if (!context.mounted) {
+      return;
+    }
 
-    final configured = await Navigator.of(context).push<bool>(
+    final result = await Navigator.of(context).push<AuthEntryResult>(
       MaterialPageRoute(
         builder: (_) => AutoReloginEnrollmentScreen(input: input),
       ),
     );
-    if (configured == true && context.mounted) {
+    if (!context.mounted || result == null) {
+      return;
+    }
+    if (result.autoReloginConfigured) {
       AppToast.showSuccess(context, message: '已启用并验证自动重新登录');
+      return;
+    }
+    if (result.noticeMessage != null) {
+      AppToast.showWarning(context, message: result.noticeMessage!);
     }
   }
 
@@ -591,7 +611,7 @@ class _SettingsSwitchTile extends StatelessWidget {
                 Text(
                   subtitle,
                   style: AppTypography.bodySmall.copyWith(color: subColor),
-                  maxLines: 2,
+                  maxLines: 4,
                   overflow: TextOverflow.ellipsis,
                 ),
               ],

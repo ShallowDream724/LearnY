@@ -8,6 +8,8 @@ abstract final class AppStateKeys {
   static const String fileCacheLimitMb = 'file_cache_limit_mb';
   static const String autoReloginEnabled = 'auto_relogin_enabled';
   static const String autoReloginStatus = 'auto_relogin_status';
+  static const String identityAccountHint = 'identity_account_hint';
+  static const String guideState = 'guide_state';
   static const String recentSearches = 'recent_searches';
   static const String homeScheduleSnapshot = 'home_schedule_snapshot';
 }

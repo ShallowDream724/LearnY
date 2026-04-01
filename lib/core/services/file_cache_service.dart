@@ -477,7 +477,10 @@ class FileCacheService {
     required db.CachedAsset asset,
     required String courseName,
   }) {
-    final attachment = FileAttachment.tryParseJsonString(rawJson);
+    final attachment = FileAttachment.tryParseJsonString(
+      rawJson,
+      fallbackKind: fileAttachmentKindFromName(asset.sourceKind),
+    );
     if (attachment == null) {
       return null;
     }
@@ -488,6 +491,7 @@ class FileCacheService {
       attachment: attachment,
       courseId: asset.courseId,
       courseName: courseName,
+      assetKey: asset.assetKey,
     );
   }
 

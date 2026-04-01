@@ -170,9 +170,7 @@ class AuthReloginService {
     }
 
     return lastResult ??
-        const AuthReloginResult.failure(
-          stage: AuthReloginFailureStage.unknown,
-        );
+        const AuthReloginResult.failure(stage: AuthReloginFailureStage.unknown);
   }
 
   Future<AuthReloginResult> _attemptLogin(
@@ -237,12 +235,19 @@ class AuthReloginService {
       throw const ApiError(reason: FailReason.noCredential);
     }
 
+    final normalizedFingerGenPrint = fingerGenPrint.trim();
+    final normalizedFingerGenPrint3 = _resolveTrustedBrowserMirror(
+      normalizedFingerGenPrint,
+      fingerGenPrint,
+      fingerGenPrint3,
+    );
+
     return StoredCredential(
       username: normalizedUsername,
       password: password,
       fingerPrint: normalizedFingerPrint,
-      fingerGenPrint: fingerGenPrint.trim(),
-      fingerGenPrint3: fingerGenPrint3.trim(),
+      fingerGenPrint: normalizedFingerGenPrint,
+      fingerGenPrint3: normalizedFingerGenPrint3,
       deviceName: deviceName.trim(),
       singleLoginEnabled: singleLoginEnabled,
     );
@@ -279,6 +284,21 @@ class AuthReloginService {
       buffer.write(alphabet[_random.nextInt(alphabet.length)]);
     }
     return buffer.toString();
+  }
+
+  String _resolveTrustedBrowserMirror(
+    String normalizedFingerGenPrint,
+    String fingerGenPrint,
+    String fingerGenPrint3,
+  ) {
+    final normalizedFingerGenPrint3 = fingerGenPrint3.trim();
+    if (normalizedFingerGenPrint3.isNotEmpty) {
+      return normalizedFingerGenPrint3;
+    }
+    if (normalizedFingerGenPrint.isEmpty) {
+      return '';
+    }
+    return fingerGenPrint.trim();
   }
 }
 

@@ -26,6 +26,7 @@ class AuthSessionStore {
   Future<void> clear() {
     return Future.wait([
       _db.deleteState(AppStateKeys.username),
+      _db.deleteState(AppStateKeys.identityAccountHint),
       _db.deleteState(AppStateKeys.userDepartment),
       _db.deleteState(AppStateKeys.currentSemesterId),
     ]);

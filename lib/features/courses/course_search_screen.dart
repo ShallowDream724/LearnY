@@ -216,15 +216,18 @@ class _CourseSearchScreenState extends ConsumerState<CourseSearchScreen> {
       backgroundColor: c.bg,
       appBar: AppBar(
         titleSpacing: 0,
-        title: _CourseSearchField(
-          controller: _controller,
-          focusNode: _focusNode,
-          onChanged: (query) {
-            setState(_collapsedSections.clear);
-            ref
-                .read(courseSearchControllerProvider(_args).notifier)
-                .onQueryChanged(query);
-          },
+        title: Padding(
+          padding: const EdgeInsets.only(right: 12),
+          child: _CourseSearchField(
+            controller: _controller,
+            focusNode: _focusNode,
+            onChanged: (query) {
+              setState(_collapsedSections.clear);
+              ref
+                  .read(courseSearchControllerProvider(_args).notifier)
+                  .onQueryChanged(query);
+            },
+          ),
         ),
         actions: [
           if (groups.isNotEmpty)
@@ -433,7 +436,6 @@ class _CourseSearchField extends StatelessWidget {
 
     return Container(
       height: 40,
-      alignment: Alignment.center,
       decoration: BoxDecoration(
         color: c.surface,
         borderRadius: BorderRadius.circular(12),
@@ -442,22 +444,13 @@ class _CourseSearchField extends StatelessWidget {
         controller: controller,
         focusNode: focusNode,
         onChanged: onChanged,
-        textAlignVertical: TextAlignVertical.center,
         style: AppTypography.bodyMedium.copyWith(color: c.text),
         decoration: InputDecoration(
-          isCollapsed: true,
           hintText: '搜索这门课的通知、作业、文件、附件或拼音...',
           hintStyle: AppTypography.bodyMedium.copyWith(color: c.tertiary),
-          prefixIcon: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Icon(Icons.search_rounded, size: 18, color: c.tertiary),
-          ),
-          prefixIconConstraints: const BoxConstraints(
-            minWidth: 38,
-            minHeight: 18,
-          ),
+          prefixIcon: Icon(Icons.search_rounded, size: 20, color: c.tertiary),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.only(right: 12),
+          contentPadding: const EdgeInsets.symmetric(vertical: 10),
         ),
       ),
     );

@@ -142,6 +142,7 @@ class _NotificationDetailScreenState
             rawJson: notification.attachmentJson,
             courseId: widget.courseId,
             courseName: widget.courseName,
+            fallbackKind: FileAttachmentKind.notification,
           );
           final hasContent = hasVisibleHtmlContent(notification.content);
 

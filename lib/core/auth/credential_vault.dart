@@ -44,8 +44,11 @@ class StoredCredential {
       final username = (json['username'] as String? ?? '').trim();
       final password = json['password'] as String? ?? '';
       final fingerPrint = (json['fingerPrint'] as String? ?? '').trim();
-      final fingerGenPrint = json['fingerGenPrint'] as String? ?? '';
-      final fingerGenPrint3 = json['fingerGenPrint3'] as String? ?? '';
+      final fingerGenPrint = (json['fingerGenPrint'] as String? ?? '').trim();
+      final fingerGenPrint3 = _resolveTrustedBrowserMirror(
+        fingerGenPrint,
+        (json['fingerGenPrint3'] as String? ?? '').trim(),
+      );
       final deviceName = json['deviceName'] as String? ?? '';
       final singleLoginRaw = json['singleLoginEnabled'];
       final singleLoginEnabled = switch (singleLoginRaw) {
@@ -108,3 +111,13 @@ final credentialVaultProvider = Provider<CredentialVault>((ref) {
 final storedCredentialAvailabilityProvider = FutureProvider<bool>((ref) async {
   return ref.watch(credentialVaultProvider).hasCredential();
 });
+
+String _resolveTrustedBrowserMirror(
+  String fingerGenPrint,
+  String fingerGenPrint3,
+) {
+  if (fingerGenPrint3.isNotEmpty) {
+    return fingerGenPrint3;
+  }
+  return fingerGenPrint;
+}

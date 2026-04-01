@@ -1,47 +1,19 @@
-// WebView-based SSO login screen — with proper Dio session handoff.
-//
-// ## How it works
-//
-// The original JS library does:
-// 1. POST login form with SM2-encrypted password to id.tsinghua.edu.cn
-// 2. Extract a `ticket` (like `ST-XXXXX`) from the response page
-// 3. Use the ticket to call `learn.tsinghua.edu.cn/b/j_spring_security_thauth_roaming_entry?ticket=XXX`
-// 4. This sets session cookies and authenticates the user
-// 5. Then fetch the course list page to extract the CSRF token
-//
-// In our WebView approach:
-// 1. Load the id.tsinghua.edu.cn login page in a WebView
-// 2. The WebView handles SM2 encryption natively (the page's own JS does it)
-// 3. After successful login, the page produces a redirect containing the ticket
-// 4. We monitor WebView navigation for URLs matching the ticket pattern
-// 5. When we detect the ticket redirect, we:
-//    a. Block the WebView from consuming it
-//    b. Extract the ticket string
-//    c. Use Dio to call learnAuthRoam(ticket) — Dio gets the session cookies
-//    d. Use Dio to fetch the course list page for the CSRF token
-// 6. Now Dio is fully authenticated and the API client works
-//
-// ## Why not just extract cookies from the WebView?
-//
-// Session cookies are typically HttpOnly, so `document.cookie` in JS
-// won't return them. Platform-specific cookie extraction is fragile.
-// The ticket interception approach is clean and reliable.
-//
-// ## Fallback
-//
-// If ticket interception fails (URL pattern changed), we fall back to
-// extracting cookies via the WebView's cookie manager and injecting
-// them into Dio's CookieJar.
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../core/auth/auth.dart';
+import '../../core/design/app_toast.dart';
 import '../../core/design/app_theme_colors.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/typography.dart';
-import '../../core/api/urls.dart' as urls;
+import '../../core/guides/guide_presenter.dart';
+import '../../core/guides/guide_registry.dart';
+import '../../core/providers/app_update_provider.dart';
+import '../../core/providers/auth_preferences_provider.dart';
+import 'widgets/auto_relogin_setup_dialog.dart';
+import 'widgets/identity_auth_flow_screen.dart';
+import 'widgets/login_auto_relogin_card.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -51,187 +23,145 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  bool _showWebView = false;
-  bool _isLoading = false;
-  bool _isProcessingTicket = false;
+  bool _isLaunchingFlow = false;
+  bool _enableAutoReloginOnLogin = false;
+  bool _guidePresentationRecorded = false;
   String? _errorMessage;
-  late WebViewController _webViewController;
 
-  @override
-  void initState() {
-    super.initState();
-    _initWebView();
-  }
+  Future<void> _startLogin() async {
+    if (_isLaunchingFlow) {
+      return;
+    }
 
-  void _initWebView() {
-    _webViewController = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onPageStarted: _onPageStarted,
-          onPageFinished: _onPageFinished,
-          onNavigationRequest: _onNavigationRequest,
-        ),
-      );
-  }
-
-  // ─────────────────────────────────────────────
-  //  Core login flow
-  // ─────────────────────────────────────────────
-
-  void _startLogin() {
     setState(() {
-      _showWebView = true;
-      _isLoading = true;
-      _isProcessingTicket = false;
+      _isLaunchingFlow = true;
       _errorMessage = null;
     });
-    // Load the id.tsinghua login page.
-    // The form's `action` handles SM2 encryption via its own JS.
-    _webViewController.loadRequest(Uri.parse(urls.idLogin()));
-  }
-
-  void _onPageStarted(String url) {
-    if (mounted && !_isProcessingTicket) {
-      setState(() => _isLoading = true);
-    }
-  }
-
-  Future<void> _onPageFinished(String url) async {
-    if (!mounted || _isProcessingTicket) return;
-    setState(() => _isLoading = false);
-
-    // Fallback detection: if the WebView somehow ends up at learn.tsinghua
-    // (meaning the ticket was consumed by the WebView before we could
-    // intercept it), try the cookie-extraction fallback.
-    if (ref.read(ssoTicketParserProvider).shouldAttemptFallback(url)) {
-      await _fallbackCookieExtraction();
-    }
-  }
-
-  /// This is the critical method: we watch every WebView navigation.
-  /// When we see the ticket URL (learn auth roaming), we intercept it.
-  NavigationDecision _onNavigationRequest(NavigationRequest request) {
-    final instruction = ref
-        .read(ssoTicketParserProvider)
-        .inspectNavigation(request.url);
-    if (instruction.shouldConsumeTicket && instruction.ticket != null) {
-      _consumeTicketWithDio(instruction.ticket!);
-      return NavigationDecision.prevent;
-    }
-    return NavigationDecision.navigate;
-  }
-
-  // ─────────────────────────────────────────────
-  //  Primary path: ticket interception
-  // ─────────────────────────────────────────────
-
-  /// We have the ticket. Now use Dio to:
-  /// 1. Call learnAuthRoam(ticket) → Dio gets session cookies
-  /// 2. Fetch the course list page → extract CSRF token
-  /// 3. Extract username from the page
-  Future<void> _consumeTicketWithDio(String ticket) async {
-    if (_isProcessingTicket) return;
-    _isProcessingTicket = true;
-
-    setState(() => _isLoading = true);
 
     try {
-      await ref.read(ssoLoginCoordinatorProvider).consumeTicket(ticket);
-    } catch (e, stackTrace) {
-      debugPrint('[LearnX] Login failed: $e');
-      debugPrint('[LearnX] Stack trace: $stackTrace');
+      final result = await _openAuthFlow();
+      if (!mounted) {
+        return;
+      }
+      if (result == null) {
+        return;
+      }
+
+      if (result.autoReloginConfigured) {
+        AppToast.showSuccess(context, message: '自动重新登录已启用并完成校验');
+      } else if (result.noticeMessage != null) {
+        AppToast.showWarning(context, message: result.noticeMessage!);
+      }
+    } finally {
       if (mounted) {
         setState(() {
-          _errorMessage = '登录认证失败: ${_truncateError(e.toString())}';
-          _showWebView = false;
-          _isLoading = false;
-          _isProcessingTicket = false;
+          _isLaunchingFlow = false;
         });
       }
     }
   }
 
-  // ─────────────────────────────────────────────
-  //  Fallback: cookie extraction from WebView
-  // ─────────────────────────────────────────────
-
-  /// If the ticket interception didn't work (WebView consumed the ticket
-  /// before we could intercept it), try extracting what we need from the
-  /// WebView itself. This is less reliable but serves as a safety net.
-  Future<void> _fallbackCookieExtraction() async {
-    if (_isProcessingTicket) return;
-    _isProcessingTicket = true;
-    setState(() => _isLoading = true);
-
-    try {
-      // Wait for the page to fully render
-      await Future.delayed(const Duration(seconds: 2));
-
-      // Try to navigate to the course list page in the WebView
-      await _webViewController.loadRequest(
-        Uri.parse(urls.learnStudentCourseListPage()),
+  Future<AuthEntryResult?> _openAuthFlow() async {
+    AuthEntryRequest request = const AuthEntryRequest.loginOnly();
+    if (_enableAutoReloginOnLogin) {
+      final initialUsername = await ref.read(
+        preferredIdentityAccountProvider.future,
       );
-      await Future.delayed(const Duration(seconds: 3));
-
-      // Extract CSRF token via JavaScript
-      final rawHtml = await _webViewController.runJavaScriptReturningResult(
-        'document.documentElement.outerHTML',
-      );
-
-      final pageSnapshot = ref
-          .read(ssoFallbackPageParserProvider)
-          .parse(rawHtml.toString());
-
-      final cookieStr = await _webViewController.runJavaScriptReturningResult(
-        'document.cookie',
-      );
-      var cookieString = cookieStr.toString();
-      if (cookieString.startsWith('"') && cookieString.endsWith('"')) {
-        cookieString = cookieString.substring(1, cookieString.length - 1);
+      if (!mounted) {
+        return null;
       }
-
-      await ref
-          .read(ssoLoginCoordinatorProvider)
-          .completeFallbackLogin(
-            pageSnapshot: pageSnapshot,
-            cookieString: cookieString,
-          );
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _errorMessage = '认证回退失败: ${_truncateError(e.toString())}';
-          _showWebView = false;
-          _isLoading = false;
-          _isProcessingTicket = false;
-        });
+      final input = await showDialog<AutoReloginSetupInput>(
+        context: context,
+        builder: (_) =>
+            AutoReloginSetupDialog(initialUsername: initialUsername),
+      );
+      if (input == null || !mounted) {
+        return null;
       }
+      await ref.read(identityAccountHintStoreProvider).save(input.username);
+      if (!mounted) {
+        return null;
+      }
+      request = AuthEntryRequest.loginAndEnableAutoRelogin(input: input);
     }
+
+    return Navigator.of(context).push<AuthEntryResult>(
+      MaterialPageRoute(
+        builder: (_) => IdentityAuthFlowScreen(request: request),
+      ),
+    );
   }
 
-  String _truncateError(String error) {
-    if (error.length > 80) return '${error.substring(0, 77)}...';
-    return error;
+  Future<void> _showAutoReloginDetails() async {
+    final c = context.colors;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: c.surface,
+      builder: (context) {
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '自动重新登录说明',
+                  style: AppTypography.titleLarge.copyWith(color: c.text),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '开启后，LearnY 会在首次登录时顺带验证静默恢复能力。账号密码只保存在系统安全存储中，不会写入本地数据库，也不会上传到我们的服务器。',
+                  style: AppTypography.bodyMedium.copyWith(
+                    color: c.subtitle,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  '如果统一身份页面出现“信任当前设备 / 180天”等提示，建议勾选。这样后续会话过期时，应用才有机会自动恢复，而不是再次打断你手动登录。',
+                  style: AppTypography.bodyMedium.copyWith(
+                    color: c.subtitle,
+                    height: 1.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
-  // ─────────────────────────────────────────────
-  //  Build
-  // ─────────────────────────────────────────────
+  Future<void> _dismissGuide() async {
+    await ref
+        .read(guidePresenterProvider)
+        .dismiss(GuideRegistry.loginAutoRelogin);
+    ref.invalidate(guideVisibilityProvider(GuideRegistry.loginAutoRelogin.id));
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (_showWebView) {
-      return _buildWebViewScreen();
-    }
-    return _buildBrandedScreen();
-  }
-
-  // ─────────────────────────────────────────────
-  //  Branded login splash
-  // ─────────────────────────────────────────────
-
-  Widget _buildBrandedScreen() {
     final c = context.colors;
+    final buildInfo = ref.watch(appBuildInfoProvider).valueOrNull;
+    final showGuideAsync = ref.watch(
+      guideVisibilityProvider(GuideRegistry.loginAutoRelogin.id),
+    );
+    final showGuideBody = showGuideAsync.valueOrNull ?? true;
+
+    if (showGuideBody && !_guidePresentationRecorded) {
+      _guidePresentationRecorded = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref
+            .read(guidePresenterProvider)
+            .markPresented(GuideRegistry.loginAutoRelogin);
+      });
+    }
+    if (!showGuideBody) {
+      _guidePresentationRecorded = false;
+    }
 
     return Scaffold(
       backgroundColor: c.bg,
@@ -241,16 +171,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           child: Column(
             children: [
               const Spacer(flex: 3),
-
-              // Logo
               _buildLogo()
                   .animate()
                   .fadeIn(duration: 600.ms, curve: Curves.easeOut)
                   .slideY(begin: -0.1, end: 0),
-
               const SizedBox(height: 28),
-
-              // Title
               Text(
                     'LearnY',
                     style: AppTypography.statLarge.copyWith(
@@ -261,10 +186,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   .animate(delay: 200.ms)
                   .fadeIn(duration: 500.ms)
                   .slideY(begin: 0.1, end: 0),
-
               const SizedBox(height: 8),
-
-              // Subtitle
               Text(
                 '清华大学网络学堂',
                 style: AppTypography.bodyLarge.copyWith(
@@ -272,10 +194,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   letterSpacing: 2,
                 ),
               ).animate(delay: 400.ms).fadeIn(duration: 500.ms),
-
               const Spacer(flex: 2),
-
-              // Error message
               if (_errorMessage != null) ...[
                 Container(
                   width: double.infinity,
@@ -307,15 +226,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
               ],
-
-              // Login button
+              LoginAutoReloginCard(
+                    enabled: _enableAutoReloginOnLogin,
+                    showGuideBody: showGuideBody,
+                    onChanged: (value) {
+                      setState(() {
+                        _enableAutoReloginOnLogin = value;
+                      });
+                    },
+                    onLearnMore: _showAutoReloginDetails,
+                    onDismissGuide: _dismissGuide,
+                  )
+                  .animate(delay: 540.ms)
+                  .fadeIn(duration: 450.ms)
+                  .slideY(begin: 0.1, end: 0),
+              const SizedBox(height: 18),
               SizedBox(
                     width: double.infinity,
                     height: 52,
                     child: ElevatedButton(
-                      onPressed: _isLoading ? null : _startLogin,
+                      onPressed: _isLaunchingFlow ? null : _startLogin,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
@@ -324,7 +256,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           borderRadius: BorderRadius.circular(14),
                         ),
                       ),
-                      child: _isLoading
+                      child: _isLaunchingFlow
                           ? const SizedBox(
                               width: 22,
                               height: 22,
@@ -342,20 +274,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ),
                     ),
                   )
-                  .animate(delay: 600.ms)
+                  .animate(delay: 620.ms)
                   .fadeIn(duration: 500.ms)
                   .slideY(begin: 0.15, end: 0),
-
               const SizedBox(height: 16),
-
-              // Version info
               Text(
-                'v0.1.0',
+                buildInfo?.shortLabel ?? '读取版本中...',
                 style: AppTypography.bodySmall.copyWith(
                   color: c.subtitle.withAlpha(120),
                 ),
-              ).animate(delay: 800.ms).fadeIn(duration: 400.ms),
-
+              ).animate(delay: 780.ms).fadeIn(duration: 400.ms),
               const Spacer(flex: 1),
             ],
           ),
@@ -386,66 +314,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       child: const Center(
         child: Icon(Icons.school_rounded, size: 42, color: Colors.white),
       ),
-    );
-  }
-
-  // ─────────────────────────────────────────────
-  //  WebView login screen
-  // ─────────────────────────────────────────────
-
-  Widget _buildWebViewScreen() {
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.close_rounded),
-          onPressed: () {
-            setState(() {
-              _showWebView = false;
-              _isLoading = false;
-              _isProcessingTicket = false;
-            });
-          },
-        ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('统一身份认证'),
-            if (_isProcessingTicket)
-              Text(
-                '正在验证登录信息...',
-                style: AppTypography.bodySmall.copyWith(
-                  color: AppColors.primary,
-                ),
-              ),
-          ],
-        ),
-        bottom: _isLoading
-            ? const PreferredSize(
-                preferredSize: Size.fromHeight(2),
-                child: LinearProgressIndicator(
-                  minHeight: 2,
-                  color: AppColors.primary,
-                ),
-              )
-            : null,
-      ),
-      body: _isProcessingTicket
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CircularProgressIndicator(color: AppColors.primary),
-                  const SizedBox(height: 20),
-                  Text(
-                    '正在建立安全会话...',
-                    style: AppTypography.bodyMedium.copyWith(
-                      color: context.colors.subtitle,
-                    ),
-                  ),
-                ],
-              ),
-            )
-          : WebViewWidget(controller: _webViewController),
     );
   }
 }

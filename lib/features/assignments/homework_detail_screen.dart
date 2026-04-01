@@ -53,12 +53,14 @@ class HomeworkDetailScreen extends ConsumerWidget {
   FileAttachmentEntry _attachmentEntry({
     required String label,
     required String? rawJson,
+    FileAttachmentKind? fallbackKind,
   }) {
     return FileAttachmentEntry.fromJson(
       label: label,
       rawJson: rawJson,
       courseId: courseId,
       courseName: courseName,
+      fallbackKind: fallbackKind,
     );
   }
 
@@ -134,14 +136,17 @@ class HomeworkDetailScreen extends ConsumerWidget {
         final homeworkAttachmentEntry = _attachmentEntry(
           label: '作业附件',
           rawJson: hw.attachmentJson,
+          fallbackKind: FileAttachmentKind.homeworkAttachment,
         );
         final submittedAttachmentEntry = _attachmentEntry(
           label: '提交附件',
           rawJson: hw.submittedAttachmentJson,
+          fallbackKind: FileAttachmentKind.homeworkSubmitted,
         );
         final answerAttachmentEntry = _attachmentEntry(
           label: '答案附件',
           rawJson: hw.answerAttachmentJson,
+          fallbackKind: FileAttachmentKind.homeworkAnswer,
         );
 
         return Scaffold(

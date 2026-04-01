@@ -56,6 +56,37 @@ void main() {
     expect(initialsResults.single.title, '土力学');
   });
 
+  test('prioritizes strong file title hits over weaker phonetic matches', () {
+    final documents = [
+      buildDocument(
+        key: 'course:pcr',
+        kind: SearchResultKind.course,
+        title: '平差软件',
+        fields: const [
+          SearchField('平差软件', weight: 4, isPrimary: true, enablePhonetic: true),
+        ],
+      ),
+      buildDocument(
+        key: 'file:pcr',
+        kind: SearchResultKind.courseFile,
+        title: 'PCR实验步骤.pdf',
+        navigationType: SearchNavigationType.fileDetail,
+        fileExtension: 'pdf',
+        fields: const [
+          SearchField('PCR实验步骤.pdf', weight: 4, isPrimary: true),
+          SearchField('实验说明', weight: 2.2),
+        ],
+      ),
+    ];
+
+    final results = engine.search(documents: documents, query: 'pcr');
+
+    expect(results, hasLength(2));
+    expect(results.first.title, 'PCR实验步骤.pdf');
+    expect(results.first.section.title, '文件');
+    expect(results.last.title, '平差软件');
+  });
+
   test('surfaces favorites as related results for 收藏 intent', () {
     final documents = [
       buildDocument(
