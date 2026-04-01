@@ -4,9 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:open_filex/open_filex.dart';
-import 'package:pdfrx/pdfrx.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/design/app_toast.dart';
 import '../../../core/design/app_theme_colors.dart';
@@ -16,6 +14,8 @@ import '../../../core/files/file_models.dart';
 import '../../../core/files/preview/archive_preview_service.dart';
 import '../../../core/files/preview/file_preview_models.dart';
 import '../../../core/files/preview/file_preview_preparation_service.dart';
+import 'file_preview_feedback.dart';
+import 'pdf_preview_surface.dart';
 
 class FilePreviewView extends ConsumerStatefulWidget {
   const FilePreviewView({
@@ -63,19 +63,19 @@ class _FilePreviewViewState extends ConsumerState<FilePreviewView> {
       future: _previewFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const _PreparingPreviewView();
+          return const PreparingPreviewView();
         }
 
         final preview = snapshot.data;
         if (preview == null) {
-          return _PreviewUnavailable(
+          return PreviewUnavailable(
             message: '预览准备失败',
             onOpenExternal: widget.onOpenExternal,
           );
         }
 
         return switch (preview) {
-          PdfPreparedFilePreview() => _PdfPreview(
+          PdfPreparedFilePreview() => PdfPreviewSurface(
             filePath: preview.filePath,
             onOpenExternal: widget.onOpenExternal,
           ),
@@ -91,74 +91,12 @@ class _FilePreviewViewState extends ConsumerState<FilePreviewView> {
             containerLocalPath: widget.localPath,
             preview: preview,
           ),
-          UnsupportedPreparedFilePreview() => _PreviewUnavailable(
+          UnsupportedPreparedFilePreview() => PreviewUnavailable(
             message: preview.message,
             onOpenExternal: widget.onOpenExternal,
           ),
         };
       },
-    );
-  }
-}
-
-class _PreparingPreviewView extends StatelessWidget {
-  const _PreparingPreviewView();
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(
-            width: 44,
-            height: 44,
-            child: CircularProgressIndicator.adaptive(strokeWidth: 3),
-          ),
-          const SizedBox(height: 14),
-          Text('正在准备预览...', style: TextStyle(color: c.text, fontSize: 15)),
-        ],
-      ),
-    );
-  }
-}
-
-class _PreviewUnavailable extends StatelessWidget {
-  const _PreviewUnavailable({
-    required this.message,
-    required this.onOpenExternal,
-  });
-
-  final String message;
-  final VoidCallback onOpenExternal;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.insert_drive_file_outlined, size: 52, color: c.subtitle),
-            const SizedBox(height: 12),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: c.text, fontSize: 15, height: 1.5),
-            ),
-            const SizedBox(height: 16),
-            FilledButton.tonal(
-              onPressed: onOpenExternal,
-              child: const Text('外部打开'),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -1139,268 +1077,6 @@ class _ArchiveBreadcrumb {
 
   final String path;
   final String label;
-}
-
-class _PdfPreview extends StatefulWidget {
-  const _PdfPreview({required this.filePath, required this.onOpenExternal});
-
-  final String filePath;
-  final VoidCallback onOpenExternal;
-
-  @override
-  State<_PdfPreview> createState() => _PdfPreviewState();
-}
-
-class _PdfPreviewState extends State<_PdfPreview> {
-  late final PdfViewerController _controller;
-  int _pageCount = 0;
-  int _currentPage = 1;
-  String? _errorMessage;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = PdfViewerController();
-  }
-
-  Future<void> _handlePdfLink(PdfLink link) async {
-    final url = link.url;
-    if (url != null) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-      return;
-    }
-    final dest = link.dest;
-    if (dest != null) {
-      await _controller.goToPage(
-        pageNumber: dest.pageNumber,
-        anchor: PdfPageAnchor.top,
-      );
-    }
-  }
-
-  Future<void> _fitCurrentPage({required bool fitWidth}) async {
-    if (!_controller.isReady) {
-      return;
-    }
-    final page = _controller.pageNumber ?? _currentPage;
-    final matrix = fitWidth
-        ? _controller.calcMatrixFitWidthForPage(pageNumber: page)
-        : _controller.calcMatrixForPage(
-            pageNumber: page,
-            anchor: PdfPageAnchor.all,
-          );
-    await _controller.goTo(matrix);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-
-    if (_errorMessage != null) {
-      return _PreviewUnavailable(
-        message: _errorMessage!,
-        onOpenExternal: widget.onOpenExternal,
-      );
-    }
-
-    return Stack(
-      children: [
-        PdfViewer.file(
-          widget.filePath,
-          controller: _controller,
-          params: PdfViewerParams(
-            backgroundColor: c.bg,
-            margin: 12,
-            maxScale: 6,
-            scrollPhysics: const BouncingScrollPhysics(),
-            scrollPhysicsScale: const BouncingScrollPhysics(),
-            pageDropShadow: BoxShadow(
-              color: Colors.black.withAlpha(context.isDark ? 44 : 18),
-              blurRadius: 18,
-              spreadRadius: 2,
-              offset: const Offset(0, 8),
-            ),
-            onViewerReady: (document, controller) {
-              if (!mounted) {
-                return;
-              }
-              setState(() {
-                _pageCount = document.pages.length;
-                _currentPage = controller.pageNumber ?? 1;
-              });
-            },
-            onPageChanged: (pageNumber) {
-              if (!mounted || pageNumber == null) {
-                return;
-              }
-              setState(() => _currentPage = pageNumber);
-            },
-            onDocumentLoadFinished: (documentRef, succeeded) {
-              if (succeeded || !mounted) {
-                return;
-              }
-              final listenable = documentRef.resolveListenable();
-              final error = listenable.error;
-              setState(() {
-                _errorMessage = error == null ? 'PDF 预览失败' : 'PDF 预览失败：$error';
-              });
-            },
-            linkHandlerParams: PdfLinkHandlerParams(
-              onLinkTap: (link) {
-                unawaited(_handlePdfLink(link));
-              },
-            ),
-            loadingBannerBuilder: (context, bytesDownloaded, totalBytes) {
-              return const _PreparingPreviewView();
-            },
-            errorBannerBuilder: (context, error, stackTrace, documentRef) {
-              return _PreviewUnavailable(
-                message: 'PDF 预览失败：$error',
-                onOpenExternal: widget.onOpenExternal,
-              );
-            },
-          ),
-        ),
-        if (_pageCount > 0)
-          Positioned(
-            top: 16,
-            right: 12,
-            child: AnimatedBuilder(
-              animation: _controller,
-              builder: (context, _) {
-                final canUseControls = _controller.isReady;
-                return DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: Colors.black.withAlpha(150),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 6,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _PdfControlButton(
-                          icon: Icons.remove_rounded,
-                          tooltip: '缩小',
-                          onTap: canUseControls
-                              ? () => _controller.zoomDown()
-                              : null,
-                        ),
-                        _PdfTextChip(
-                          label: '适页',
-                          onTap: canUseControls
-                              ? () => _fitCurrentPage(fitWidth: false)
-                              : null,
-                        ),
-                        _PdfTextChip(
-                          label: '适宽',
-                          onTap: canUseControls
-                              ? () => _fitCurrentPage(fitWidth: true)
-                              : null,
-                        ),
-                        _PdfControlButton(
-                          icon: Icons.add_rounded,
-                          tooltip: '放大',
-                          onTap: canUseControls
-                              ? () => _controller.zoomUp()
-                              : null,
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        if (_pageCount > 0)
-          Positioned(
-            bottom: 16,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.black.withAlpha(150),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  '$_currentPage / $_pageCount',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontFamily: 'JetBrains Mono',
-                    fontFamilyFallback: ['monospace'],
-                  ),
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _PdfControlButton extends StatelessWidget {
-  const _PdfControlButton({
-    required this.icon,
-    required this.tooltip,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      visualDensity: VisualDensity.compact,
-      splashRadius: 18,
-      tooltip: tooltip,
-      onPressed: onTap,
-      icon: Icon(icon, color: Colors.white, size: 18),
-    );
-  }
-}
-
-class _PdfTextChip extends StatelessWidget {
-  const _PdfTextChip({required this.label, required this.onTap});
-
-  final String label;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(999),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: Colors.white.withAlpha(24),
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _ImagePreview extends StatelessWidget {

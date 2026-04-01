@@ -76,7 +76,6 @@ void main() {
 class _DelayedAppDatabase extends AppDatabase {
   _DelayedAppDatabase() : super(NativeDatabase.memory());
 
-  @override
   Future<String?> getState(String key) async {
     await Future<void>.delayed(const Duration(milliseconds: 30));
     final row = await (select(
