@@ -449,7 +449,10 @@ class _IdentityAuthFlowScreenState
       username: submittedUsername.isEmpty
           ? input.username.trim()
           : submittedUsername,
-      password: submittedPassword.isEmpty ? input.password : submittedPassword,
+      password: resolveEnrollmentPassword(
+        submittedPassword: submittedPassword,
+        fallbackPassword: input.password,
+      ),
       fingerPrint: (resolved['fingerPrint'] ?? '').trim(),
       fingerGenPrint: (resolved['fingerGenPrint'] ?? '').trim(),
       fingerGenPrint3: (resolved['fingerGenPrint3'] ?? '').trim(),

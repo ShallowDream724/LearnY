@@ -4,6 +4,7 @@ export 'app_session_coordinator.dart';
 export 'auth_controller.dart';
 export 'auth_entry_coordinator.dart';
 export 'auth_entry_models.dart';
+export 'identity_password_utils.dart';
 export 'auth_relogin_models.dart';
 export 'auth_relogin_service.dart';
 export 'auth_router_refresh_notifier.dart';
