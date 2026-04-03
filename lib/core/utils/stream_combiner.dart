@@ -187,3 +187,97 @@ Stream<R> combineLatest4<A, B, C, D, R>(
 
   return controller.stream;
 }
+
+Stream<R> combineLatest5<A, B, C, D, E, R>(
+  Stream<A> streamA,
+  Stream<B> streamB,
+  Stream<C> streamC,
+  Stream<D> streamD,
+  Stream<E> streamE,
+  R Function(A valueA, B valueB, C valueC, D valueD, E valueE) combine,
+) {
+  late final StreamController<R> controller;
+  StreamSubscription<A>? subA;
+  StreamSubscription<B>? subB;
+  StreamSubscription<C>? subC;
+  StreamSubscription<D>? subD;
+  StreamSubscription<E>? subE;
+  A? latestA;
+  B? latestB;
+  C? latestC;
+  D? latestD;
+  E? latestE;
+  var hasA = false;
+  var hasB = false;
+  var hasC = false;
+  var hasD = false;
+  var hasE = false;
+
+  void emitIfReady() {
+    if (!hasA || !hasB || !hasC || !hasD || !hasE || controller.isClosed) {
+      return;
+    }
+    controller.add(
+      combine(
+        latestA as A,
+        latestB as B,
+        latestC as C,
+        latestD as D,
+        latestE as E,
+      ),
+    );
+  }
+
+  controller = StreamController<R>(
+    onListen: () {
+      subA = streamA.listen((value) {
+        latestA = value;
+        hasA = true;
+        emitIfReady();
+      }, onError: controller.addError);
+      subB = streamB.listen((value) {
+        latestB = value;
+        hasB = true;
+        emitIfReady();
+      }, onError: controller.addError);
+      subC = streamC.listen((value) {
+        latestC = value;
+        hasC = true;
+        emitIfReady();
+      }, onError: controller.addError);
+      subD = streamD.listen((value) {
+        latestD = value;
+        hasD = true;
+        emitIfReady();
+      }, onError: controller.addError);
+      subE = streamE.listen((value) {
+        latestE = value;
+        hasE = true;
+        emitIfReady();
+      }, onError: controller.addError);
+    },
+    onPause: () {
+      subA?.pause();
+      subB?.pause();
+      subC?.pause();
+      subD?.pause();
+      subE?.pause();
+    },
+    onResume: () {
+      subA?.resume();
+      subB?.resume();
+      subC?.resume();
+      subD?.resume();
+      subE?.resume();
+    },
+    onCancel: () async {
+      await subA?.cancel();
+      await subB?.cancel();
+      await subC?.cancel();
+      await subD?.cancel();
+      await subE?.cancel();
+    },
+  );
+
+  return controller.stream;
+}

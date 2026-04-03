@@ -1,6 +1,7 @@
 /// Centralized keys for app-level persisted state.
 abstract final class AppStateKeys {
   static const String username = 'username';
+  static const String learningDataOwner = 'learning_data_owner';
   static const String userDepartment = 'user_department';
   static const String currentSemesterId = 'current_semester_id';
   static const String themeMode = 'theme_mode';
@@ -12,4 +13,6 @@ abstract final class AppStateKeys {
   static const String guideState = 'guide_state';
   static const String recentSearches = 'recent_searches';
   static const String homeScheduleSnapshot = 'home_schedule_snapshot';
+  static const String homeworkNoSubmissionNeededPrefix =
+      'homework_no_submission_needed';
 }

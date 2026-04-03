@@ -23,12 +23,18 @@ class AuthSessionStore {
     return _db.setState(AppStateKeys.username, username);
   }
 
+  Future<String?> readLearningDataOwner() {
+    return _db.getState(AppStateKeys.learningDataOwner);
+  }
+
+  Future<void> saveLearningDataOwner(String username) {
+    return _db.setState(AppStateKeys.learningDataOwner, username);
+  }
+
   Future<void> clear() {
     return Future.wait([
       _db.deleteState(AppStateKeys.username),
       _db.deleteState(AppStateKeys.identityAccountHint),
-      _db.deleteState(AppStateKeys.userDepartment),
-      _db.deleteState(AppStateKeys.currentSemesterId),
     ]);
   }
 }

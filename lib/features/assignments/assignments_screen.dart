@@ -11,19 +11,25 @@
 //   - _FilterRow         : filter pills
 //   - _TimelineSection   : group header + connector + children
 //   - _HomeworkItem      : individual assignment card
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/design/app_theme_colors.dart';
+import '../../core/design/app_toast.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/cooldown_toast.dart';
+import '../../core/design/homework_reminder_menu.dart';
 import '../../core/design/shimmer.dart';
 import '../../core/design/typography.dart';
 import '../../core/database/database.dart';
+import '../../core/providers/providers.dart';
 import '../../core/providers/sync_models.dart';
 import '../../core/router/router.dart';
+import '../../core/shell/shell_layout_metrics.dart';
 import '../../core/sync/sync_actions.dart';
 import '../../core/utils/deadline_time.dart';
 import '../../core/utils/homework_grade_display.dart';
@@ -46,7 +52,63 @@ _GroupMeta _groupMeta(AssignmentTimelineGroup g) => switch (g) {
   ),
   AssignmentTimelineGroup.later => _GroupMeta('更远', const Color(0xFF007AFF)),
   AssignmentTimelineGroup.done => _GroupMeta('已完成', const Color(0xFF34C759)),
+  AssignmentTimelineGroup.noSubmissionNeeded => _GroupMeta(
+    '无需提交',
+    const Color(0xFF8E8E93),
+  ),
 };
+
+Future<void> _handleHomeworkReminderAction({
+  required BuildContext context,
+  required WidgetRef ref,
+  required Homework homework,
+  required String courseName,
+  required bool isNoSubmissionNeeded,
+  required Offset anchor,
+}) async {
+  if (!isNoSubmissionNeeded && (homework.submitted || homework.graded)) {
+    return;
+  }
+
+  final action = await showHomeworkReminderMenu(
+    context,
+    title: homework.title,
+    courseName: courseName,
+    isNoSubmissionNeeded: isNoSubmissionNeeded,
+    anchor: anchor,
+  );
+  if (!context.mounted || action == null) {
+    return;
+  }
+
+  final markNoSubmissionNeeded =
+      action == HomeworkReminderMenuAction.markNoSubmissionNeeded;
+  await ref
+      .read(homeworkReminderActionsProvider)
+      .setNoSubmissionNeeded(
+        homework.id,
+        noSubmissionNeeded: markNoSubmissionNeeded,
+      );
+  if (!context.mounted) {
+    return;
+  }
+
+  AppToast.showInfo(
+    context,
+    message: markNoSubmissionNeeded ? '已设为无需提交' : '已恢复提交提醒',
+    actionLabel: '撤销',
+    onAction: () {
+      unawaited(
+        ref
+            .read(homeworkReminderActionsProvider)
+            .setNoSubmissionNeeded(
+              homework.id,
+              noSubmissionNeeded: !markNoSubmissionNeeded,
+            ),
+      );
+    },
+  );
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Screen
@@ -58,9 +120,13 @@ class AssignmentsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.colors;
+    final now = ref.watch(minuteTickProvider).valueOrNull ?? nowInShanghai();
     final filter = ref.watch(homeworkFilterProvider);
     final homeworkAsync = ref.watch(assignmentHomeworksProvider);
     final courseNameAsync = ref.watch(assignmentCourseNameMapProvider);
+    final noSubmissionNeededIds =
+        ref.watch(homeworkNoSubmissionNeededIdsProvider).valueOrNull ??
+        const <String>{};
 
     return Scaffold(
       body: RefreshIndicator(
@@ -85,7 +151,12 @@ class AssignmentsScreen extends ConsumerWidget {
               ),
             ),
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+              padding: EdgeInsets.fromLTRB(
+                16,
+                8,
+                16,
+                shellContentBottomInset(context),
+              ),
               sliver: homeworkAsync.when(
                 skipLoadingOnReload: true,
                 skipLoadingOnRefresh: true,
@@ -97,6 +168,8 @@ class AssignmentsScreen extends ConsumerWidget {
                   final presentation = buildAssignmentsPresentation(
                     homeworks: allHomeworks,
                     filter: filter,
+                    noSubmissionNeededIds: noSubmissionNeededIds,
+                    now: now,
                   );
 
                   return SliverList(
@@ -124,6 +197,7 @@ class AssignmentsScreen extends ConsumerWidget {
                             group: section.group,
                             homeworks: section.homeworks,
                             courseNames: courseNames,
+                            now: now,
                             onTapItem: (hw) {
                               final name = courseNames[hw.courseId] ?? '';
                               context.push(
@@ -134,6 +208,18 @@ class AssignmentsScreen extends ConsumerWidget {
                                 ),
                               );
                             },
+                            onLongPressItem:
+                                (hw, isNoSubmissionNeeded, anchor) {
+                                  final name = courseNames[hw.courseId] ?? '';
+                                  return _handleHomeworkReminderAction(
+                                    context: context,
+                                    ref: ref,
+                                    homework: hw,
+                                    courseName: name,
+                                    isNoSubmissionNeeded: isNoSubmissionNeeded,
+                                    anchor: anchor,
+                                  );
+                                },
                           ),
                         ),
                     ]),
@@ -307,8 +393,12 @@ class _FilterRow extends StatelessWidget {
       child: Row(
         children: HomeworkFilter.values.map((f) {
           final isSelected = f == current;
+          final selectedBg = switch (f) {
+            HomeworkFilter.noSubmissionNeeded => const Color(0xFF8E8E93),
+            _ => const Color(0xFF007AFF),
+          };
           final bg = isSelected
-              ? const Color(0xFF007AFF)
+              ? selectedBg
               : (context.isDark
                     ? const Color(0xFF2C2C2E)
                     : const Color(0xFFF5F5F7));
@@ -317,13 +407,13 @@ class _FilterRow extends StatelessWidget {
               : (context.isDark ? c.subtitle : const Color(0xFF636366));
 
           return Padding(
-            padding: const EdgeInsets.only(right: 8),
+            padding: const EdgeInsets.only(right: 6),
             child: GestureDetector(
               onTap: () => onChanged(f),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
+                  horizontal: 13,
                   vertical: 7,
                 ),
                 decoration: BoxDecoration(
@@ -341,7 +431,7 @@ class _FilterRow extends StatelessWidget {
                 child: Text(
                   _label(f),
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: 12.5,
                     fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                     color: fg,
                   ),
@@ -359,6 +449,7 @@ class _FilterRow extends StatelessWidget {
     HomeworkFilter.pending => '待提交',
     HomeworkFilter.submitted => '已提交',
     HomeworkFilter.graded => '已批改',
+    HomeworkFilter.noSubmissionNeeded => '无需提交',
   };
 }
 
@@ -370,13 +461,22 @@ class _TimelineSection extends StatelessWidget {
   final AssignmentTimelineGroup group;
   final List<Homework> homeworks;
   final Map<String, String> courseNames;
+  final DateTime now;
   final void Function(Homework hw) onTapItem;
+  final Future<void> Function(
+    Homework hw,
+    bool isNoSubmissionNeeded,
+    Offset anchor,
+  )
+  onLongPressItem;
 
   const _TimelineSection({
     required this.group,
     required this.homeworks,
     required this.courseNames,
+    required this.now,
     required this.onTapItem,
+    required this.onLongPressItem,
   });
 
   @override
@@ -384,6 +484,8 @@ class _TimelineSection extends StatelessWidget {
     final c = context.colors;
     final meta = _groupMeta(group);
     final isDone = group == AssignmentTimelineGroup.done;
+    final isNoSubmissionNeededGroup =
+        group == AssignmentTimelineGroup.noSubmissionNeeded;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 24),
@@ -456,7 +558,11 @@ class _TimelineSection extends StatelessWidget {
                     hw: hw,
                     courseName: courseName,
                     isDone: isDone,
+                    isNoSubmissionNeeded: isNoSubmissionNeededGroup,
+                    now: now,
                     onTap: () => onTapItem(hw),
+                    onLongPress: (anchor) =>
+                        onLongPressItem(hw, isNoSubmissionNeededGroup, anchor),
                   ),
                 );
               }).toList(),
@@ -476,13 +582,19 @@ class _HomeworkItem extends StatelessWidget {
   final Homework hw;
   final String courseName;
   final bool isDone;
+  final bool isNoSubmissionNeeded;
+  final DateTime now;
   final VoidCallback? onTap;
+  final ValueChanged<Offset>? onLongPress;
 
   const _HomeworkItem({
     required this.hw,
     required this.courseName,
     required this.isDone,
+    required this.isNoSubmissionNeeded,
+    required this.now,
     this.onTap,
+    this.onLongPress,
   });
 
   @override
@@ -494,11 +606,22 @@ class _HomeworkItem extends StatelessWidget {
       grade: hw.grade,
       gradeLevel: hw.gradeLevel,
     );
+    final useMonospaceDeadline = _usesMonospaceDeadline();
 
     // Card background
     Color cardBg;
     BoxBorder? cardBorder;
-    if (isGraded) {
+    if (isNoSubmissionNeeded) {
+      cardBg = context.isDark
+          ? const Color(0xFF2C2C2E)
+          : const Color(0xFFF3F4F6);
+      cardBorder = Border.all(
+        color: context.isDark
+            ? const Color(0xFF48484A).withAlpha(72)
+            : const Color(0xFFD1D1D6),
+        width: 0.5,
+      );
+    } else if (isGraded) {
       cardBg = context.isDark
           ? const Color(0xFF1A2E1A)
           : const Color(0xFFF0FFF4);
@@ -515,105 +638,121 @@ class _HomeworkItem extends StatelessWidget {
 
     return Opacity(
       opacity: opacity,
-      child: Material(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          onTap: onTap,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onLongPressStart: onLongPress == null
+            ? null
+            : (details) => onLongPress!(details.globalPosition),
+        child: Material(
+          color: cardBg,
           borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: cardBorder,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Top: course + status
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        courseName,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                          color: c.tertiary,
-                          letterSpacing: 0.2,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: cardBorder,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Top: course + status
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          courseName,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: c.tertiary,
+                            letterSpacing: 0.2,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    _StatusBadge(hw: hw),
-                  ],
-                ),
-                const SizedBox(height: 4),
-
-                // Mid: title + time/grade
-                Row(
-                  children: [
-                    if (isSubmitted && !isGraded) ...[
-                      Icon(
-                        Icons.check_circle_rounded,
-                        size: 14,
-                        color: const Color(0xFF007AFF).withAlpha(180),
+                      _StatusBadge(
+                        hw: hw,
+                        now: now,
+                        isNoSubmissionNeeded: isNoSubmissionNeeded,
                       ),
-                      const SizedBox(width: 5),
                     ],
-                    Expanded(
-                      child: Text(
-                        hw.title,
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: c.text,
-                          decoration: null,
+                  ),
+                  const SizedBox(height: 4),
+
+                  // Mid: title + time/grade
+                  Row(
+                    children: [
+                      if (isSubmitted && !isGraded) ...[
+                        Icon(
+                          Icons.check_circle_rounded,
+                          size: 14,
+                          color: const Color(0xFF007AFF).withAlpha(180),
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    if (isGraded && gradeDisplay.hasDisplayValue)
-                      Text(
-                        gradeDisplay.primaryLabel!,
-                        style: TextStyle(
-                          fontFamily: gradeDisplay.isNumeric
-                              ? 'JetBrains Mono'
-                              : null,
-                          fontFamilyFallback: gradeDisplay.isNumeric
-                              ? const ['monospace']
-                              : null,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF34C759),
-                        ),
-                      )
-                    else if (!isDone)
-                      Text(
-                        _formatDeadline(),
-                        style: TextStyle(
-                          fontFamily: 'JetBrains Mono',
-                          fontFamilyFallback: const ['monospace'],
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: -0.3,
-                          color: _deadlineColor(),
+                        const SizedBox(width: 5),
+                      ],
+                      Expanded(
+                        child: Text(
+                          hw.title,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: c.text,
+                            decoration: null,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    const SizedBox(width: 4),
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      size: 16,
-                      color: context.isDark
-                          ? const Color(0xFF48484A)
-                          : const Color(0xFFC7C7CC),
-                    ),
-                  ],
-                ),
-              ],
+                      const SizedBox(width: 12),
+                      if (isGraded && gradeDisplay.hasDisplayValue)
+                        Text(
+                          gradeDisplay.primaryLabel!,
+                          style: TextStyle(
+                            fontFamily: gradeDisplay.isNumeric
+                                ? 'JetBrains Mono'
+                                : null,
+                            fontFamilyFallback: gradeDisplay.isNumeric
+                                ? const ['monospace']
+                                : null,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF34C759),
+                          ),
+                        )
+                      else if (!isDone)
+                        Text(
+                          _formatDeadline(),
+                          style: TextStyle(
+                            fontFamily: useMonospaceDeadline
+                                ? 'JetBrains Mono'
+                                : null,
+                            fontFamilyFallback: useMonospaceDeadline
+                                ? const ['monospace']
+                                : null,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: useMonospaceDeadline ? -0.3 : 0,
+                            color: isNoSubmissionNeeded
+                                ? c.tertiary
+                                : _deadlineColor(),
+                          ),
+                        ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        size: 16,
+                        color: context.isDark
+                            ? const Color(0xFF48484A)
+                            : const Color(0xFFC7C7CC),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -626,7 +765,7 @@ class _HomeworkItem extends StatelessWidget {
   Color _deadlineColor() {
     final deadline = tryParseEpochMillisToLocal(hw.deadline);
     if (deadline == null) return const Color(0xFF007AFF);
-    final remaining = deadline.difference(nowInShanghai());
+    final remaining = deadline.difference(now);
     if (remaining.isNegative) return const Color(0xFFFF3B30);
     if (remaining.inHours < 24) return const Color(0xFFFF3B30);
     if (remaining.inHours < 72) return const Color(0xFFE8590C);
@@ -636,7 +775,6 @@ class _HomeworkItem extends StatelessWidget {
   String _formatDeadline() {
     final d = tryParseEpochMillisToLocal(hw.deadline);
     if (d == null) return hw.deadline;
-    final now = nowInShanghai();
     final remaining = d.difference(now);
 
     if (remaining.isNegative) {
@@ -647,10 +785,19 @@ class _HomeworkItem extends StatelessWidget {
     }
 
     if (remaining.inHours < 24) {
-      return '还剩${remaining.inHours}h${remaining.inMinutes.remainder(60)}m';
+      return '还剩 ${remaining.inHours}h ${remaining.inMinutes.remainder(60)}m';
     }
 
     return formatRelativeDeadlineLabel(d, now: now);
+  }
+
+  bool _usesMonospaceDeadline() {
+    final d = tryParseEpochMillisToLocal(hw.deadline);
+    if (d == null) {
+      return true;
+    }
+    final remaining = d.difference(now);
+    return remaining.isNegative || remaining.inHours >= 24;
   }
 }
 
@@ -660,8 +807,14 @@ class _HomeworkItem extends StatelessWidget {
 
 class _StatusBadge extends StatelessWidget {
   final Homework hw;
+  final DateTime now;
+  final bool isNoSubmissionNeeded;
 
-  const _StatusBadge({required this.hw});
+  const _StatusBadge({
+    required this.hw,
+    required this.now,
+    required this.isNoSubmissionNeeded,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -685,10 +838,11 @@ class _StatusBadge extends StatelessWidget {
   }
 
   (String, Color) _data() {
+    if (isNoSubmissionNeeded) return ('无需提交', const Color(0xFF8E8E93));
     if (hw.graded) return ('已批改', const Color(0xFF34C759));
     if (hw.submitted) return ('已提交', const Color(0xFF007AFF));
     final deadline = tryParseEpochMillisToLocal(hw.deadline);
-    if (deadline != null && deadline.isBefore(nowInShanghai())) {
+    if (deadline != null && deadline.isBefore(now)) {
       return ('已超期', const Color(0xFFFF3B30));
     }
     return ('待提交', const Color(0xFFFF9500));

@@ -17,6 +17,7 @@ import '../../core/design/shimmer.dart';
 import '../../core/design/typography.dart';
 import '../../core/providers/providers.dart';
 import '../../core/providers/sync_models.dart';
+import '../../core/shell/shell_layout_metrics.dart';
 import '../../core/sync/sync_actions.dart';
 import 'providers/home_providers.dart';
 import 'providers/home_schedule_provider.dart';
@@ -237,7 +238,7 @@ class _HomeContentSliver extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+      padding: EdgeInsets.fromLTRB(16, 8, 16, shellContentBottomInset(context)),
       sliver: SliverList(
         delegate: SliverChildListDelegate([
           HomeStatsSection(onUnreadTap: onUnreadStatTap),

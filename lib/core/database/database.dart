@@ -10,6 +10,7 @@ part 'database.g.dart';
 part 'daos/app_state_dao.dart';
 part 'daos/cached_asset_dao.dart';
 part 'daos/course_dao.dart';
+part 'daos/course_display_prefs_dao.dart';
 part 'daos/file_dao.dart';
 part 'daos/file_bookmark_dao.dart';
 part 'daos/homework_dao.dart';
@@ -171,6 +172,21 @@ class Homeworks extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// Local presentation preferences for the course workbench.
+class CourseDisplayPrefs extends Table {
+  TextColumn get ownerKey => text()();
+  TextColumn get semesterId => text()();
+  TextColumn get courseId => text()();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  TextColumn get iconKey => text().nullable()();
+  TextColumn get alias => text().nullable()();
+  TextColumn get accentKey => text().nullable()();
+  TextColumn get updatedAt => text()();
+
+  @override
+  Set<Column> get primaryKey => {ownerKey, semesterId, courseId};
+}
+
 /// Key-value store for app state and preferences.
 class AppState extends Table {
   TextColumn get key => text()();
@@ -193,6 +209,7 @@ class AppState extends Table {
     CachedAssets,
     FileBookmarks,
     Homeworks,
+    CourseDisplayPrefs,
     AppState,
   ],
 )
@@ -200,7 +217,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -246,6 +263,9 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 5 && !await _tableHasColumn('file_bookmarks', 'course_name')) {
         await m.addColumn(fileBookmarks, fileBookmarks.courseName);
+      }
+      if (from < 6) {
+        await m.createTable(courseDisplayPrefs);
       }
     },
   );

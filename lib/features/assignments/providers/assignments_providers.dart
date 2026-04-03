@@ -4,15 +4,22 @@ import '../../../core/database/database.dart';
 import '../../../core/providers/providers.dart';
 import '../../../core/utils/deadline_time.dart';
 
-enum HomeworkFilter { all, pending, submitted, graded }
+enum HomeworkFilter { all, pending, submitted, graded, noSubmissionNeeded }
 
-enum AssignmentTimelineGroup { thisWeek, nextWeek, later, done }
+enum AssignmentTimelineGroup {
+  thisWeek,
+  nextWeek,
+  later,
+  done,
+  noSubmissionNeeded,
+}
 
 const assignmentTimelineOrder = <AssignmentTimelineGroup>[
   AssignmentTimelineGroup.thisWeek,
   AssignmentTimelineGroup.nextWeek,
   AssignmentTimelineGroup.later,
   AssignmentTimelineGroup.done,
+  AssignmentTimelineGroup.noSubmissionNeeded,
 ];
 
 class AssignmentStats {
@@ -92,16 +99,27 @@ final homeworkDetailProvider = StreamProvider.family<Homework?, String>((
 AssignmentsPresentation buildAssignmentsPresentation({
   required List<Homework> homeworks,
   required HomeworkFilter filter,
+  Set<String> noSubmissionNeededIds = const <String>{},
   DateTime? now,
 }) {
   final resolvedNow = now ?? nowInShanghai();
   final filteredHomeworks = homeworks
-      .where((homework) => _matchesFilter(homework, filter))
+      .where(
+        (homework) => _matchesFilter(
+          homework,
+          filter,
+          noSubmissionNeededIds: noSubmissionNeededIds,
+        ),
+      )
       .toList();
   final groupedHomeworks = <AssignmentTimelineGroup, List<Homework>>{};
 
   for (final homework in filteredHomeworks) {
-    final group = _classifyHomework(homework, resolvedNow);
+    final group = _classifyHomework(
+      homework,
+      resolvedNow,
+      noSubmissionNeededIds: noSubmissionNeededIds,
+    );
     (groupedHomeworks[group] ??= []).add(homework);
   }
 
@@ -118,7 +136,11 @@ AssignmentsPresentation buildAssignmentsPresentation({
       .toList();
 
   return AssignmentsPresentation(
-    stats: _computeAssignmentStats(homeworks, resolvedNow),
+    stats: _computeAssignmentStats(
+      homeworks,
+      resolvedNow,
+      noSubmissionNeededIds: noSubmissionNeededIds,
+    ),
     filteredHomeworks: filteredHomeworks,
     sections: sections,
   );
@@ -126,8 +148,9 @@ AssignmentsPresentation buildAssignmentsPresentation({
 
 AssignmentStats _computeAssignmentStats(
   List<Homework> homeworks,
-  DateTime now,
-) {
+  DateTime now, {
+  required Set<String> noSubmissionNeededIds,
+}) {
   var pending = 0;
   var submitted = 0;
   var graded = 0;
@@ -140,6 +163,10 @@ AssignmentStats _computeAssignmentStats(
     }
     if (homework.submitted) {
       submitted++;
+      continue;
+    }
+
+    if (noSubmissionNeededIds.contains(homework.id)) {
       continue;
     }
 
@@ -160,18 +187,36 @@ AssignmentStats _computeAssignmentStats(
   );
 }
 
-bool _matchesFilter(Homework homework, HomeworkFilter filter) {
+bool _matchesFilter(
+  Homework homework,
+  HomeworkFilter filter, {
+  required Set<String> noSubmissionNeededIds,
+}) {
+  final isNoSubmissionNeeded =
+      noSubmissionNeededIds.contains(homework.id) &&
+      !homework.submitted &&
+      !homework.graded;
   return switch (filter) {
-    HomeworkFilter.pending => !homework.submitted && !homework.graded,
+    HomeworkFilter.pending =>
+      !homework.submitted && !homework.graded && !isNoSubmissionNeeded,
     HomeworkFilter.submitted => homework.submitted && !homework.graded,
     HomeworkFilter.graded => homework.graded,
+    HomeworkFilter.noSubmissionNeeded => isNoSubmissionNeeded,
     HomeworkFilter.all => true,
   };
 }
 
-AssignmentTimelineGroup _classifyHomework(Homework homework, DateTime now) {
+AssignmentTimelineGroup _classifyHomework(
+  Homework homework,
+  DateTime now, {
+  required Set<String> noSubmissionNeededIds,
+}) {
   if (homework.submitted || homework.graded) {
     return AssignmentTimelineGroup.done;
+  }
+
+  if (noSubmissionNeededIds.contains(homework.id)) {
+    return AssignmentTimelineGroup.noSubmissionNeeded;
   }
 
   final deadlineMs = int.tryParse(homework.deadline);

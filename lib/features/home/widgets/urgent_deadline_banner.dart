@@ -19,12 +19,14 @@ class UrgentDeadlineBanner extends ConsumerStatefulWidget {
   final List<HomeworkSummary> assignments;
   final int pendingAssignments;
   final void Function(HomeworkSummary hw)? onTap;
+  final Future<void> Function(HomeworkSummary hw, Offset anchor)? onLongPress;
 
   const UrgentDeadlineBanner({
     super.key,
     required this.assignments,
     required this.pendingAssignments,
     this.onTap,
+    this.onLongPress,
   });
 
   @override
@@ -334,116 +336,123 @@ class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
               final color = _tierColor(tier);
               final dateSub = _formatDateSub(hw);
 
-              return InkWell(
-                onTap: () => widget.onTap?.call(hw),
-                child: Container(
-                  padding: EdgeInsets.fromLTRB(16, 11, 16, isLast ? 14 : 11),
-                  decoration: BoxDecoration(
-                    border: isLast
-                        ? null
-                        : Border(bottom: BorderSide(color: dividerColor)),
-                  ),
-                  child: Row(
-                    children: [
-                      // Sequence number
-                      SizedBox(
-                        width: 18,
-                        child: Text(
-                          '${index + 1}',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontFamily: 'JetBrains Mono',
-                            fontFamilyFallback: const ['monospace'],
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: color.withAlpha(
-                              tier == _UrgencyTier.critical
-                                  ? 153 // 0.6
-                                  : tier == _UrgencyTier.warning
-                                  ? 128 // 0.5
-                                  : 89, // 0.35
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      // Content
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              hw.courseName,
-                              style: AppTypography.bodySmall.copyWith(
-                                color: secondaryTextColor,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                                letterSpacing: 0.2,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              hw.title,
-                              style: AppTypography.bodyMedium.copyWith(
-                                color: isDark
-                                    ? c.text
-                                    : const Color(0xFF1C1C1E),
-                                fontWeight: FontWeight.w600,
-                                fontSize: 15,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      // Time display
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            _formatCountdown(hw),
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onLongPressStart: widget.onLongPress == null
+                    ? null
+                    : (details) =>
+                          widget.onLongPress?.call(hw, details.globalPosition),
+                child: InkWell(
+                  onTap: () => widget.onTap?.call(hw),
+                  child: Container(
+                    padding: EdgeInsets.fromLTRB(16, 11, 16, isLast ? 14 : 11),
+                    decoration: BoxDecoration(
+                      border: isLast
+                          ? null
+                          : Border(bottom: BorderSide(color: dividerColor)),
+                    ),
+                    child: Row(
+                      children: [
+                        // Sequence number
+                        SizedBox(
+                          width: 18,
+                          child: Text(
+                            '${index + 1}',
+                            textAlign: TextAlign.center,
                             style: TextStyle(
                               fontFamily: 'JetBrains Mono',
                               fontFamilyFallback: const ['monospace'],
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: -0.5,
-                              color: color,
-                            ),
-                          ),
-                          if (dateSub.isNotEmpty) ...[
-                            const SizedBox(height: 2),
-                            Text(
-                              dateSub,
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w500,
-                                color: tertiaryTextColor,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: color.withAlpha(
+                                tier == _UrgencyTier.critical
+                                    ? 153 // 0.6
+                                    : tier == _UrgencyTier.warning
+                                    ? 128 // 0.5
+                                    : 89, // 0.35
                               ),
                             ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        // Content
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                hw.courseName,
+                                style: AppTypography.bodySmall.copyWith(
+                                  color: secondaryTextColor,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  letterSpacing: 0.2,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                hw.title,
+                                style: AppTypography.bodyMedium.copyWith(
+                                  color: isDark
+                                      ? c.text
+                                      : const Color(0xFF1C1C1E),
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 15,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        // Time display
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              _formatCountdown(hw),
+                              style: TextStyle(
+                                fontFamily: 'JetBrains Mono',
+                                fontFamilyFallback: const ['monospace'],
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: -0.5,
+                                color: color,
+                              ),
+                            ),
+                            if (dateSub.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                dateSub,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w500,
+                                  color: tertiaryTextColor,
+                                ),
+                              ),
+                            ],
+                            // Progress bar for critical items
+                            if (tier == _UrgencyTier.critical &&
+                                !hw.isOverdue) ...[
+                              const SizedBox(height: 3),
+                              _ProgressBar(remaining: hw.timeRemaining),
+                            ],
                           ],
-                          // Progress bar for critical items
-                          if (tier == _UrgencyTier.critical &&
-                              !hw.isOverdue) ...[
-                            const SizedBox(height: 3),
-                            _ProgressBar(remaining: hw.timeRemaining),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(width: 4),
-                      // Chevron
-                      Icon(
-                        Icons.chevron_right_rounded,
-                        size: 16,
-                        color: isDark
-                            ? const Color(0xFF48484A)
-                            : const Color(0xFFD0C0B0),
-                      ),
-                    ],
+                        ),
+                        const SizedBox(width: 4),
+                        // Chevron
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          size: 16,
+                          color: isDark
+                              ? const Color(0xFF48484A)
+                              : const Color(0xFFD0C0B0),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               );

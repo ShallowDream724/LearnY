@@ -1,10 +1,12 @@
 /// App shell — adaptive navigation: bottom bar on phones, side rail on tablets.
 ///
-/// Uses Material 3 NavigationBar (compact) / NavigationRail (medium+).
-/// 4 tabs: Home, Assignments, Courses, Profile.
+/// Phone keeps the top-level tabs in a swipeable PageView and mirrors its
+/// progress into the bottom bar for lightweight transition feedback.
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -15,6 +17,31 @@ import '../design/typography.dart';
 import '../providers/providers.dart';
 import '../providers/connectivity_provider.dart';
 import '../router/router.dart';
+import 'jelly_bottom_nav_bar.dart';
+import 'shell_nav_motion.dart';
+
+const _shellDestinations = <ShellNavDestinationData>[
+  ShellNavDestinationData(
+    icon: Icons.home_outlined,
+    selectedIcon: Icons.home_rounded,
+    label: '首页',
+  ),
+  ShellNavDestinationData(
+    icon: Icons.assignment_outlined,
+    selectedIcon: Icons.assignment_rounded,
+    label: '作业',
+  ),
+  ShellNavDestinationData(
+    icon: Icons.school_outlined,
+    selectedIcon: Icons.school_rounded,
+    label: '课程',
+  ),
+  ShellNavDestinationData(
+    icon: Icons.person_outlined,
+    selectedIcon: Icons.person_rounded,
+    label: '我的',
+  ),
+];
 
 class AppShell extends ConsumerWidget {
   final StatefulNavigationShell navigationShell;
@@ -25,6 +52,7 @@ class AppShell extends ConsumerWidget {
     if (index == navigationShell.currentIndex) {
       return;
     }
+    HapticFeedback.selectionClick();
     navigationShell.goBranch(index);
   }
 
@@ -34,6 +62,8 @@ class AppShell extends ConsumerWidget {
     final useRail = shouldShowRail(context);
     final auth = ref.watch(authProvider);
     final connectivity = ref.watch(connectivityProvider);
+    final pageProgress = ref.watch(shellPageProgressProvider);
+    final resolvedPageProgress = pageProgress ?? index.toDouble();
     final isOffline = connectivity.status == NetworkStatus.offline;
     final isSessionExpired = auth.requiresReauthentication;
     final currentLocation = GoRouterState.of(context).uri.toString();
@@ -65,7 +95,7 @@ class AppShell extends ConsumerWidget {
     if (useRail) {
       return _buildRailLayout(context, index, content);
     }
-    return _buildBottomNavLayout(context, index, content);
+    return _buildBottomNavLayout(context, resolvedPageProgress, content);
   }
 
   // ─────────────────────────────────────────────
@@ -136,27 +166,13 @@ class AppShell extends ConsumerWidget {
                         ),
                       ),
               ),
-              destinations: const [
-                NavigationRailDestination(
-                  icon: Icon(Icons.home_outlined),
-                  selectedIcon: Icon(Icons.home_rounded),
-                  label: Text('首页'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.assignment_outlined),
-                  selectedIcon: Icon(Icons.assignment_rounded),
-                  label: Text('作业'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.school_outlined),
-                  selectedIcon: Icon(Icons.school_rounded),
-                  label: Text('课程'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.person_outlined),
-                  selectedIcon: Icon(Icons.person_rounded),
-                  label: Text('我的'),
-                ),
+              destinations: [
+                for (final destination in _shellDestinations)
+                  NavigationRailDestination(
+                    icon: Icon(destination.icon),
+                    selectedIcon: Icon(destination.selectedIcon),
+                    label: Text(destination.label),
+                  ),
               ],
             ),
           ),
@@ -174,45 +190,16 @@ class AppShell extends ConsumerWidget {
 
   Widget _buildBottomNavLayout(
     BuildContext context,
-    int index,
+    double pageProgress,
     Widget content,
   ) {
-    final c = context.colors;
-
     return Scaffold(
+      extendBody: true,
       body: content,
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          border: Border(top: BorderSide(color: c.border, width: 0.5)),
-        ),
-        child: NavigationBar(
-          selectedIndex: index,
-          onDestinationSelected: (i) => _onTap(context, i),
-          height: Spacing.bottomNavHeight,
-          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-          destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home_rounded),
-              label: '首页',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.assignment_outlined),
-              selectedIcon: Icon(Icons.assignment_rounded),
-              label: '作业',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.school_outlined),
-              selectedIcon: Icon(Icons.school_rounded),
-              label: '课程',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.person_outlined),
-              selectedIcon: Icon(Icons.person_rounded),
-              label: '我的',
-            ),
-          ],
-        ),
+      bottomNavigationBar: JellyBottomNavBar(
+        destinations: _shellDestinations,
+        pageProgress: pageProgress,
+        onTap: (i) => _onTap(context, i),
       ),
     );
   }
@@ -229,7 +216,7 @@ Widget buildAppShellBranchContainer(
   );
 }
 
-class _AppShellBranchContainer extends StatefulWidget {
+class _AppShellBranchContainer extends ConsumerStatefulWidget {
   const _AppShellBranchContainer({
     required this.navigationShell,
     required this.children,
@@ -239,13 +226,18 @@ class _AppShellBranchContainer extends StatefulWidget {
   final List<Widget> children;
 
   @override
-  State<_AppShellBranchContainer> createState() =>
+  ConsumerState<_AppShellBranchContainer> createState() =>
       _AppShellBranchContainerState();
 }
 
-class _AppShellBranchContainerState extends State<_AppShellBranchContainer> {
+class _AppShellBranchContainerState
+    extends ConsumerState<_AppShellBranchContainer>
+    with SingleTickerProviderStateMixin {
   late final PageController _pageController;
+  late final AnimationController _navProgressController;
+  Animation<double>? _navProgressAnimation;
   bool _isSyncingFromShell = false;
+  bool _ignorePageProgressListener = false;
 
   @override
   void initState() {
@@ -253,6 +245,10 @@ class _AppShellBranchContainerState extends State<_AppShellBranchContainer> {
     _pageController = PageController(
       initialPage: widget.navigationShell.currentIndex,
     );
+    _navProgressController = AnimationController(vsync: this)
+      ..addListener(_handleVisualProgressTick);
+    _pageController.addListener(_handlePageProgressChanged);
+    _setShellPageProgress(widget.navigationShell.currentIndex.toDouble());
   }
 
   @override
@@ -262,10 +258,17 @@ class _AppShellBranchContainerState extends State<_AppShellBranchContainer> {
         widget.navigationShell.currentIndex) {
       _syncToShellIndex(widget.navigationShell.currentIndex);
     }
+    if (shouldShowRail(context)) {
+      _setShellPageProgress(widget.navigationShell.currentIndex.toDouble());
+    }
   }
 
   @override
   void dispose() {
+    _navProgressController
+      ..removeListener(_handleVisualProgressTick)
+      ..dispose();
+    _pageController.removeListener(_handlePageProgressChanged);
     _pageController.dispose();
     super.dispose();
   }
@@ -299,6 +302,50 @@ class _AppShellBranchContainerState extends State<_AppShellBranchContainer> {
     );
   }
 
+  void _handlePageProgressChanged() {
+    if (!_pageController.hasClients || _ignorePageProgressListener) {
+      return;
+    }
+    _stopVisualProgressAnimation();
+    final page =
+        _pageController.page ?? widget.navigationShell.currentIndex.toDouble();
+    _setShellPageProgress(page);
+  }
+
+  void _handleVisualProgressTick() {
+    final value = _navProgressAnimation?.value;
+    if (value == null) {
+      return;
+    }
+    _setShellPageProgress(value);
+  }
+
+  void _setShellPageProgress(double page) {
+    if (!mounted) {
+      return;
+    }
+
+    void write() {
+      if (!mounted) {
+        return;
+      }
+      final current = ref.read(shellPageProgressProvider);
+      if (current != null && (current - page).abs() < 0.0001) {
+        return;
+      }
+      ref.read(shellPageProgressProvider.notifier).state = page;
+    }
+
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    if (phase == SchedulerPhase.idle ||
+        phase == SchedulerPhase.postFrameCallbacks) {
+      write();
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => write());
+  }
+
   Future<void> _syncToShellIndex(int targetIndex) async {
     if (!_pageController.hasClients) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -312,6 +359,8 @@ class _AppShellBranchContainerState extends State<_AppShellBranchContainer> {
     final currentPage =
         _pageController.page?.round() ?? _pageController.initialPage;
     if (currentPage == targetIndex) {
+      _stopVisualProgressAnimation();
+      _setShellPageProgress(targetIndex.toDouble());
       return;
     }
 
@@ -319,8 +368,22 @@ class _AppShellBranchContainerState extends State<_AppShellBranchContainer> {
     try {
       final distance = (currentPage - targetIndex).abs();
       if (distance > 1) {
+        final fromProgress =
+            ref.read(shellPageProgressProvider) ?? currentPage.toDouble();
+        _ignorePageProgressListener = true;
         _pageController.jumpToPage(targetIndex);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _ignorePageProgressListener = false;
+          }
+        });
+        _animateShellProgress(
+          from: fromProgress,
+          to: targetIndex.toDouble(),
+          distance: distance,
+        );
       } else {
+        _stopVisualProgressAnimation();
         await _pageController.animateToPage(
           targetIndex,
           duration: const Duration(milliseconds: 280),
@@ -330,6 +393,46 @@ class _AppShellBranchContainerState extends State<_AppShellBranchContainer> {
     } finally {
       _isSyncingFromShell = false;
     }
+  }
+
+  void _animateShellProgress({
+    required double from,
+    required double to,
+    required int distance,
+  }) {
+    if ((from - to).abs() < 0.0001) {
+      _setShellPageProgress(to);
+      return;
+    }
+
+    _navProgressController.stop();
+    _navProgressController.duration = Duration(
+      milliseconds: switch (distance) {
+        0 || 1 => 280,
+        2 => 340,
+        _ => 400,
+      },
+    );
+    _navProgressAnimation = Tween<double>(
+      begin: from,
+      end: to,
+    ).animate(
+      CurvedAnimation(
+        parent: _navProgressController,
+        curve: Curves.easeOutCubic,
+      ),
+    );
+    _navProgressController
+      ..value = 0
+      ..forward();
+  }
+
+  void _stopVisualProgressAnimation() {
+    if (!_navProgressController.isAnimating) {
+      return;
+    }
+    _navProgressController.stop();
+    _navProgressAnimation = null;
   }
 
   bool _isTopLevelTabPath(String path) {

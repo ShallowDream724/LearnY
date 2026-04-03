@@ -122,6 +122,74 @@ void main() {
         'monday-deadline',
       );
     });
+
+    test(
+      'moves no-submission-needed homework to the bottom and excludes it from pending stats',
+      () {
+        final now = DateTime(2026, 3, 18, 10);
+        final presentation = buildAssignmentsPresentation(
+          homeworks: [
+            _homework(
+              id: 'normal',
+              courseId: 'course-1',
+              deadline: now.add(const Duration(hours: 6)),
+            ),
+            _homework(
+              id: 'no-need',
+              courseId: 'course-1',
+              deadline: now.subtract(const Duration(hours: 2)),
+            ),
+          ],
+          filter: HomeworkFilter.all,
+          noSubmissionNeededIds: const {'no-need'},
+          now: now,
+        );
+
+        expect(presentation.stats.pending, 1);
+        expect(presentation.stats.overdue, 0);
+        expect(presentation.sections.map((section) => section.group).toList(), [
+          AssignmentTimelineGroup.thisWeek,
+          AssignmentTimelineGroup.noSubmissionNeeded,
+        ]);
+        expect(presentation.sections.last.homeworks.single.id, 'no-need');
+      },
+    );
+
+    test(
+      'filters only no-submission-needed homework when that filter is selected',
+      () {
+        final now = DateTime(2026, 3, 18, 10);
+        final presentation = buildAssignmentsPresentation(
+          homeworks: [
+            _homework(
+              id: 'normal',
+              courseId: 'course-1',
+              deadline: now.add(const Duration(hours: 6)),
+            ),
+            _homework(
+              id: 'no-need',
+              courseId: 'course-1',
+              deadline: now.add(const Duration(hours: 4)),
+            ),
+          ],
+          filter: HomeworkFilter.noSubmissionNeeded,
+          noSubmissionNeededIds: const {'no-need'},
+          now: now,
+        );
+
+        expect(
+          presentation.filteredHomeworks
+              .map((homework) => homework.id)
+              .toList(),
+          ['no-need'],
+        );
+        expect(presentation.sections, hasLength(1));
+        expect(
+          presentation.sections.single.group,
+          AssignmentTimelineGroup.noSubmissionNeeded,
+        );
+      },
+    );
   });
 }
 

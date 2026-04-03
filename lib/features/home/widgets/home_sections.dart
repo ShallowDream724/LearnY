@@ -8,6 +8,7 @@ import '../../../core/design/app_theme_colors.dart';
 import '../../../core/design/app_toast.dart';
 import '../../../core/design/colors.dart';
 import '../../../core/design/file_type_utils.dart';
+import '../../../core/design/homework_reminder_menu.dart';
 import '../../../core/design/swipe_to_read.dart';
 import '../../../core/design/typography.dart';
 import '../../../core/providers/providers.dart';
@@ -165,6 +166,43 @@ class HomeUrgentAssignmentsSection extends ConsumerWidget {
               courseName: hw.courseName,
             ),
           ),
+          onLongPress: (hw, anchor) async {
+            final action = await showHomeworkReminderMenu(
+              context,
+              title: hw.title,
+              courseName: hw.courseName,
+              isNoSubmissionNeeded: false,
+              anchor: anchor,
+            );
+            if (!context.mounted || action == null) {
+              return;
+            }
+
+            await ref
+                .read(homeworkReminderActionsProvider)
+                .setNoSubmissionNeeded(
+                  hw.id,
+                  noSubmissionNeeded:
+                      action ==
+                      HomeworkReminderMenuAction.markNoSubmissionNeeded,
+                );
+            if (!context.mounted) {
+              return;
+            }
+
+            AppToast.showInfo(
+              context,
+              message: '已设为无需提交',
+              actionLabel: '撤销',
+              onAction: () {
+                unawaited(
+                  ref
+                      .read(homeworkReminderActionsProvider)
+                      .setNoSubmissionNeeded(hw.id, noSubmissionNeeded: false),
+                );
+              },
+            );
+          },
         ),
         const SizedBox(height: 16),
       ],

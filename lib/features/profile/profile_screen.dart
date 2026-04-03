@@ -13,6 +13,7 @@ import '../../core/design/colors.dart';
 import '../../core/design/typography.dart';
 import '../../core/providers/providers.dart';
 import '../../core/router/router.dart';
+import '../../core/shell/shell_layout_metrics.dart';
 import '../../core/utils/china_time.dart';
 import '../files/providers/file_bookmark_providers.dart';
 import 'providers/profile_identity_provider.dart';
@@ -48,7 +49,12 @@ class ProfileScreen extends ConsumerWidget {
             ),
           ),
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+            padding: EdgeInsets.fromLTRB(
+              16,
+              8,
+              16,
+              shellContentBottomInset(context),
+            ),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
                 // ── User Card ──

@@ -27,8 +27,14 @@ class PdfPreviewSurface extends StatefulWidget {
 
 class _PdfPreviewSurfaceState extends State<PdfPreviewSurface> {
   static const _chromeHideDelay = Duration(seconds: 3);
+  static const _selectionHandleHitBoxSize = 44.0;
+  static const _leftSelectionHandleVerticalBias = 0.48;
+  static const _scrollThumbWidth = 6.0;
+  static const _scrollThumbHeight = 52.0;
 
   late final PdfViewerController _controller;
+  late final TextEditingController _pageInputController;
+  late final FocusNode _pageInputFocusNode;
   Timer? _chromeTimer;
 
   int _pageCount = 0;
@@ -42,11 +48,33 @@ class _PdfPreviewSurfaceState extends State<PdfPreviewSurface> {
   void initState() {
     super.initState();
     _controller = PdfViewerController();
+    _pageInputController = TextEditingController(text: '1');
+    _pageInputFocusNode = FocusNode()
+      ..addListener(() {
+        if (!mounted) {
+          return;
+        }
+        if (_pageInputFocusNode.hasFocus) {
+          _chromeTimer?.cancel();
+          if (!_chromeVisible) {
+            setState(() => _chromeVisible = true);
+          } else {
+            setState(() {});
+          }
+          return;
+        }
+        setState(() {});
+        if (!_hasSelectedText && !_isDraggingSelectionHandle) {
+          _showChrome();
+        }
+      });
   }
 
   @override
   void dispose() {
     _chromeTimer?.cancel();
+    _pageInputController.dispose();
+    _pageInputFocusNode.dispose();
     super.dispose();
   }
 
@@ -85,11 +113,16 @@ class _PdfPreviewSurfaceState extends State<PdfPreviewSurface> {
     if (!_hasSelectedText && mounted && !_chromeVisible) {
       setState(() => _chromeVisible = true);
     }
-    if (_hasSelectedText || _isDraggingSelectionHandle) {
+    if (_hasSelectedText ||
+        _isDraggingSelectionHandle ||
+        _pageInputFocusNode.hasFocus) {
       return;
     }
     _chromeTimer = Timer(_chromeHideDelay, () {
-      if (!mounted || _hasSelectedText || _isDraggingSelectionHandle) {
+      if (!mounted ||
+          _hasSelectedText ||
+          _isDraggingSelectionHandle ||
+          _pageInputFocusNode.hasFocus) {
         return;
       }
       setState(() => _chromeVisible = false);
@@ -98,10 +131,81 @@ class _PdfPreviewSurfaceState extends State<PdfPreviewSurface> {
 
   void _hideChromeImmediately() {
     _chromeTimer?.cancel();
-    if (!mounted || !_chromeVisible) {
+    if (!mounted || !_chromeVisible || _pageInputFocusNode.hasFocus) {
       return;
     }
     setState(() => _chromeVisible = false);
+  }
+
+  void _syncPageInput({bool preserveSelection = false}) {
+    final nextText = _currentPage.toString();
+    if (_pageInputController.text == nextText) {
+      return;
+    }
+    final selection = preserveSelection
+        ? _pageInputController.selection
+        : TextSelection.collapsed(offset: nextText.length);
+    _pageInputController.value = TextEditingValue(
+      text: nextText,
+      selection: selection,
+      composing: TextRange.empty,
+    );
+  }
+
+  Future<void> _submitPageJump() async {
+    final raw = _pageInputController.text.trim();
+    final target = int.tryParse(raw);
+    if (target == null || target < 1 || target > _pageCount) {
+      AppToast.showWarning(context, message: '请输入 1 - $_pageCount 的页码');
+      _syncPageInput();
+      return;
+    }
+
+    await _controller.goToPage(pageNumber: target, anchor: PdfPageAnchor.top);
+    if (!mounted) {
+      return;
+    }
+    _pageInputFocusNode.unfocus();
+    _syncPageInput();
+    _showChrome();
+  }
+
+  Widget _buildViewerScrollThumb() {
+    return PdfViewerScrollThumb(
+      controller: _controller,
+      orientation: ScrollbarOrientation.right,
+      margin: 10,
+      thumbSize: const Size(_scrollThumbWidth, _scrollThumbHeight),
+      thumbBuilder: (context, thumbSize, pageNumber, controller) {
+        return IgnorePointer(
+          ignoring: _hasSelectedText,
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 160),
+            opacity: _hasSelectedText ? 0 : (_chromeVisible ? 0.96 : 0.68),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: const Color(0xFF1F2430).withAlpha(
+                  context.isDark ? 176 : 148,
+                ),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(
+                  color: Colors.white.withAlpha(context.isDark ? 28 : 42),
+                  width: 0.8,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withAlpha(26),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: SizedBox(width: thumbSize.width, height: thumbSize.height),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   void _handleSelectionChanged(PdfTextSelection selection) {
@@ -210,46 +314,47 @@ class _PdfPreviewSurfaceState extends State<PdfPreviewSurface> {
       return null;
     }
 
-    return AdaptiveTextSelectionToolbar.buttonItems(
-      anchors: TextSelectionToolbarAnchors(
-        primaryAnchor: params.anchorA,
-        secondaryAnchor: params.anchorB,
+    return Align(
+      alignment: Alignment.topLeft,
+      child: AdaptiveTextSelectionToolbar.buttonItems(
+        anchors: TextSelectionToolbarAnchors(
+          primaryAnchor: params.anchorA,
+          secondaryAnchor: params.anchorB,
+        ),
+        buttonItems: items,
       ),
-      buttonItems: items,
     );
   }
 
   Widget _buildSelectionHandle(
     BuildContext context,
     PdfTextSelectionAnchor anchor,
-    PdfViewerTextSelectionAnchorHandleState state,
+    PdfViewerTextSelectionAnchorHandleState _,
   ) {
     final c = context.colors;
-    final handleType = _selectionHandleType(anchor);
-    final lineExtent = _selectionHandleLineExtent(anchor);
+    final geometry = _selectionHandleGeometry(anchor);
 
     return CupertinoTheme(
       data: CupertinoThemeData(
         brightness: context.isDark ? Brightness.dark : Brightness.light,
         selectionHandleColor: c.infoAccent,
       ),
-      child: Builder(
-        builder: (context) {
-          return AnimatedScale(
-            duration: const Duration(milliseconds: 120),
-            curve: Curves.easeOutCubic,
-            scale: switch (state) {
-              PdfViewerTextSelectionAnchorHandleState.dragging => 1.08,
-              PdfViewerTextSelectionAnchorHandleState.hover => 1.04,
-              PdfViewerTextSelectionAnchorHandleState.normal => 1,
-            },
-            child: cupertinoTextSelectionControls.buildHandle(
-              context,
-              handleType,
-              lineExtent,
+      child: SizedBox(
+        width: geometry.containerSize.width,
+        height: geometry.containerSize.height,
+        child: Stack(
+          children: [
+            Positioned(
+              left: geometry.childOffset.dx,
+              top: geometry.childOffset.dy,
+              child: cupertinoTextSelectionControls.buildHandle(
+                context,
+                geometry.handleType,
+                geometry.lineExtent,
+              ),
             ),
-          );
-        },
+          ],
+        ),
       ),
     );
   }
@@ -257,29 +362,9 @@ class _PdfPreviewSurfaceState extends State<PdfPreviewSurface> {
   Offset _selectionHandleOffset(
     BuildContext context,
     PdfTextSelectionAnchor anchor,
-    PdfViewerTextSelectionAnchorHandleState state,
+    PdfViewerTextSelectionAnchorHandleState _,
   ) {
-    final handleType = _selectionHandleType(anchor);
-    final lineExtent = _selectionHandleLineExtent(anchor);
-    final handleSize = cupertinoTextSelectionControls.getHandleSize(lineExtent);
-    final anchorOffset = cupertinoTextSelectionControls.getHandleAnchor(
-      handleType,
-      lineExtent,
-    );
-
-    return switch (anchor.direction) {
-      PdfTextDirection.ltr || PdfTextDirection.unknown =>
-        anchor.type == PdfTextSelectionAnchorType.a
-            ? Offset(
-                handleSize.width - anchorOffset.dx,
-                handleSize.height - anchorOffset.dy,
-              )
-            : Offset(-anchorOffset.dx, -anchorOffset.dy),
-      PdfTextDirection.rtl || PdfTextDirection.vrtl =>
-        anchor.type == PdfTextSelectionAnchorType.a
-            ? Offset(-anchorOffset.dx, handleSize.height - anchorOffset.dy)
-            : Offset(handleSize.width - anchorOffset.dx, -anchorOffset.dy),
-    };
+    return _selectionHandleGeometry(anchor).anchorOffset;
   }
 
   TextSelectionHandleType _selectionHandleType(PdfTextSelectionAnchor anchor) {
@@ -304,6 +389,47 @@ class _PdfPreviewSurfaceState extends State<PdfPreviewSurface> {
       PdfTextDirection.unknown => rect.height,
     };
     return extent.clamp(18.0, 42.0);
+  }
+
+  _SelectionHandleGeometry _selectionHandleGeometry(
+    PdfTextSelectionAnchor anchor,
+  ) {
+    final handleType = _selectionHandleType(anchor);
+    final lineExtent = _selectionHandleLineExtent(anchor);
+    final handleSize = cupertinoTextSelectionControls.getHandleSize(
+      lineExtent,
+    );
+    final handleAnchor = cupertinoTextSelectionControls.getHandleAnchor(
+      handleType,
+      lineExtent,
+    );
+    final containerSize = Size(
+      math.max(handleSize.width, _selectionHandleHitBoxSize),
+      math.max(handleSize.height, _selectionHandleHitBoxSize),
+    );
+    final childOffset = Offset(
+      math.max((containerSize.width - handleSize.width) / 2, 0),
+      math.max((containerSize.height - handleSize.height) / 2, 0),
+    );
+    final anchorInContainer = childOffset + handleAnchor;
+    final verticalBias = handleType == TextSelectionHandleType.left
+        ? lineExtent * _leftSelectionHandleVerticalBias
+        : 0.0;
+
+    return _SelectionHandleGeometry(
+      handleType: handleType,
+      lineExtent: lineExtent,
+      containerSize: containerSize,
+      childOffset: childOffset,
+      anchorOffset: switch (handleType) {
+        TextSelectionHandleType.left => Offset(
+          containerSize.width - anchorInContainer.dx,
+          containerSize.height - anchorInContainer.dy + verticalBias,
+        ),
+        TextSelectionHandleType.right ||
+        TextSelectionHandleType.collapsed => -anchorInContainer,
+      },
+    );
   }
 
   Widget _buildMagnifierDecoration(
@@ -376,6 +502,7 @@ class _PdfPreviewSurfaceState extends State<PdfPreviewSurface> {
                 _pageCount = document.pages.length;
                 _currentPage = controller.pageNumber ?? 1;
               });
+              _syncPageInput();
               _showChrome();
             },
             onPageChanged: (pageNumber) {
@@ -383,6 +510,9 @@ class _PdfPreviewSurfaceState extends State<PdfPreviewSurface> {
                 return;
               }
               setState(() => _currentPage = pageNumber);
+              if (!_pageInputFocusNode.hasFocus) {
+                _syncPageInput();
+              }
               if (!_hasSelectedText) {
                 _showChrome();
               }
@@ -403,6 +533,9 @@ class _PdfPreviewSurfaceState extends State<PdfPreviewSurface> {
                 unawaited(_handlePdfLink(link));
               },
             ),
+            viewerOverlayBuilder: (context, size, handleLinkTap) => [
+              _buildViewerScrollThumb(),
+            ],
             textSelectionParams: PdfTextSelectionParams(
               enabled: true,
               enableSelectionHandles: true,
@@ -481,17 +614,37 @@ class _PdfPreviewSurfaceState extends State<PdfPreviewSurface> {
             bottom: 16,
             left: 0,
             right: 0,
-            child: IgnorePointer(
-              ignoring: true,
-              child: Center(
-                child: AnimatedOpacity(
+            child: Center(
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                opacity: _hasSelectedText ? 0 : (_chromeVisible ? 1 : 0.72),
+                child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 180),
-                  curve: Curves.easeOutCubic,
-                  opacity: _hasSelectedText ? 0 : (_chromeVisible ? 1 : 0.58),
-                  child: _PdfPageChip(
-                    label: '$_currentPage / $_pageCount',
-                    compact: !_chromeVisible,
-                  ),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeOutCubic,
+                  child: _chromeVisible || _pageInputFocusNode.hasFocus
+                      ? _PdfPageJumpBar(
+                          key: const ValueKey('page-jump-bar'),
+                          controller: _pageInputController,
+                          focusNode: _pageInputFocusNode,
+                          pageCount: _pageCount,
+                          onSubmitted: (_) => _submitPageJump(),
+                          onGo: _submitPageJump,
+                        )
+                      : _PdfPageChip(
+                          key: const ValueKey('page-chip'),
+                          label: '$_currentPage / $_pageCount',
+                          compact: true,
+                          onTap: () {
+                            _showChrome();
+                            _pageInputFocusNode.requestFocus();
+                            _pageInputController.selection = TextSelection(
+                              baseOffset: 0,
+                              extentOffset: _pageInputController.text.length,
+                            );
+                          },
+                        ),
                 ),
               ),
             ),
@@ -499,6 +652,22 @@ class _PdfPreviewSurfaceState extends State<PdfPreviewSurface> {
       ],
     );
   }
+}
+
+class _SelectionHandleGeometry {
+  const _SelectionHandleGeometry({
+    required this.handleType,
+    required this.lineExtent,
+    required this.containerSize,
+    required this.childOffset,
+    required this.anchorOffset,
+  });
+
+  final TextSelectionHandleType handleType;
+  final double lineExtent;
+  final Size containerSize;
+  final Offset childOffset;
+  final Offset anchorOffset;
 }
 
 class _PdfChromeBar extends StatelessWidget {
@@ -623,32 +792,157 @@ class _PdfTextChip extends StatelessWidget {
 }
 
 class _PdfPageChip extends StatelessWidget {
-  const _PdfPageChip({required this.label, required this.compact});
+  const _PdfPageChip({
+    super.key,
+    required this.label,
+    required this.compact,
+    this.onTap,
+  });
 
   final String label;
   final bool compact;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOutCubic,
-      padding: EdgeInsets.symmetric(
-        horizontal: compact ? 10 : 12,
-        vertical: compact ? 5 : 6,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          padding: EdgeInsets.symmetric(
+            horizontal: compact ? 10 : 12,
+            vertical: compact ? 5 : 6,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.black.withAlpha(compact ? 126 : 148),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: Colors.white.withAlpha(18), width: 0.8),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withAlpha(compact ? 228 : 255),
+              fontSize: compact ? 11 : 12,
+              fontFamily: 'JetBrains Mono',
+              fontFamilyFallback: const ['monospace'],
+            ),
+          ),
+        ),
       ),
+    );
+  }
+}
+
+class _PdfPageJumpBar extends StatelessWidget {
+  const _PdfPageJumpBar({
+    super.key,
+    required this.controller,
+    required this.focusNode,
+    required this.pageCount,
+    required this.onSubmitted,
+    required this.onGo,
+  });
+
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final int pageCount;
+  final ValueChanged<String> onSubmitted;
+  final VoidCallback onGo;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
       decoration: BoxDecoration(
-        color: Colors.black.withAlpha(compact ? 126 : 148),
+        color: Colors.black.withAlpha(148),
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: Colors.white.withAlpha(18), width: 0.8),
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: Colors.white.withAlpha(compact ? 228 : 255),
-          fontSize: compact ? 11 : 12,
-          fontFamily: 'JetBrains Mono',
-          fontFamilyFallback: const ['monospace'],
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 6, 6, 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 56,
+              child: TextField(
+                controller: controller,
+                focusNode: focusNode,
+                keyboardType: TextInputType.number,
+                textInputAction: TextInputAction.go,
+                onSubmitted: onSubmitted,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'JetBrains Mono',
+                  fontFamilyFallback: ['monospace'],
+                ),
+                decoration: InputDecoration(
+                  isDense: true,
+                  hintText: '页码',
+                  hintStyle: TextStyle(
+                    color: Colors.white.withAlpha(115),
+                    fontSize: 11,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  filled: true,
+                  fillColor: Colors.white.withAlpha(20),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(999),
+                    borderSide: BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(999),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(999),
+                    borderSide: BorderSide(
+                      color: Colors.white.withAlpha(36),
+                      width: 0.8,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Text(
+                '/ $pageCount',
+                style: TextStyle(
+                  color: Colors.white.withAlpha(232),
+                  fontSize: 12,
+                  fontFamily: 'JetBrains Mono',
+                  fontFamilyFallback: const ['monospace'],
+                ),
+              ),
+            ),
+            SizedBox(
+              height: 32,
+              child: FilledButton(
+                onPressed: onGo,
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.white.withAlpha(26),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  minimumSize: const Size(0, 32),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ).copyWith(elevation: const WidgetStatePropertyAll(0)),
+                child: const Text(
+                  '跳转',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

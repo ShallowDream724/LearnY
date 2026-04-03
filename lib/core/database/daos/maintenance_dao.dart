@@ -14,8 +14,9 @@ extension MaintenanceDao on AppDatabase {
     await delete(courses).go();
     await delete(notifications).go();
     await delete(courseFiles).go();
-    await delete(cachedAssets).go();
+    await clearCachedAssets();
     await delete(homeworks).go();
+    await delete(courseDisplayPrefs).go();
     await delete(appState).go();
   }
 
@@ -24,9 +25,16 @@ extension MaintenanceDao on AppDatabase {
     await delete(courses).go();
     await delete(notifications).go();
     await delete(courseFiles).go();
-    await delete(cachedAssets).go();
+    await clearCachedAssets();
     await delete(homeworks).go();
+    await delete(courseDisplayPrefs).go();
     await deleteState(AppStateKeys.homeScheduleSnapshot);
+  }
+
+  Future<void> clearUserScopedData() async {
+    await clearLearningData();
+    await deleteState(AppStateKeys.currentSemesterId);
+    await deleteState(AppStateKeys.userDepartment);
   }
 
   Future<void> clearSessionState() async {

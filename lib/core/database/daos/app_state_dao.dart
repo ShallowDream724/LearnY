@@ -8,6 +8,14 @@ extension AppStateDao on AppDatabase {
     return row?.value;
   }
 
+  Stream<String?> watchState(String key) {
+    return (select(
+      appState,
+    )..where((t) => t.key.equals(key))).watchSingleOrNull().map(
+      (row) => row?.value,
+    );
+  }
+
   Future<void> setState(String key, String value) async {
     await into(appState).insertOnConflictUpdate(
       AppStateCompanion(key: Value(key), value: Value(value)),

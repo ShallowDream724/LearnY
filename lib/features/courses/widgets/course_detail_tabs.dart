@@ -449,6 +449,7 @@ class CourseHomeworksTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.colors;
+    final now = ref.watch(minuteTickProvider).valueOrNull ?? nowInShanghai();
     final homeworksAsync = ref.watch(courseHomeworksProvider(courseId));
 
     return homeworksAsync.when(
@@ -496,8 +497,8 @@ class CourseHomeworksTab extends ConsumerWidget {
             itemCount: homeworks.length,
             itemBuilder: (context, index) {
               final homework = homeworks[index];
-              final statusColor = _statusColor(homework);
-              final statusText = _statusText(homework);
+              final statusColor = _statusColor(homework, now);
+              final statusText = _statusText(homework, now);
               final gradeDisplay = resolveHomeworkGradeDisplay(
                 grade: homework.grade,
                 gradeLevel: homework.gradeLevel,
@@ -601,21 +602,21 @@ class CourseHomeworksTab extends ConsumerWidget {
     );
   }
 
-  Color _statusColor(db.Homework homework) {
+  Color _statusColor(db.Homework homework, DateTime now) {
     if (homework.graded) return AppColors.success;
     if (homework.submitted) return AppColors.info;
     final deadline = tryParseEpochMillisToLocal(homework.deadline);
-    if (deadline != null && deadline.isBefore(nowInShanghai())) {
+    if (deadline != null && deadline.isBefore(now)) {
       return AppColors.error;
     }
     return AppColors.warning;
   }
 
-  String _statusText(db.Homework homework) {
+  String _statusText(db.Homework homework, DateTime now) {
     if (homework.graded) return '已批改';
     if (homework.submitted) return '已提交';
     final deadline = tryParseEpochMillisToLocal(homework.deadline);
-    if (deadline != null && deadline.isBefore(nowInShanghai())) {
+    if (deadline != null && deadline.isBefore(now)) {
       return '已超期';
     }
     return '待提交';

@@ -24,8 +24,17 @@ class AuthSessionRepository {
     return _sessionStore.read();
   }
 
-  Future<void> persistAuthenticatedUser(String username) {
-    return _sessionStore.saveAuthenticatedUser(username);
+  Future<void> persistAuthenticatedUser(String username) async {
+    final normalizedUsername = username.trim();
+    final existingOwner =
+        (await _sessionStore.readLearningDataOwner())?.trim() ?? '';
+
+    if (existingOwner.isNotEmpty && existingOwner != normalizedUsername) {
+      await _database.clearUserScopedData();
+    }
+
+    await _sessionStore.saveLearningDataOwner(normalizedUsername);
+    await _sessionStore.saveAuthenticatedUser(normalizedUsername);
   }
 
   Future<void> logout() async {
@@ -35,7 +44,6 @@ class AuthSessionRepository {
       // Server logout failure should not block local cleanup.
     }
 
-    await _database.clearLearningData();
     await _sessionStore.clear();
 
     try {

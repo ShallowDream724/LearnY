@@ -10,23 +10,29 @@ final homeDataProvider = StreamProvider<HomeData>((ref) {
   final database = ref.watch(databaseProvider);
   final semesterId = ref.watch(currentSemesterIdProvider);
   final thresholdHours = ref.watch(deadlineThresholdHoursProvider);
+  final noSubmissionNeededIds =
+      ref.watch(homeworkNoSubmissionNeededIdsProvider).valueOrNull ??
+      const <String>{};
 
   if (semesterId == null) {
     return Stream.value(const HomeData());
   }
 
-  return combineLatest4(
+  return combineLatest5(
     database.watchCoursesBySemester(semesterId),
     database.watchHomeworksBySemester(semesterId),
     database.watchUnreadNotificationsBySemester(semesterId),
     database.watchUnreadFilesBySemester(semesterId),
-    (courses, homeworks, unreadNotifications, unreadFiles) {
+    minuteTickStream(),
+    (courses, homeworks, unreadNotifications, unreadFiles, now) {
       return _buildHomeData(
         courses: courses,
         homeworks: homeworks,
         unreadNotifications: unreadNotifications,
         unreadFiles: unreadFiles,
+        noSubmissionNeededIds: noSubmissionNeededIds,
         thresholdHours: thresholdHours,
+        now: now,
       );
     },
   );
@@ -37,14 +43,15 @@ HomeData _buildHomeData({
   required List<db.Homework> homeworks,
   required List<db.Notification> unreadNotifications,
   required List<db.CourseFile> unreadFiles,
+  required Set<String> noSubmissionNeededIds,
   required int thresholdHours,
+  required DateTime now,
 }) {
   final courseMap = {for (final course in courses) course.id: course.name};
   if (courseMap.isEmpty) {
     return const HomeData();
   }
 
-  final now = nowInShanghai();
   final urgentAssignments = <HomeworkSummary>[];
   final recentGradeSummaries = <GradeSummary>[];
   var pendingCount = 0;
@@ -55,7 +62,12 @@ HomeData _buildHomeData({
       continue;
     }
 
-    if (!homework.submitted && !homework.graded) {
+    final isNoSubmissionNeeded =
+        noSubmissionNeededIds.contains(homework.id) &&
+        !homework.submitted &&
+        !homework.graded;
+
+    if (!homework.submitted && !homework.graded && !isNoSubmissionNeeded) {
       pendingCount++;
 
       final deadlineTime = tryParseEpochMillisToLocal(homework.deadline);

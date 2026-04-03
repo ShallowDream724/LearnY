@@ -6,5 +6,7 @@ export 'api_client_provider.dart';
 export 'app_providers.dart';
 export 'auth_preferences_provider.dart';
 export 'app_update_provider.dart';
+export 'homework_reminder_state_provider.dart';
 export 'learning_data_actions_provider.dart';
 export 'preferences_providers.dart';
+export 'time_tick_provider.dart';

@@ -5608,6 +5608,525 @@ class HomeworksCompanion extends UpdateCompanion<Homework> {
   }
 }
 
+class $CourseDisplayPrefsTable extends CourseDisplayPrefs
+    with TableInfo<$CourseDisplayPrefsTable, CourseDisplayPref> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CourseDisplayPrefsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _ownerKeyMeta = const VerificationMeta(
+    'ownerKey',
+  );
+  @override
+  late final GeneratedColumn<String> ownerKey = GeneratedColumn<String>(
+    'owner_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _semesterIdMeta = const VerificationMeta(
+    'semesterId',
+  );
+  @override
+  late final GeneratedColumn<String> semesterId = GeneratedColumn<String>(
+    'semester_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _courseIdMeta = const VerificationMeta(
+    'courseId',
+  );
+  @override
+  late final GeneratedColumn<String> courseId = GeneratedColumn<String>(
+    'course_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _iconKeyMeta = const VerificationMeta(
+    'iconKey',
+  );
+  @override
+  late final GeneratedColumn<String> iconKey = GeneratedColumn<String>(
+    'icon_key',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _aliasMeta = const VerificationMeta('alias');
+  @override
+  late final GeneratedColumn<String> alias = GeneratedColumn<String>(
+    'alias',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _accentKeyMeta = const VerificationMeta(
+    'accentKey',
+  );
+  @override
+  late final GeneratedColumn<String> accentKey = GeneratedColumn<String>(
+    'accent_key',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<String> updatedAt = GeneratedColumn<String>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    ownerKey,
+    semesterId,
+    courseId,
+    sortOrder,
+    iconKey,
+    alias,
+    accentKey,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'course_display_prefs';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CourseDisplayPref> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('owner_key')) {
+      context.handle(
+        _ownerKeyMeta,
+        ownerKey.isAcceptableOrUnknown(data['owner_key']!, _ownerKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_ownerKeyMeta);
+    }
+    if (data.containsKey('semester_id')) {
+      context.handle(
+        _semesterIdMeta,
+        semesterId.isAcceptableOrUnknown(data['semester_id']!, _semesterIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_semesterIdMeta);
+    }
+    if (data.containsKey('course_id')) {
+      context.handle(
+        _courseIdMeta,
+        courseId.isAcceptableOrUnknown(data['course_id']!, _courseIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_courseIdMeta);
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    if (data.containsKey('icon_key')) {
+      context.handle(
+        _iconKeyMeta,
+        iconKey.isAcceptableOrUnknown(data['icon_key']!, _iconKeyMeta),
+      );
+    }
+    if (data.containsKey('alias')) {
+      context.handle(
+        _aliasMeta,
+        alias.isAcceptableOrUnknown(data['alias']!, _aliasMeta),
+      );
+    }
+    if (data.containsKey('accent_key')) {
+      context.handle(
+        _accentKeyMeta,
+        accentKey.isAcceptableOrUnknown(data['accent_key']!, _accentKeyMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {ownerKey, semesterId, courseId};
+  @override
+  CourseDisplayPref map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CourseDisplayPref(
+      ownerKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}owner_key'],
+      )!,
+      semesterId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}semester_id'],
+      )!,
+      courseId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}course_id'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+      iconKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}icon_key'],
+      ),
+      alias: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}alias'],
+      ),
+      accentKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}accent_key'],
+      ),
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CourseDisplayPrefsTable createAlias(String alias) {
+    return $CourseDisplayPrefsTable(attachedDatabase, alias);
+  }
+}
+
+class CourseDisplayPref extends DataClass
+    implements Insertable<CourseDisplayPref> {
+  final String ownerKey;
+  final String semesterId;
+  final String courseId;
+  final int sortOrder;
+  final String? iconKey;
+  final String? alias;
+  final String? accentKey;
+  final String updatedAt;
+  const CourseDisplayPref({
+    required this.ownerKey,
+    required this.semesterId,
+    required this.courseId,
+    required this.sortOrder,
+    this.iconKey,
+    this.alias,
+    this.accentKey,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['owner_key'] = Variable<String>(ownerKey);
+    map['semester_id'] = Variable<String>(semesterId);
+    map['course_id'] = Variable<String>(courseId);
+    map['sort_order'] = Variable<int>(sortOrder);
+    if (!nullToAbsent || iconKey != null) {
+      map['icon_key'] = Variable<String>(iconKey);
+    }
+    if (!nullToAbsent || alias != null) {
+      map['alias'] = Variable<String>(alias);
+    }
+    if (!nullToAbsent || accentKey != null) {
+      map['accent_key'] = Variable<String>(accentKey);
+    }
+    map['updated_at'] = Variable<String>(updatedAt);
+    return map;
+  }
+
+  CourseDisplayPrefsCompanion toCompanion(bool nullToAbsent) {
+    return CourseDisplayPrefsCompanion(
+      ownerKey: Value(ownerKey),
+      semesterId: Value(semesterId),
+      courseId: Value(courseId),
+      sortOrder: Value(sortOrder),
+      iconKey: iconKey == null && nullToAbsent
+          ? const Value.absent()
+          : Value(iconKey),
+      alias: alias == null && nullToAbsent
+          ? const Value.absent()
+          : Value(alias),
+      accentKey: accentKey == null && nullToAbsent
+          ? const Value.absent()
+          : Value(accentKey),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory CourseDisplayPref.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CourseDisplayPref(
+      ownerKey: serializer.fromJson<String>(json['ownerKey']),
+      semesterId: serializer.fromJson<String>(json['semesterId']),
+      courseId: serializer.fromJson<String>(json['courseId']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      iconKey: serializer.fromJson<String?>(json['iconKey']),
+      alias: serializer.fromJson<String?>(json['alias']),
+      accentKey: serializer.fromJson<String?>(json['accentKey']),
+      updatedAt: serializer.fromJson<String>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'ownerKey': serializer.toJson<String>(ownerKey),
+      'semesterId': serializer.toJson<String>(semesterId),
+      'courseId': serializer.toJson<String>(courseId),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+      'iconKey': serializer.toJson<String?>(iconKey),
+      'alias': serializer.toJson<String?>(alias),
+      'accentKey': serializer.toJson<String?>(accentKey),
+      'updatedAt': serializer.toJson<String>(updatedAt),
+    };
+  }
+
+  CourseDisplayPref copyWith({
+    String? ownerKey,
+    String? semesterId,
+    String? courseId,
+    int? sortOrder,
+    Value<String?> iconKey = const Value.absent(),
+    Value<String?> alias = const Value.absent(),
+    Value<String?> accentKey = const Value.absent(),
+    String? updatedAt,
+  }) => CourseDisplayPref(
+    ownerKey: ownerKey ?? this.ownerKey,
+    semesterId: semesterId ?? this.semesterId,
+    courseId: courseId ?? this.courseId,
+    sortOrder: sortOrder ?? this.sortOrder,
+    iconKey: iconKey.present ? iconKey.value : this.iconKey,
+    alias: alias.present ? alias.value : this.alias,
+    accentKey: accentKey.present ? accentKey.value : this.accentKey,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  CourseDisplayPref copyWithCompanion(CourseDisplayPrefsCompanion data) {
+    return CourseDisplayPref(
+      ownerKey: data.ownerKey.present ? data.ownerKey.value : this.ownerKey,
+      semesterId: data.semesterId.present
+          ? data.semesterId.value
+          : this.semesterId,
+      courseId: data.courseId.present ? data.courseId.value : this.courseId,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      iconKey: data.iconKey.present ? data.iconKey.value : this.iconKey,
+      alias: data.alias.present ? data.alias.value : this.alias,
+      accentKey: data.accentKey.present ? data.accentKey.value : this.accentKey,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CourseDisplayPref(')
+          ..write('ownerKey: $ownerKey, ')
+          ..write('semesterId: $semesterId, ')
+          ..write('courseId: $courseId, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('iconKey: $iconKey, ')
+          ..write('alias: $alias, ')
+          ..write('accentKey: $accentKey, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    ownerKey,
+    semesterId,
+    courseId,
+    sortOrder,
+    iconKey,
+    alias,
+    accentKey,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CourseDisplayPref &&
+          other.ownerKey == this.ownerKey &&
+          other.semesterId == this.semesterId &&
+          other.courseId == this.courseId &&
+          other.sortOrder == this.sortOrder &&
+          other.iconKey == this.iconKey &&
+          other.alias == this.alias &&
+          other.accentKey == this.accentKey &&
+          other.updatedAt == this.updatedAt);
+}
+
+class CourseDisplayPrefsCompanion extends UpdateCompanion<CourseDisplayPref> {
+  final Value<String> ownerKey;
+  final Value<String> semesterId;
+  final Value<String> courseId;
+  final Value<int> sortOrder;
+  final Value<String?> iconKey;
+  final Value<String?> alias;
+  final Value<String?> accentKey;
+  final Value<String> updatedAt;
+  final Value<int> rowid;
+  const CourseDisplayPrefsCompanion({
+    this.ownerKey = const Value.absent(),
+    this.semesterId = const Value.absent(),
+    this.courseId = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.iconKey = const Value.absent(),
+    this.alias = const Value.absent(),
+    this.accentKey = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CourseDisplayPrefsCompanion.insert({
+    required String ownerKey,
+    required String semesterId,
+    required String courseId,
+    this.sortOrder = const Value.absent(),
+    this.iconKey = const Value.absent(),
+    this.alias = const Value.absent(),
+    this.accentKey = const Value.absent(),
+    required String updatedAt,
+    this.rowid = const Value.absent(),
+  }) : ownerKey = Value(ownerKey),
+       semesterId = Value(semesterId),
+       courseId = Value(courseId),
+       updatedAt = Value(updatedAt);
+  static Insertable<CourseDisplayPref> custom({
+    Expression<String>? ownerKey,
+    Expression<String>? semesterId,
+    Expression<String>? courseId,
+    Expression<int>? sortOrder,
+    Expression<String>? iconKey,
+    Expression<String>? alias,
+    Expression<String>? accentKey,
+    Expression<String>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (ownerKey != null) 'owner_key': ownerKey,
+      if (semesterId != null) 'semester_id': semesterId,
+      if (courseId != null) 'course_id': courseId,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (iconKey != null) 'icon_key': iconKey,
+      if (alias != null) 'alias': alias,
+      if (accentKey != null) 'accent_key': accentKey,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CourseDisplayPrefsCompanion copyWith({
+    Value<String>? ownerKey,
+    Value<String>? semesterId,
+    Value<String>? courseId,
+    Value<int>? sortOrder,
+    Value<String?>? iconKey,
+    Value<String?>? alias,
+    Value<String?>? accentKey,
+    Value<String>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return CourseDisplayPrefsCompanion(
+      ownerKey: ownerKey ?? this.ownerKey,
+      semesterId: semesterId ?? this.semesterId,
+      courseId: courseId ?? this.courseId,
+      sortOrder: sortOrder ?? this.sortOrder,
+      iconKey: iconKey ?? this.iconKey,
+      alias: alias ?? this.alias,
+      accentKey: accentKey ?? this.accentKey,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (ownerKey.present) {
+      map['owner_key'] = Variable<String>(ownerKey.value);
+    }
+    if (semesterId.present) {
+      map['semester_id'] = Variable<String>(semesterId.value);
+    }
+    if (courseId.present) {
+      map['course_id'] = Variable<String>(courseId.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (iconKey.present) {
+      map['icon_key'] = Variable<String>(iconKey.value);
+    }
+    if (alias.present) {
+      map['alias'] = Variable<String>(alias.value);
+    }
+    if (accentKey.present) {
+      map['accent_key'] = Variable<String>(accentKey.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<String>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CourseDisplayPrefsCompanion(')
+          ..write('ownerKey: $ownerKey, ')
+          ..write('semesterId: $semesterId, ')
+          ..write('courseId: $courseId, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('iconKey: $iconKey, ')
+          ..write('alias: $alias, ')
+          ..write('accentKey: $accentKey, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $AppStateTable extends AppState
     with TableInfo<$AppStateTable, AppStateData> {
   @override
@@ -5826,6 +6345,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $CachedAssetsTable cachedAssets = $CachedAssetsTable(this);
   late final $FileBookmarksTable fileBookmarks = $FileBookmarksTable(this);
   late final $HomeworksTable homeworks = $HomeworksTable(this);
+  late final $CourseDisplayPrefsTable courseDisplayPrefs =
+      $CourseDisplayPrefsTable(this);
   late final $AppStateTable appState = $AppStateTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
@@ -5839,6 +6360,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     cachedAssets,
     fileBookmarks,
     homeworks,
+    courseDisplayPrefs,
     appState,
   ];
 }
@@ -8427,6 +8949,278 @@ typedef $$HomeworksTableProcessedTableManager =
       Homework,
       PrefetchHooks Function()
     >;
+typedef $$CourseDisplayPrefsTableCreateCompanionBuilder =
+    CourseDisplayPrefsCompanion Function({
+      required String ownerKey,
+      required String semesterId,
+      required String courseId,
+      Value<int> sortOrder,
+      Value<String?> iconKey,
+      Value<String?> alias,
+      Value<String?> accentKey,
+      required String updatedAt,
+      Value<int> rowid,
+    });
+typedef $$CourseDisplayPrefsTableUpdateCompanionBuilder =
+    CourseDisplayPrefsCompanion Function({
+      Value<String> ownerKey,
+      Value<String> semesterId,
+      Value<String> courseId,
+      Value<int> sortOrder,
+      Value<String?> iconKey,
+      Value<String?> alias,
+      Value<String?> accentKey,
+      Value<String> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$CourseDisplayPrefsTableFilterComposer
+    extends Composer<_$AppDatabase, $CourseDisplayPrefsTable> {
+  $$CourseDisplayPrefsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get ownerKey => $composableBuilder(
+    column: $table.ownerKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get semesterId => $composableBuilder(
+    column: $table.semesterId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get courseId => $composableBuilder(
+    column: $table.courseId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get iconKey => $composableBuilder(
+    column: $table.iconKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get alias => $composableBuilder(
+    column: $table.alias,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get accentKey => $composableBuilder(
+    column: $table.accentKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CourseDisplayPrefsTableOrderingComposer
+    extends Composer<_$AppDatabase, $CourseDisplayPrefsTable> {
+  $$CourseDisplayPrefsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get ownerKey => $composableBuilder(
+    column: $table.ownerKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get semesterId => $composableBuilder(
+    column: $table.semesterId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get courseId => $composableBuilder(
+    column: $table.courseId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get iconKey => $composableBuilder(
+    column: $table.iconKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get alias => $composableBuilder(
+    column: $table.alias,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get accentKey => $composableBuilder(
+    column: $table.accentKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CourseDisplayPrefsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CourseDisplayPrefsTable> {
+  $$CourseDisplayPrefsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get ownerKey =>
+      $composableBuilder(column: $table.ownerKey, builder: (column) => column);
+
+  GeneratedColumn<String> get semesterId => $composableBuilder(
+    column: $table.semesterId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get courseId =>
+      $composableBuilder(column: $table.courseId, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<String> get iconKey =>
+      $composableBuilder(column: $table.iconKey, builder: (column) => column);
+
+  GeneratedColumn<String> get alias =>
+      $composableBuilder(column: $table.alias, builder: (column) => column);
+
+  GeneratedColumn<String> get accentKey =>
+      $composableBuilder(column: $table.accentKey, builder: (column) => column);
+
+  GeneratedColumn<String> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$CourseDisplayPrefsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CourseDisplayPrefsTable,
+          CourseDisplayPref,
+          $$CourseDisplayPrefsTableFilterComposer,
+          $$CourseDisplayPrefsTableOrderingComposer,
+          $$CourseDisplayPrefsTableAnnotationComposer,
+          $$CourseDisplayPrefsTableCreateCompanionBuilder,
+          $$CourseDisplayPrefsTableUpdateCompanionBuilder,
+          (
+            CourseDisplayPref,
+            BaseReferences<
+              _$AppDatabase,
+              $CourseDisplayPrefsTable,
+              CourseDisplayPref
+            >,
+          ),
+          CourseDisplayPref,
+          PrefetchHooks Function()
+        > {
+  $$CourseDisplayPrefsTableTableManager(
+    _$AppDatabase db,
+    $CourseDisplayPrefsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CourseDisplayPrefsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CourseDisplayPrefsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CourseDisplayPrefsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> ownerKey = const Value.absent(),
+                Value<String> semesterId = const Value.absent(),
+                Value<String> courseId = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<String?> iconKey = const Value.absent(),
+                Value<String?> alias = const Value.absent(),
+                Value<String?> accentKey = const Value.absent(),
+                Value<String> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CourseDisplayPrefsCompanion(
+                ownerKey: ownerKey,
+                semesterId: semesterId,
+                courseId: courseId,
+                sortOrder: sortOrder,
+                iconKey: iconKey,
+                alias: alias,
+                accentKey: accentKey,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String ownerKey,
+                required String semesterId,
+                required String courseId,
+                Value<int> sortOrder = const Value.absent(),
+                Value<String?> iconKey = const Value.absent(),
+                Value<String?> alias = const Value.absent(),
+                Value<String?> accentKey = const Value.absent(),
+                required String updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => CourseDisplayPrefsCompanion.insert(
+                ownerKey: ownerKey,
+                semesterId: semesterId,
+                courseId: courseId,
+                sortOrder: sortOrder,
+                iconKey: iconKey,
+                alias: alias,
+                accentKey: accentKey,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CourseDisplayPrefsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CourseDisplayPrefsTable,
+      CourseDisplayPref,
+      $$CourseDisplayPrefsTableFilterComposer,
+      $$CourseDisplayPrefsTableOrderingComposer,
+      $$CourseDisplayPrefsTableAnnotationComposer,
+      $$CourseDisplayPrefsTableCreateCompanionBuilder,
+      $$CourseDisplayPrefsTableUpdateCompanionBuilder,
+      (
+        CourseDisplayPref,
+        BaseReferences<
+          _$AppDatabase,
+          $CourseDisplayPrefsTable,
+          CourseDisplayPref
+        >,
+      ),
+      CourseDisplayPref,
+      PrefetchHooks Function()
+    >;
 typedef $$AppStateTableCreateCompanionBuilder =
     AppStateCompanion Function({
       required String key,
@@ -8584,6 +9378,8 @@ class $AppDatabaseManager {
       $$FileBookmarksTableTableManager(_db, _db.fileBookmarks);
   $$HomeworksTableTableManager get homeworks =>
       $$HomeworksTableTableManager(_db, _db.homeworks);
+  $$CourseDisplayPrefsTableTableManager get courseDisplayPrefs =>
+      $$CourseDisplayPrefsTableTableManager(_db, _db.courseDisplayPrefs);
   $$AppStateTableTableManager get appState =>
       $$AppStateTableTableManager(_db, _db.appState);
 }

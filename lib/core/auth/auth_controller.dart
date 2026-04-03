@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../database/app_state_keys.dart';
+import '../database/database.dart';
 import '../providers/api_client_provider.dart';
 import '../providers/app_providers.dart';
 import 'auto_relogin_capability_store.dart';
@@ -98,6 +100,10 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<void> onLoginSuccess(String username) async {
     await _repository.persistAuthenticatedUser(username);
+    final cachedSemesterId = await _ref
+        .read(databaseProvider)
+        .getState(AppStateKeys.currentSemesterId);
+    _ref.read(currentSemesterIdProvider.notifier).state = cachedSemesterId;
     state = AuthState.authenticated(username: username);
   }
 
