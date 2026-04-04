@@ -7,9 +7,12 @@
 [![Release](https://img.shields.io/github/v/release/ShallowDream724/LearnY?display_name=tag&label=Release)](https://github.com/ShallowDream724/LearnY/releases)
 [![Platform](https://img.shields.io/badge/Platform-Android_APK-3DDC84?logo=android&logoColor=white)](https://github.com/ShallowDream724/LearnY/releases)
 [![Flutter](https://img.shields.io/badge/Flutter-3.41-02569B?logo=flutter&logoColor=white)](https://flutter.dev/)
+[![Stars](https://img.shields.io/github/stars/ShallowDream724/LearnY?style=flat&label=Stars)](https://github.com/ShallowDream724/LearnY/stargazers)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 [下载最新版](https://github.com/ShallowDream724/LearnY/releases/latest) · [更新日志](CHANGELOG.md) · [问题反馈](https://github.com/ShallowDream724/LearnY/issues)
+
+如果这个项目对你有帮助，欢迎点一个 Star，这会让 LearnY 更容易被更多同学看到。
 
 </div>
 
