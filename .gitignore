@@ -49,6 +49,7 @@ app.*.map.json
 /PROJECT_PLAN.md
 /blueprint.md
 /THEME_AND_COURSE_WORKBENCH_BLUEPRINT.md
+/theme_migration_handoff.md
 /architecture_audit.md
 /walkthrough.md
 /mockups/
