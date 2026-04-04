@@ -44,3 +44,23 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 .ace-tool/
+
+# Internal planning docs / mockups
+/PROJECT_PLAN.md
+/blueprint.md
+/THEME_AND_COURSE_WORKBENCH_BLUEPRINT.md
+/architecture_audit.md
+/walkthrough.md
+/mockups/
+/docs/ai_architecture_guardrails.md
+/docs/architecture_refactor_blueprint.md
+/docs/auth_relogin_blueprint.md
+/docs/file_system_next_stage.md
+/docs/course_workbench_product_design.md
+/docs/*preview*.html
+/assignment_page_mockup.html
+/assignment_page_redesign.html
+/course_card_mockup.html
+/ddl_banner_mockup.html
+/theme.html
+/theme.html.raw.diff.txt
