@@ -29,6 +29,8 @@ extension MaintenanceDao on AppDatabase {
     await delete(homeworks).go();
     await delete(courseDisplayPrefs).go();
     await deleteState(AppStateKeys.homeScheduleSnapshot);
+    await deleteStatesByPrefix(AppStateKeys.homeScheduleSemesterCachePrefix);
+    await deleteState(AppStateKeys.homeScheduleRemoteRefreshState);
   }
 
   Future<void> clearUserScopedData() async {
@@ -40,5 +42,6 @@ extension MaintenanceDao on AppDatabase {
   Future<void> clearSessionState() async {
     await deleteState(AppStateKeys.username);
     await deleteState(AppStateKeys.homeScheduleSnapshot);
+    await deleteState(AppStateKeys.homeScheduleRemoteRefreshState);
   }
 }

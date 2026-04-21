@@ -13,6 +13,13 @@ abstract final class AppStateKeys {
   static const String guideState = 'guide_state';
   static const String recentSearches = 'recent_searches';
   static const String homeScheduleSnapshot = 'home_schedule_snapshot';
+  static const String homeScheduleSemesterCachePrefix =
+      'home_schedule_semester_cache';
+  static const String homeScheduleRemoteRefreshState =
+      'home_schedule_remote_refresh_state';
   static const String homeworkNoSubmissionNeededPrefix =
       'homework_no_submission_needed';
+
+  static String homeScheduleSemesterCache(String semesterId) =>
+      '$homeScheduleSemesterCachePrefix::$semesterId';
 }

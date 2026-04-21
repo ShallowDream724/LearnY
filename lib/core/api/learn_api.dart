@@ -973,8 +973,16 @@ class Learn2018Helper {
       ticket = ticket.substring(1, ticket.length - 1);
     }
 
-    // Auth with registrar
-    await _myFetch(urls.registrarAuth(ticket));
+    // Auth with registrar.
+    // `zhjw.cic.tsinghua.edu.cn` issues its JSESSIONID during the redirect
+    // chain, so we must capture cookies from every hop instead of relying on
+    // Dio's automatic redirect handling.
+    final registrarAuthResp = await _followRedirectsManually(
+      urls.registrarAuth(ticket),
+    );
+    if (registrarAuthResp.statusCode != 200) {
+      throw const ApiError(reason: FailReason.invalidResponse);
+    }
 
     // Fetch calendar data
     final resp = await _myFetchWithToken(

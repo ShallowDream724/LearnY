@@ -9,11 +9,9 @@ extension AppStateDao on AppDatabase {
   }
 
   Stream<String?> watchState(String key) {
-    return (select(
-      appState,
-    )..where((t) => t.key.equals(key))).watchSingleOrNull().map(
-      (row) => row?.value,
-    );
+    return (select(appState)..where((t) => t.key.equals(key)))
+        .watchSingleOrNull()
+        .map((row) => row?.value);
   }
 
   Future<void> setState(String key, String value) async {
@@ -24,5 +22,9 @@ extension AppStateDao on AppDatabase {
 
   Future<void> deleteState(String key) {
     return (delete(appState)..where((t) => t.key.equals(key))).go();
+  }
+
+  Future<void> deleteStatesByPrefix(String prefix) {
+    return (delete(appState)..where((t) => t.key.like('$prefix::%'))).go();
   }
 }

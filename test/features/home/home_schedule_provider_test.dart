@@ -64,10 +64,7 @@ void main() {
         DateTime(2026, 3, 16),
         length: 1,
       );
-      final laterDay = buildHomeScheduleDays(
-        DateTime(2026, 5, 18),
-        length: 1,
-      );
+      final laterDay = buildHomeScheduleDays(DateTime(2026, 5, 18), length: 1);
 
       final course = _course(
         name: '临床早接',
@@ -87,6 +84,31 @@ void main() {
 
       expect(firstHalfSnapshot.itemsFor(firstHalfDay.first), hasLength(1));
       expect(laterSnapshot.itemsFor(laterDay.first), isEmpty);
+    });
+
+    test('parses english cached course strings from english learn mode', () {
+      final days = buildHomeScheduleDays(DateTime(2026, 4, 21), length: 1);
+      final snapshot = buildHomeScheduleSnapshotFromCachedCourses(
+        days: days,
+        courses: [
+          _course(
+            name: 'Molecular Biology',
+            chineseName: '分子生物学',
+            timeAndLocation: ['Section 1 of Tues (Week all ), 六教6B207'],
+          ),
+          _course(
+            name: 'An Introduction to Industrial System',
+            chineseName: '工业系统概论',
+            timeAndLocation: ['Section 2 of Tues (Week 1-12), 李兆基科技大楼B148'],
+          ),
+        ],
+        semesterStartDate: '2026-02-24',
+      );
+
+      final items = snapshot.itemsFor(days.first);
+      expect(items.map((item) => item.courseName), ['分子生物学', '工业系统概论']);
+      expect(items.map((item) => item.startTime), ['08:00', '09:50']);
+      expect(items.map((item) => item.location), ['六教6B207', '李兆基科技大楼B148']);
     });
 
     test(
@@ -210,6 +232,96 @@ void main() {
     );
   });
 
+  group('home schedule remote refresh policy', () {
+    test('uses cached data immediately but refreshes again when stale', () {
+      final days = buildHomeScheduleDays(DateTime(2026, 3, 21), length: 2);
+      final localSnapshot = buildHomeScheduleSnapshotFromCachedCourses(
+        days: days,
+        courses: [
+          _course(name: '分子生物学', timeAndLocation: ['星期六第1节(全周)，六教6B207']),
+        ],
+        semesterStartDate: '2026-03-16',
+      );
+
+      final successfulState = HomeScheduleRemoteRefreshState(
+        semesterId: 'semester-1',
+        lastAttemptAt: DateTime(2026, 3, 21, 8, 0),
+        hasSuccessfulRefresh: true,
+      );
+
+      expect(
+        shouldFetchHomeScheduleRemoteSnapshot(
+          semesterId: 'semester-1',
+          cachedSnapshot: null,
+          localSnapshot: localSnapshot,
+          refreshState: null,
+          now: DateTime(2026, 3, 21, 9, 0),
+        ),
+        isTrue,
+      );
+
+      expect(
+        shouldFetchHomeScheduleRemoteSnapshot(
+          semesterId: 'semester-1',
+          cachedSnapshot: null,
+          localSnapshot: localSnapshot,
+          refreshState: successfulState,
+          now: DateTime(2026, 3, 21, 16, 0),
+        ),
+        isFalse,
+      );
+
+      expect(
+        shouldFetchHomeScheduleRemoteSnapshot(
+          semesterId: 'semester-1',
+          cachedSnapshot: null,
+          localSnapshot: localSnapshot,
+          refreshState: successfulState,
+          now: DateTime(2026, 3, 21, 21, 0),
+        ),
+        isTrue,
+      );
+    });
+
+    test('backs off repeated automatic retries after a failed pull', () {
+      final days = buildHomeScheduleDays(DateTime(2026, 3, 21), length: 1);
+      final localSnapshot = buildHomeScheduleSnapshotFromCachedCourses(
+        days: days,
+        courses: [
+          _course(name: '工程数学', timeAndLocation: ['星期六第1节(全周)，三教3204']),
+        ],
+        semesterStartDate: '2026-03-16',
+      );
+      final failedState = HomeScheduleRemoteRefreshState(
+        semesterId: 'semester-1',
+        lastAttemptAt: DateTime(2026, 3, 21, 8, 0),
+        hasSuccessfulRefresh: false,
+      );
+
+      expect(
+        shouldFetchHomeScheduleRemoteSnapshot(
+          semesterId: 'semester-1',
+          cachedSnapshot: null,
+          localSnapshot: localSnapshot,
+          refreshState: failedState,
+          now: DateTime(2026, 3, 21, 9, 0),
+        ),
+        isFalse,
+      );
+
+      expect(
+        shouldFetchHomeScheduleRemoteSnapshot(
+          semesterId: 'semester-1',
+          cachedSnapshot: null,
+          localSnapshot: localSnapshot,
+          refreshState: failedState,
+          now: DateTime(2026, 3, 21, 10, 30),
+        ),
+        isTrue,
+      );
+    });
+  });
+
   group('mergeHomeScheduleSnapshots', () {
     test('keeps local items when registrar snapshot is missing a course', () {
       final days = buildHomeScheduleDays(DateTime(2026, 3, 16), length: 1);
@@ -250,12 +362,13 @@ void main() {
 
 db.Course _course({
   required String name,
+  String? chineseName,
   required List<String> timeAndLocation,
 }) {
   return db.Course(
     id: '${name}_id',
     name: name,
-    chineseName: name,
+    chineseName: chineseName ?? name,
     englishName: name,
     teacherName: '',
     teacherNumber: '',

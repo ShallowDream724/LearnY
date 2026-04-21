@@ -8,6 +8,7 @@ import '../../../core/api/models.dart' as api;
 import '../../../core/database/app_state_keys.dart';
 import '../../../core/database/database.dart' as db;
 import '../../../core/providers/providers.dart';
+import '../../../core/schedule/semester_schedule_cache.dart' as schedule_cache;
 
 class TodayScheduleItem {
   const TodayScheduleItem({
@@ -67,43 +68,23 @@ class HomeScheduleSnapshot {
   }
 }
 
-class _ParsedCourseMeeting {
-  const _ParsedCourseMeeting({
-    required this.dayOfWeek,
-    required this.periods,
-    required this.location,
-    required this.activeWeeks,
-    required this.usesTeachingBlockClock,
+class HomeScheduleRemoteRefreshState {
+  const HomeScheduleRemoteRefreshState({
+    required this.semesterId,
+    required this.lastAttemptAt,
+    required this.hasSuccessfulRefresh,
   });
 
-  final int dayOfWeek;
-  final List<int> periods;
-  final String location;
-  final Set<int>? activeWeeks;
-  final bool usesTeachingBlockClock;
-
-  bool matchesWeek(int weekNumber) {
-    final weeks = activeWeeks;
-    return weeks == null || weeks.contains(weekNumber);
-  }
+  final String semesterId;
+  final DateTime lastAttemptAt;
+  final bool hasSuccessfulRefresh;
 }
 
-class _ScheduledOccurrence {
-  const _ScheduledOccurrence({
-    required this.courseId,
-    required this.courseName,
-    required this.location,
-    required this.startPeriod,
-    required this.endPeriod,
-    required this.usesTeachingBlockClock,
-  });
+class _CachedScheduleArtifacts {
+  const _CachedScheduleArtifacts({required this.snapshot, required this.cache});
 
-  final String courseId;
-  final String courseName;
-  final String location;
-  final int startPeriod;
-  final int endPeriod;
-  final bool usesTeachingBlockClock;
+  final HomeScheduleSnapshot snapshot;
+  final schedule_cache.SemesterScheduleCache? cache;
 }
 
 final homeSchedulePageIndexProvider = StateProvider<int>((ref) => 0);
@@ -141,7 +122,12 @@ final homeScheduleSnapshotProvider = StreamProvider<HomeScheduleSnapshot>((
       semesterId: semesterId,
       days: days,
     );
-    final localSnapshotFuture = _buildCachedScheduleSnapshot(
+    final cachedSemesterSnapshotFuture = _readCachedSemesterScheduleSnapshot(
+      database: database,
+      semesterId: semesterId,
+      days: days,
+    );
+    final localArtifactsFuture = _buildCachedScheduleArtifacts(
       database: database,
       semesterId: semesterId,
       days: days,
@@ -150,15 +136,31 @@ final homeScheduleSnapshotProvider = StreamProvider<HomeScheduleSnapshot>((
     HomeScheduleSnapshot? emittedSnapshot;
 
     final cachedSnapshot = await cachedSnapshotFuture;
-    if (cachedSnapshot != null && _hasAnyScheduleItems(cachedSnapshot)) {
-      emittedSnapshot = cachedSnapshot;
-      yield cachedSnapshot;
+    final cachedSemesterSnapshot = await cachedSemesterSnapshotFuture;
+    final persistedSnapshot = _mergePersistedScheduleSnapshots(
+      cachedSnapshot: cachedSnapshot,
+      semesterSnapshot: cachedSemesterSnapshot,
+    );
+    if (persistedSnapshot != null && _hasAnyScheduleItems(persistedSnapshot)) {
+      emittedSnapshot = persistedSnapshot;
+      yield persistedSnapshot;
     }
 
-    final localSnapshot = await localSnapshotFuture;
-    if (emittedSnapshot == null ||
-        (!_hasAnyScheduleItems(emittedSnapshot) &&
-            _hasAnyScheduleItems(localSnapshot))) {
+    final localArtifacts = await localArtifactsFuture;
+    final localCache = localArtifacts.cache;
+    if (localCache != null && localCache.hasAnyMeetings) {
+      await _persistSemesterScheduleCache(
+        database: database,
+        cache: localCache,
+      );
+    }
+    final localSnapshot = _mergeLocalScheduleSnapshot(
+      currentSnapshot: localArtifacts.snapshot,
+      semesterSnapshot: cachedSemesterSnapshot,
+    );
+    if (_hasAnyScheduleItems(localSnapshot) &&
+        (emittedSnapshot == null ||
+            !_scheduleSnapshotsEqual(localSnapshot, emittedSnapshot))) {
       emittedSnapshot = localSnapshot;
       yield localSnapshot;
     }
@@ -166,6 +168,29 @@ final homeScheduleSnapshotProvider = StreamProvider<HomeScheduleSnapshot>((
     if (!authState.isLoggedIn) {
       return;
     }
+
+    final remoteRefreshState = await readHomeScheduleRemoteRefreshState(
+      database: database,
+    );
+    if (!shouldFetchHomeScheduleRemoteSnapshot(
+      semesterId: semesterId,
+      cachedSnapshot: cachedSnapshot,
+      localSnapshot: localSnapshot,
+      semesterSnapshot: cachedSemesterSnapshot,
+      refreshState: remoteRefreshState,
+      now: DateTime.now(),
+    )) {
+      return;
+    }
+
+    await persistHomeScheduleRemoteRefreshState(
+      database: database,
+      state: HomeScheduleRemoteRefreshState(
+        semesterId: semesterId,
+        lastAttemptAt: DateTime.now(),
+        hasSuccessfulRefresh: false,
+      ),
+    );
 
     try {
       final events = await ref
@@ -185,7 +210,16 @@ final homeScheduleSnapshotProvider = StreamProvider<HomeScheduleSnapshot>((
         semesterId: semesterId,
         snapshot: mergedSnapshot,
       );
-      if (!_scheduleSnapshotsEqual(mergedSnapshot, emittedSnapshot)) {
+      await persistHomeScheduleRemoteRefreshState(
+        database: database,
+        state: HomeScheduleRemoteRefreshState(
+          semesterId: semesterId,
+          lastAttemptAt: DateTime.now(),
+          hasSuccessfulRefresh: true,
+        ),
+      );
+      if (emittedSnapshot == null ||
+          !_scheduleSnapshotsEqual(mergedSnapshot, emittedSnapshot)) {
         yield mergedSnapshot;
       }
     } catch (error, stackTrace) {
@@ -267,59 +301,15 @@ HomeScheduleSnapshot buildHomeScheduleSnapshotFromCachedCourses({
   required List<db.Course> courses,
   required String semesterStartDate,
 }) {
-  final semesterStart = _parseDateOnly(semesterStartDate);
-  if (semesterStart == null) {
-    return _emptyScheduleSnapshot(days);
-  }
-
-  final occurrencesByDateKey = <String, List<_ScheduledOccurrence>>{
-    for (final day in days) day.dateKey: <_ScheduledOccurrence>[],
-  };
-
-  for (final course in courses) {
-    final meetings = _decodeCourseMeetings(course.timeAndLocationJson);
-    if (meetings.isEmpty) {
-      continue;
-    }
-
-    for (final day in days) {
-      final dayOffset = day.date.difference(semesterStart).inDays;
-      if (dayOffset < 0) {
-        continue;
-      }
-
-      final weekNumber = (dayOffset ~/ 7) + 1;
-      final dayOccurrences = occurrencesByDateKey[day.dateKey]!;
-
-      for (final meeting in meetings) {
-        if (meeting.dayOfWeek != day.date.weekday ||
-            !meeting.matchesWeek(weekNumber)) {
-          continue;
-        }
-
-        for (final run in _collapseConsecutivePeriods(meeting.periods)) {
-          dayOccurrences.add(
-            _ScheduledOccurrence(
-              courseId: course.id,
-              courseName: course.name,
-              location: meeting.location,
-              startPeriod: run.$1,
-              endPeriod: run.$2,
-              usesTeachingBlockClock: meeting.usesTeachingBlockClock,
-            ),
-          );
-        }
-      }
-    }
-  }
-
-  final itemsByDateKey = <String, List<TodayScheduleItem>>{};
-  for (final entry in occurrencesByDateKey.entries) {
-    final merged = _mergeOccurrences(entry.value);
-    itemsByDateKey[entry.key] = merged.map(_mapOccurrenceToItem).toList();
-  }
-
-  return HomeScheduleSnapshot(days: days, itemsByDateKey: itemsByDateKey);
+  final cache = schedule_cache.buildSemesterScheduleCacheFromCourses(
+    semesterId: '',
+    semesterStartDate: semesterStartDate,
+    courses: courses,
+  );
+  return buildHomeScheduleSnapshotFromSemesterScheduleCache(
+    days: days,
+    cache: cache,
+  );
 }
 
 @visibleForTesting
@@ -368,7 +358,33 @@ HomeScheduleSnapshot mergeHomeScheduleSnapshots({
   );
 }
 
-Future<HomeScheduleSnapshot> _buildCachedScheduleSnapshot({
+HomeScheduleSnapshot buildHomeScheduleSnapshotFromSemesterScheduleCache({
+  required List<HomeScheduleDayOption> days,
+  required schedule_cache.SemesterScheduleCache cache,
+}) {
+  final resolved = schedule_cache.resolveSemesterScheduleItemsByDateKey(
+    cache: cache,
+    dates: days.map((day) => day.date).toList(growable: false),
+  );
+  return HomeScheduleSnapshot(
+    days: days,
+    itemsByDateKey: {
+      for (final day in days)
+        day.dateKey: [
+          for (final item in resolved[day.dateKey] ?? const [])
+            TodayScheduleItem(
+              courseId: item.courseId,
+              courseName: item.courseName,
+              startTime: item.startTime,
+              endTime: item.endTime,
+              location: item.location,
+            ),
+        ],
+    },
+  );
+}
+
+Future<_CachedScheduleArtifacts> _buildCachedScheduleArtifacts({
   required db.AppDatabase database,
   required String semesterId,
   required List<HomeScheduleDayOption> days,
@@ -376,13 +392,63 @@ Future<HomeScheduleSnapshot> _buildCachedScheduleSnapshot({
 }) async {
   final semester = await database.getSemesterById(semesterId);
   if (semester == null) {
-    return _emptyScheduleSnapshot(days);
+    return _CachedScheduleArtifacts(
+      snapshot: _emptyScheduleSnapshot(days),
+      cache: null,
+    );
   }
 
-  return buildHomeScheduleSnapshotFromCachedCourses(
-    days: days,
-    courses: courses,
+  final cache = schedule_cache.buildSemesterScheduleCacheFromCourses(
+    semesterId: semesterId,
     semesterStartDate: semester.startDate,
+    courses: courses,
+  );
+  return _CachedScheduleArtifacts(
+    snapshot: buildHomeScheduleSnapshotFromSemesterScheduleCache(
+      days: days,
+      cache: cache,
+    ),
+    cache: cache,
+  );
+}
+
+Future<void> _persistSemesterScheduleCache({
+  required db.AppDatabase database,
+  required schedule_cache.SemesterScheduleCache cache,
+}) async {
+  if (!cache.hasAnyMeetings) {
+    return;
+  }
+  final key = AppStateKeys.homeScheduleSemesterCache(cache.semesterId);
+  final payload = schedule_cache.encodeSemesterScheduleCachePayload(cache);
+  final existing = await database.getState(key);
+  if (existing == payload) {
+    return;
+  }
+  await database.setState(key, payload);
+}
+
+Future<HomeScheduleSnapshot?> _readCachedSemesterScheduleSnapshot({
+  required db.AppDatabase database,
+  required String semesterId,
+  required List<HomeScheduleDayOption> days,
+}) async {
+  final raw = await database.getState(
+    AppStateKeys.homeScheduleSemesterCache(semesterId),
+  );
+  if (raw == null || raw.isEmpty) {
+    return null;
+  }
+  final cache = schedule_cache.decodeSemesterScheduleCachePayload(
+    semesterId: semesterId,
+    raw: raw,
+  );
+  if (cache == null) {
+    return null;
+  }
+  return buildHomeScheduleSnapshotFromSemesterScheduleCache(
+    days: days,
+    cache: cache,
   );
 }
 
@@ -396,6 +462,9 @@ HomeScheduleSnapshot _emptyScheduleSnapshot(List<HomeScheduleDayOption> days) {
 }
 
 const int _homeScheduleCacheVersion = 1;
+const int _homeScheduleRemoteRefreshStateVersion = 1;
+const Duration _homeScheduleRemoteRefreshInterval = Duration(hours: 12);
+const Duration _homeScheduleRemoteRetryBackoff = Duration(hours: 2);
 
 Future<void> _persistHomeScheduleSnapshot({
   required db.AppDatabase database,
@@ -409,6 +478,34 @@ Future<void> _persistHomeScheduleSnapshot({
       snapshot: snapshot,
     ),
   );
+}
+
+Future<void> persistHomeScheduleRemoteRefreshState({
+  required db.AppDatabase database,
+  required HomeScheduleRemoteRefreshState state,
+}) {
+  return database.setState(
+    AppStateKeys.homeScheduleRemoteRefreshState,
+    encodeHomeScheduleRemoteRefreshPayload(state),
+  );
+}
+
+Future<HomeScheduleRemoteRefreshState?> readHomeScheduleRemoteRefreshState({
+  required db.AppDatabase database,
+}) async {
+  final raw = await database.getState(
+    AppStateKeys.homeScheduleRemoteRefreshState,
+  );
+  if (raw == null || raw.isEmpty) {
+    return null;
+  }
+  return decodeHomeScheduleRemoteRefreshPayload(raw);
+}
+
+Future<void> resetHomeScheduleRemoteRefreshState({
+  required db.AppDatabase database,
+}) {
+  return database.deleteState(AppStateKeys.homeScheduleRemoteRefreshState);
 }
 
 Future<HomeScheduleSnapshot?> _readCachedHomeScheduleSnapshot({
@@ -425,6 +522,121 @@ Future<HomeScheduleSnapshot?> _readCachedHomeScheduleSnapshot({
     days: days,
     raw: raw,
   );
+}
+
+@visibleForTesting
+String encodeHomeScheduleRemoteRefreshPayload(
+  HomeScheduleRemoteRefreshState state,
+) {
+  return jsonEncode({
+    'version': _homeScheduleRemoteRefreshStateVersion,
+    'semesterId': state.semesterId,
+    'lastAttemptAt': state.lastAttemptAt.millisecondsSinceEpoch,
+    'hasSuccessfulRefresh': state.hasSuccessfulRefresh,
+  });
+}
+
+@visibleForTesting
+HomeScheduleRemoteRefreshState? decodeHomeScheduleRemoteRefreshPayload(
+  String raw,
+) {
+  try {
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map) {
+      return null;
+    }
+    if (decoded['version'] != _homeScheduleRemoteRefreshStateVersion) {
+      return null;
+    }
+    final semesterId = decoded['semesterId']?.toString() ?? '';
+    final lastAttemptAtMs = decoded['lastAttemptAt'] as int?;
+    final hasSuccessfulRefresh = decoded['hasSuccessfulRefresh'] == true;
+    if (semesterId.isEmpty || lastAttemptAtMs == null) {
+      return null;
+    }
+    return HomeScheduleRemoteRefreshState(
+      semesterId: semesterId,
+      lastAttemptAt: DateTime.fromMillisecondsSinceEpoch(lastAttemptAtMs),
+      hasSuccessfulRefresh: hasSuccessfulRefresh,
+    );
+  } catch (_) {
+    return null;
+  }
+}
+
+@visibleForTesting
+bool shouldFetchHomeScheduleRemoteSnapshot({
+  required String semesterId,
+  required HomeScheduleSnapshot? cachedSnapshot,
+  required HomeScheduleSnapshot localSnapshot,
+  HomeScheduleSnapshot? semesterSnapshot,
+  required HomeScheduleRemoteRefreshState? refreshState,
+  required DateTime now,
+}) {
+  final hasAnyData =
+      (cachedSnapshot != null && _hasAnyScheduleItems(cachedSnapshot)) ||
+      _hasAnyScheduleItems(localSnapshot) ||
+      (semesterSnapshot != null && _hasAnyScheduleItems(semesterSnapshot));
+
+  if (refreshState == null || refreshState.semesterId != semesterId) {
+    return true;
+  }
+  if (refreshState.hasSuccessfulRefresh) {
+    return now.difference(refreshState.lastAttemptAt) >=
+        _homeScheduleRemoteRefreshInterval;
+  }
+  if (!hasAnyData) {
+    return true;
+  }
+  return now.difference(refreshState.lastAttemptAt) >=
+      _homeScheduleRemoteRetryBackoff;
+}
+
+HomeScheduleSnapshot? _mergePersistedScheduleSnapshots({
+  required HomeScheduleSnapshot? cachedSnapshot,
+  required HomeScheduleSnapshot? semesterSnapshot,
+}) {
+  final hasCached =
+      cachedSnapshot != null && _hasAnyScheduleItems(cachedSnapshot);
+  final hasSemester =
+      semesterSnapshot != null && _hasAnyScheduleItems(semesterSnapshot);
+
+  if (hasCached && hasSemester) {
+    return mergeHomeScheduleSnapshots(
+      primary: cachedSnapshot,
+      fallback: semesterSnapshot,
+    );
+  }
+  if (hasCached) {
+    return cachedSnapshot;
+  }
+  if (hasSemester) {
+    return semesterSnapshot;
+  }
+  return null;
+}
+
+HomeScheduleSnapshot _mergeLocalScheduleSnapshot({
+  required HomeScheduleSnapshot currentSnapshot,
+  required HomeScheduleSnapshot? semesterSnapshot,
+}) {
+  final hasCurrent = _hasAnyScheduleItems(currentSnapshot);
+  final hasSemester =
+      semesterSnapshot != null && _hasAnyScheduleItems(semesterSnapshot);
+
+  if (hasCurrent && hasSemester) {
+    return mergeHomeScheduleSnapshots(
+      primary: currentSnapshot,
+      fallback: semesterSnapshot,
+    );
+  }
+  if (hasCurrent) {
+    return currentSnapshot;
+  }
+  if (hasSemester) {
+    return semesterSnapshot;
+  }
+  return currentSnapshot;
 }
 
 @visibleForTesting
@@ -570,396 +782,6 @@ String? _scheduleItemIdentityKey(TodayScheduleItem item) {
   return '$courseIdentity|$startTime|$location';
 }
 
-List<_ParsedCourseMeeting> _decodeCourseMeetings(String rawJson) {
-  if (rawJson.trim().isEmpty) {
-    return const <_ParsedCourseMeeting>[];
-  }
-
-  try {
-    final decoded = jsonDecode(rawJson);
-    if (decoded is! List) {
-      return const <_ParsedCourseMeeting>[];
-    }
-
-    final meetings = <_ParsedCourseMeeting>[];
-    for (final entry in decoded) {
-      final parsed = _parseCourseMeeting(entry?.toString() ?? '');
-      if (parsed != null) {
-        meetings.add(parsed);
-      }
-    }
-    return meetings;
-  } catch (_) {
-    return const <_ParsedCourseMeeting>[];
-  }
-}
-
-_ParsedCourseMeeting? _parseCourseMeeting(String raw) {
-  final value = raw.replaceAll(RegExp(r'\s+'), '').trim();
-  if (value.isEmpty) {
-    return null;
-  }
-
-  final match = RegExp(
-    r'^星期([一二三四五六日天])第([^节]+)节\(([^)]*)\)(?:[，,](.*))?$',
-  ).firstMatch(value);
-  if (match == null) {
-    return null;
-  }
-
-  final dayOfWeek = _parseChineseWeekday(match.group(1)!);
-  final periods = _parsePeriods(match.group(2)!);
-  final weeks = _parseWeeks(match.group(3)!);
-  final location = (match.group(4) ?? '').trim();
-
-  if (dayOfWeek == null || periods.isEmpty || weeks.isEmpty) {
-    return null;
-  }
-
-  return _ParsedCourseMeeting(
-    dayOfWeek: dayOfWeek,
-    periods: periods,
-    location: location,
-    activeWeeks: weeks.length >= 30 ? null : weeks,
-    usesTeachingBlockClock: true,
-  );
-}
-
-int? _parseChineseWeekday(String raw) {
-  return switch (raw) {
-    '一' => 1,
-    '二' => 2,
-    '三' => 3,
-    '四' => 4,
-    '五' => 5,
-    '六' => 6,
-    '日' || '天' => 7,
-    _ => null,
-  };
-}
-
-List<int> _parsePeriods(String raw) {
-  final periods = <int>{};
-  for (final token in raw.split(RegExp(r'[，,、]'))) {
-    final value = token.trim();
-    if (value.isEmpty) {
-      continue;
-    }
-
-    final rangeMatch = RegExp(r'^(\d+)-(\d+)$').firstMatch(value);
-    if (rangeMatch != null) {
-      final start = int.parse(rangeMatch.group(1)!);
-      final end = int.parse(rangeMatch.group(2)!);
-      for (var period = start; period <= end; period += 1) {
-        if (period >= 1 && period <= 14) {
-          periods.add(period);
-        }
-      }
-      continue;
-    }
-
-    final single = int.tryParse(value);
-    if (single != null && single >= 1 && single <= 14) {
-      periods.add(single);
-    }
-  }
-
-  final sorted = periods.toList()..sort();
-  return sorted;
-}
-
-Set<int> _parseWeeks(String raw) {
-  final value = raw.replaceAll(' ', '');
-  final oddOnly = value.contains('单');
-  final evenOnly = value.contains('双');
-  final isAllWeeks = value.contains('全周');
-
-  final weeks = <int>{};
-  if (isAllWeeks || (value.isEmpty && !oddOnly && !evenOnly)) {
-    weeks.addAll(_fullWeekSet());
-  }
-
-  final frontHalfWeekCount = _parseChineseWeekCountDescriptor(
-    value,
-    prefix: '前',
-  );
-  if (frontHalfWeekCount != null) {
-    weeks.addAll({for (var week = 1; week <= frontHalfWeekCount; week += 1) week});
-  }
-
-  final trailingWeekStart = _parseChineseWeekCountDescriptor(
-    value,
-    prefix: '后',
-  );
-  if (trailingWeekStart != null) {
-    weeks.addAll({
-      for (var week = trailingWeekStart + 1; week <= _fullWeekCount; week += 1)
-        week,
-    });
-  }
-
-  for (final token
-      in value
-          .replaceAll('全周', '')
-          .replaceAll('单周', '')
-          .replaceAll('双周', '')
-          .replaceAll(RegExp(r'前[一二三四五六七八九十两\d]+周'), '')
-          .replaceAll(RegExp(r'后[一二三四五六七八九十两\d]+周'), '')
-          .split(RegExp(r'[，,、]'))) {
-    final cleaned = token.trim();
-    if (cleaned.isEmpty) {
-      continue;
-    }
-
-    final rangeMatch = RegExp(r'^(\d+)-(\d+)(?:周)?$').firstMatch(cleaned);
-    if (rangeMatch != null) {
-      final start = int.parse(rangeMatch.group(1)!);
-      final end = int.parse(rangeMatch.group(2)!);
-      for (var week = start; week <= end; week += 1) {
-        weeks.add(week);
-      }
-      continue;
-    }
-
-    final singleMatch = RegExp(r'^(\d+)(?:周)?$').firstMatch(cleaned);
-    if (singleMatch != null) {
-      weeks.add(int.parse(singleMatch.group(1)!));
-    }
-  }
-
-  if (weeks.isEmpty && (oddOnly || evenOnly)) {
-    weeks.addAll(_fullWeekSet());
-  }
-
-  if (oddOnly) {
-    weeks.removeWhere((week) => week.isEven);
-  }
-  if (evenOnly) {
-    weeks.removeWhere((week) => week.isOdd);
-  }
-
-  return weeks;
-}
-
-const int _fullWeekCount = 30;
-
-Set<int> _fullWeekSet() =>
-    {for (var week = 1; week <= _fullWeekCount; week += 1) week};
-
-int? _parseChineseWeekCountDescriptor(String raw, {required String prefix}) {
-  final match = RegExp('$prefix([一二三四五六七八九十两\\d]+)周').firstMatch(raw);
-  if (match == null) {
-    return null;
-  }
-  return _parseChineseInteger(match.group(1)!);
-}
-
-int? _parseChineseInteger(String raw) {
-  final value = raw.trim();
-  if (value.isEmpty) {
-    return null;
-  }
-
-  final arabic = int.tryParse(value);
-  if (arabic != null) {
-    return arabic;
-  }
-
-  const digits = <String, int>{
-    '零': 0,
-    '一': 1,
-    '二': 2,
-    '两': 2,
-    '三': 3,
-    '四': 4,
-    '五': 5,
-    '六': 6,
-    '七': 7,
-    '八': 8,
-    '九': 9,
-  };
-
-  if (value == '十') {
-    return 10;
-  }
-  if (value.startsWith('十')) {
-    final suffix = digits[value.substring(1)];
-    return suffix == null ? null : 10 + suffix;
-  }
-  if (value.endsWith('十')) {
-    final prefixValue = digits[value.substring(0, value.length - 1)];
-    return prefixValue == null ? null : prefixValue * 10;
-  }
-
-  final tenIndex = value.indexOf('十');
-  if (tenIndex > 0 && tenIndex < value.length - 1) {
-    final prefixValue = digits[value.substring(0, tenIndex)];
-    final suffixValue = digits[value.substring(tenIndex + 1)];
-    if (prefixValue == null || suffixValue == null) {
-      return null;
-    }
-    return prefixValue * 10 + suffixValue;
-  }
-
-  return digits[value];
-}
-
-List<(int, int)> _collapseConsecutivePeriods(List<int> periods) {
-  if (periods.isEmpty) {
-    return const <(int, int)>[];
-  }
-
-  final runs = <(int, int)>[];
-  var start = periods.first;
-  var end = periods.first;
-
-  for (final period in periods.skip(1)) {
-    if (period == end + 1) {
-      end = period;
-      continue;
-    }
-    runs.add((start, end));
-    start = period;
-    end = period;
-  }
-
-  runs.add((start, end));
-  return runs;
-}
-
-List<_ScheduledOccurrence> _mergeOccurrences(
-  List<_ScheduledOccurrence> occurrences,
-) {
-  if (occurrences.isEmpty) {
-    return const <_ScheduledOccurrence>[];
-  }
-
-  final sorted = [...occurrences]
-    ..sort((left, right) {
-      final byStart = left.startPeriod.compareTo(right.startPeriod);
-      if (byStart != 0) {
-        return byStart;
-      }
-      final byCourse = left.courseName.compareTo(right.courseName);
-      if (byCourse != 0) {
-        return byCourse;
-      }
-      final byCourseId = left.courseId.compareTo(right.courseId);
-      if (byCourseId != 0) {
-        return byCourseId;
-      }
-      return left.location.compareTo(right.location);
-    });
-
-  final merged = <_ScheduledOccurrence>[];
-  var current = sorted.first;
-
-  for (final next in sorted.skip(1)) {
-    if (next.courseName == current.courseName &&
-        next.courseId == current.courseId &&
-        next.location == current.location &&
-        next.startPeriod <= current.endPeriod + 1) {
-      current = _ScheduledOccurrence(
-        courseId: current.courseId,
-        courseName: current.courseName,
-        location: current.location,
-        startPeriod: current.startPeriod,
-        endPeriod: next.endPeriod > current.endPeriod
-            ? next.endPeriod
-            : current.endPeriod,
-        usesTeachingBlockClock: current.usesTeachingBlockClock,
-      );
-      continue;
-    }
-
-    merged.add(current);
-    current = next;
-  }
-
-  merged.add(current);
-  return merged;
-}
-
-TodayScheduleItem _mapOccurrenceToItem(_ScheduledOccurrence occurrence) {
-  return TodayScheduleItem(
-    courseId: occurrence.courseId,
-    courseName: occurrence.courseName,
-    startTime: _periodStartTime(
-      occurrence.startPeriod,
-      usesTeachingBlockClock: occurrence.usesTeachingBlockClock,
-    ),
-    endTime: _periodEndTime(
-      occurrence.endPeriod,
-      usesTeachingBlockClock: occurrence.usesTeachingBlockClock,
-    ),
-    location: occurrence.location,
-  );
-}
-
-String _periodStartTime(int period, {required bool usesTeachingBlockClock}) {
-  if (usesTeachingBlockClock) {
-    const teachingBlockStartTimes = <int, String>{
-      1: '08:00',
-      2: '09:50',
-      3: '13:30',
-      4: '15:20',
-      5: '17:05',
-      6: '19:20',
-    };
-    return teachingBlockStartTimes[period] ?? '';
-  }
-
-  const startTimes = <int, String>{
-    1: '08:00',
-    2: '08:50',
-    3: '09:50',
-    4: '10:40',
-    5: '11:30',
-    6: '13:30',
-    7: '14:20',
-    8: '15:20',
-    9: '16:10',
-    10: '17:05',
-    11: '17:55',
-    12: '19:20',
-    13: '20:10',
-    14: '21:00',
-  };
-  return startTimes[period] ?? '';
-}
-
-String _periodEndTime(int period, {required bool usesTeachingBlockClock}) {
-  if (usesTeachingBlockClock) {
-    const teachingBlockEndTimes = <int, String>{
-      1: '09:35',
-      2: '11:25',
-      3: '15:05',
-      4: '16:55',
-      5: '18:40',
-      6: '20:55',
-    };
-    return teachingBlockEndTimes[period] ?? '';
-  }
-
-  const endTimes = <int, String>{
-    1: '08:45',
-    2: '09:35',
-    3: '10:35',
-    4: '11:25',
-    5: '12:15',
-    6: '14:15',
-    7: '15:05',
-    8: '16:05',
-    9: '16:55',
-    10: '17:50',
-    11: '18:40',
-    12: '20:05',
-    13: '20:55',
-    14: '21:45',
-  };
-  return endTimes[period] ?? '';
-}
-
 String? _resolveEventDayKey(String raw, Set<String> allowedKeys) {
   final normalized = _normalizeDateKey(raw);
   if (normalized != null && allowedKeys.contains(normalized)) {
@@ -1077,11 +899,17 @@ String _weekdayLabel(DateTime date) {
 Map<String, String> _uniqueCourseIdsByName(List<db.Course> courses) {
   final grouped = <String, Set<String>>{};
   for (final course in courses) {
-    final name = course.name.trim();
-    if (name.isEmpty) {
-      continue;
+    for (final candidate in [
+      course.name,
+      course.chineseName,
+      course.englishName,
+    ]) {
+      final name = candidate.trim();
+      if (name.isEmpty) {
+        continue;
+      }
+      grouped.putIfAbsent(name, () => <String>{}).add(course.id);
     }
-    grouped.putIfAbsent(name, () => <String>{}).add(course.id);
   }
 
   return {

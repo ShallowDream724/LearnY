@@ -10,6 +10,7 @@ import '../database/app_state_keys.dart';
 import '../database/database.dart';
 import '../files/file_models.dart';
 import '../files/file_repository.dart';
+import '../schedule/semester_schedule_cache.dart';
 
 class SyncExecutionResult {
   const SyncExecutionResult({
@@ -114,22 +115,51 @@ class SyncEngine {
 
     final courses = await apiClient.getCourseList(semester.id);
     final syncedAt = DateTime.now();
+    final cachedCourses = <Course>[];
     for (final course in courses) {
+      final cachedCourse = Course(
+        id: course.id,
+        name: course.name,
+        chineseName: course.chineseName,
+        englishName: course.englishName,
+        teacherName: course.teacherName,
+        teacherNumber: course.teacherNumber,
+        courseNumber: course.courseNumber,
+        courseIndex: course.courseIndex,
+        courseType: course.courseType.value,
+        semesterId: semester.id,
+        timeAndLocationJson: jsonEncode(course.timeAndLocation),
+        sortOrder: 0,
+        lastSynced: syncedAt,
+      );
+      cachedCourses.add(cachedCourse);
       await database.upsertCourse(
         CoursesCompanion.insert(
-          id: course.id,
-          name: course.name,
-          chineseName: course.chineseName,
-          englishName: Value(course.englishName),
-          teacherName: Value(course.teacherName),
-          teacherNumber: Value(course.teacherNumber),
-          courseNumber: Value(course.courseNumber),
-          courseIndex: Value(course.courseIndex),
-          courseType: course.courseType.value,
+          id: cachedCourse.id,
+          name: cachedCourse.name,
+          chineseName: cachedCourse.chineseName,
+          englishName: Value(cachedCourse.englishName),
+          teacherName: Value(cachedCourse.teacherName),
+          teacherNumber: Value(cachedCourse.teacherNumber),
+          courseNumber: Value(cachedCourse.courseNumber),
+          courseIndex: Value(cachedCourse.courseIndex),
+          courseType: cachedCourse.courseType,
           semesterId: semester.id,
-          timeAndLocationJson: Value(jsonEncode(course.timeAndLocation)),
+          timeAndLocationJson: Value(cachedCourse.timeAndLocationJson),
           lastSynced: Value(syncedAt),
         ),
+      );
+    }
+
+    final semesterScheduleCache = buildSemesterScheduleCacheFromCourses(
+      semesterId: semester.id,
+      semesterStartDate: semester.startDate,
+      courses: cachedCourses,
+    );
+    if (semesterScheduleCache.hasAnyMeetings) {
+      await database.setState(
+        AppStateKeys.homeScheduleSemesterCache(semester.id),
+        encodeSemesterScheduleCachePayload(semesterScheduleCache),
       );
     }
 
