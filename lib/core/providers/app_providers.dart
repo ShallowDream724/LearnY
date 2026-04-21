@@ -30,6 +30,14 @@ final databaseProvider = Provider<AppDatabase>((ref) {
 /// first frame after a cold start.
 final initialCurrentSemesterIdProvider = Provider<String?>((ref) => null);
 
+/// Seeded from `main.dart` so cached identity can render on the first frame
+/// after a cold start without waiting for an extra auth restore read.
+final initialAuthUsernameProvider = Provider<String?>((ref) => null);
+
+/// Tells state notifiers whether cold-start bootstrap has already populated
+/// persisted auth/session primitives in `main.dart`.
+final didBootstrapAppSessionProvider = Provider<bool>((ref) => false);
+
 /// Seeded from `main.dart` so secure auto-relogin recovery does not race the
 /// first foreground sync after a cold start.
 final initialAutoReloginEnabledProvider = Provider<bool>((ref) => false);

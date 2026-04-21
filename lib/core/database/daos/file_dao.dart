@@ -29,6 +29,30 @@ extension FileDao on AppDatabase {
     ),
   );
 
+  Future<void> updateFileLocalPath(String id, String? localPath) =>
+      (update(courseFiles)..where((t) => t.id.equals(id))).write(
+        CourseFilesCompanion(localFilePath: Value(localPath)),
+      );
+
+  Future<void> rewriteDownloadedFilePathPrefix(
+    String fromPrefix,
+    String toPrefix,
+  ) {
+    return customUpdate(
+      '''
+      UPDATE course_files
+      SET local_file_path = REPLACE(local_file_path, ?, ?)
+      WHERE local_file_path LIKE ?
+      ''',
+      variables: [
+        Variable<String>(fromPrefix),
+        Variable<String>(toPrefix),
+        Variable<String>('$fromPrefix%'),
+      ],
+      updates: {courseFiles},
+    );
+  }
+
   Stream<List<CourseFile>> watchFilesByCourse(String courseId) =>
       (select(courseFiles)..where((t) => t.courseId.equals(courseId))).watch();
 

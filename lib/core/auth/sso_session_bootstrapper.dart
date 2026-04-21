@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../api/learn_api.dart';
+import '../api/api.dart';
 import '../providers/api_client_provider.dart';
 import 'sso_cookie_bridge.dart';
 import 'sso_fallback_page_parser.dart';
@@ -21,16 +21,26 @@ class SsoSessionBootstrapper {
     required SsoFallbackPageSnapshot pageSnapshot,
     required String cookieString,
   }) async {
-    _api.setCSRFToken(pageSnapshot.csrfToken);
-    await _cookieBridge.transferWebViewCookiesToDio(cookieString);
-
-    var resolvedUsername = pageSnapshot.username.trim();
-    if (resolvedUsername.isEmpty) {
-      final userInfo = await _api.getUserInfo();
-      resolvedUsername = userInfo.name;
+    final normalizedCookieString = cookieString.trim();
+    if (normalizedCookieString.isEmpty) {
+      throw const ApiError(reason: FailReason.notLoggedIn);
     }
 
-    return resolvedUsername;
+    _api.setCSRFToken(pageSnapshot.csrfToken);
+    await _cookieBridge.transferWebViewCookiesToDio(normalizedCookieString);
+
+    final userInfo = await _api.getUserInfo();
+    final resolvedUsername = userInfo.name.trim();
+    if (resolvedUsername.isNotEmpty) {
+      return resolvedUsername;
+    }
+
+    final fallbackUsername = pageSnapshot.username.trim();
+    if (fallbackUsername.isEmpty) {
+      throw const ApiError(reason: FailReason.invalidResponse);
+    }
+
+    return fallbackUsername;
   }
 }
 

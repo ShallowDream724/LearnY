@@ -290,6 +290,7 @@ HomeScheduleSnapshot buildHomeScheduleSnapshotFromCalendarEvents({
     entry.value.sort(
       (left, right) => left.startTime.compareTo(right.startTime),
     );
+    grouped[entry.key] = _mergeAdjacentScheduleItems(entry.value);
   }
 
   return HomeScheduleSnapshot(days: days, itemsByDateKey: grouped);
@@ -349,7 +350,9 @@ HomeScheduleSnapshot mergeHomeScheduleSnapshots({
       return left.location.compareTo(right.location);
     });
 
-    mergedItemsByDateKey[day.dateKey] = primaryItems;
+    mergedItemsByDateKey[day.dateKey] = _mergeAdjacentScheduleItems(
+      primaryItems,
+    );
   }
 
   return HomeScheduleSnapshot(
@@ -780,6 +783,128 @@ String? _scheduleItemIdentityKey(TodayScheduleItem item) {
   final startTime = item.startTime.trim();
   final location = item.location.trim();
   return '$courseIdentity|$startTime|$location';
+}
+
+List<TodayScheduleItem> _mergeAdjacentScheduleItems(
+  List<TodayScheduleItem> items,
+) {
+  if (items.isEmpty) {
+    return const <TodayScheduleItem>[];
+  }
+
+  final sorted = [...items]
+    ..sort((left, right) {
+      final byStart = left.startTime.compareTo(right.startTime);
+      if (byStart != 0) {
+        return byStart;
+      }
+      final byCourse = _scheduleCourseSortKey(left).compareTo(
+        _scheduleCourseSortKey(right),
+      );
+      if (byCourse != 0) {
+        return byCourse;
+      }
+      return left.location.compareTo(right.location);
+    });
+
+  final merged = <TodayScheduleItem>[sorted.first];
+  for (final next in sorted.skip(1)) {
+    final current = merged.last;
+    if (_canMergeAdjacentScheduleItems(current, next)) {
+      merged[merged.length - 1] = TodayScheduleItem(
+        courseId: current.courseId ?? next.courseId,
+        courseName: current.courseName.isNotEmpty
+            ? current.courseName
+            : next.courseName,
+        startTime: current.startTime,
+        endTime: next.endTime.isNotEmpty ? next.endTime : current.endTime,
+        location: current.location.isNotEmpty ? current.location : next.location,
+      );
+      continue;
+    }
+    merged.add(next);
+  }
+
+  return merged;
+}
+
+bool _canMergeAdjacentScheduleItems(
+  TodayScheduleItem current,
+  TodayScheduleItem next,
+) {
+  if (!_matchesScheduleCourse(current, next)) {
+    return false;
+  }
+
+  if (current.location.trim() != next.location.trim()) {
+    return false;
+  }
+
+  return _isAdjacentScheduleBoundary(
+    currentEndTime: current.endTime,
+    nextStartTime: next.startTime,
+  );
+}
+
+String _scheduleCourseSortKey(TodayScheduleItem item) {
+  final courseName = item.courseName.trim();
+  if (courseName.isNotEmpty) {
+    return courseName;
+  }
+  final courseId = item.courseId?.trim() ?? '';
+  if (courseId.isNotEmpty) {
+    return courseId;
+  }
+  return '';
+}
+
+bool _matchesScheduleCourse(TodayScheduleItem left, TodayScheduleItem right) {
+  final leftCourseId = left.courseId?.trim() ?? '';
+  final rightCourseId = right.courseId?.trim() ?? '';
+  if (leftCourseId.isNotEmpty &&
+      rightCourseId.isNotEmpty &&
+      leftCourseId == rightCourseId) {
+    return true;
+  }
+
+  final leftCourseName = left.courseName.trim();
+  final rightCourseName = right.courseName.trim();
+  if (leftCourseName.isNotEmpty &&
+      rightCourseName.isNotEmpty &&
+      leftCourseName == rightCourseName) {
+    return true;
+  }
+
+  return false;
+}
+
+bool _isAdjacentScheduleBoundary({
+  required String currentEndTime,
+  required String nextStartTime,
+}) {
+  final endTime = currentEndTime.trim();
+  final startTime = nextStartTime.trim();
+  if (endTime.isEmpty || startTime.isEmpty) {
+    return false;
+  }
+
+  const adjacentBoundaries = <String, Set<String>>{
+    '08:45': {'08:50'},
+    '09:35': {'09:50'},
+    '10:35': {'10:40'},
+    '11:25': {'11:30', '13:30'},
+    '12:15': {'13:30'},
+    '14:15': {'14:20'},
+    '15:05': {'15:20'},
+    '16:05': {'16:10'},
+    '16:55': {'17:05'},
+    '17:50': {'17:55'},
+    '18:40': {'19:20'},
+    '20:05': {'20:10'},
+    '20:55': {'21:00'},
+  };
+
+  return adjacentBoundaries[endTime]?.contains(startTime) == true;
 }
 
 String? _resolveEventDayKey(String raw, Set<String> allowedKeys) {

@@ -43,6 +43,12 @@ class FileAssetActions {
     return _ref.read(fileDownloadProvider.notifier).openFile(item.cacheKey);
   }
 
+  Future<bool> openContainingFolder(FileDetailItem item) {
+    return _ref
+        .read(fileDownloadProvider.notifier)
+        .openContainingFolder(item.cacheKey);
+  }
+
   Future<void> deleteAsset(String assetKey) {
     return _ref.read(fileDownloadProvider.notifier).deleteFile(assetKey);
   }

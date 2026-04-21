@@ -103,6 +103,21 @@ class AppSessionCoordinator {
       return;
     }
 
+    _scheduleForegroundSync();
+  }
+
+  void scheduleInitialForegroundSyncIfNeeded() {
+    final auth = _delegate.authState;
+    if (auth.isRestoring ||
+        !auth.canAccessCachedData ||
+        auth.requiresReauthentication) {
+      return;
+    }
+
+    _scheduleForegroundSync();
+  }
+
+  void _scheduleForegroundSync() {
     if (_postAuthSyncScheduled) {
       return;
     }
@@ -158,12 +173,13 @@ class AppSessionCoordinator {
   }
 
   void _triggerRecoveryAfterSyncFailure(String? message) {
-    _recoveryTask ??= _recoverSession(
-      errorMessage: message,
-      resyncOnSuccess: true,
-    ).whenComplete(() {
-      _recoveryTask = null;
-    });
+    _recoveryTask ??=
+        _recoverSession(
+          errorMessage: message,
+          resyncOnSuccess: true,
+        ).whenComplete(() {
+          _recoveryTask = null;
+        });
   }
 
   Future<void> _recoverSession({
@@ -214,6 +230,7 @@ final appSessionCoordinatorProvider = Provider<AppSessionCoordinator>((ref) {
 
   ref.listen<AuthState>(authProvider, coordinator.handleAuthStateChanged);
   ref.listen<SyncState>(syncStateProvider, coordinator.handleSyncStateChanged);
+  coordinator.scheduleInitialForegroundSyncIfNeeded();
 
   return coordinator;
 });

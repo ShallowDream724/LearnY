@@ -8,7 +8,7 @@
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 
 import '../database/database.dart' as db;
 import '../files/cached_asset_repository.dart';
@@ -18,6 +18,7 @@ import '../providers/providers.dart';
 import '../files/preview/archive_preview_service.dart';
 import 'file_cache_policy_service.dart';
 import 'file_download_service.dart';
+import 'file_storage_workspace_service.dart';
 
 // ---------------------------------------------------------------------------
 //  Data model
@@ -59,8 +60,9 @@ class FileCacheService {
   FileCacheService(this._ref);
 
   Future<Directory> get _rootDir async {
-    final appDir = await getApplicationDocumentsDirectory();
-    return Directory('${appDir.path}/learnx_files');
+    return _ref
+        .read(fileStorageWorkspaceServiceProvider)
+        .ensureFilesRootDirectory();
   }
 
   // ─── Size queries ───
@@ -72,8 +74,9 @@ class FileCacheService {
   }
 
   Future<int> getCourseCacheSize(String courseId) async {
-    final root = await _rootDir;
-    final courseDir = Directory('${root.path}/$courseId');
+    final courseDir = await _ref
+        .read(fileStorageWorkspaceServiceProvider)
+        .ensureCourseDirectory(courseId: courseId);
     if (!await courseDir.exists()) return 0;
     return _directorySize(courseDir);
   }
@@ -219,9 +222,16 @@ class FileCacheService {
 
   Future<void> clearCourseCache(String courseId) async {
     final root = await _rootDir;
-    final courseDir = Directory('${root.path}/$courseId');
+    final courseDir = await _ref
+        .read(fileStorageWorkspaceServiceProvider)
+        .ensureCourseDirectory(courseId: courseId);
+    final legacyCourseDir = Directory('${root.path}/$courseId');
     if (await courseDir.exists()) {
       await courseDir.delete(recursive: true);
+    }
+    if (!p.equals(legacyCourseDir.path, courseDir.path) &&
+        await legacyCourseDir.exists()) {
+      await legacyCourseDir.delete(recursive: true);
     }
 
     final fileRepository = _ref.read(fileRepositoryProvider);

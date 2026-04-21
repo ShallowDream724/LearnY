@@ -169,7 +169,8 @@ GoRouter buildRouter({required WidgetRef ref}) {
       GoRoute(
         path: Routes.login,
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const LoginScreen(),
+        builder: (context, state) =>
+            LoginScreen(returnTo: state.uri.queryParameters['from']),
       ),
 
       GoRoute(

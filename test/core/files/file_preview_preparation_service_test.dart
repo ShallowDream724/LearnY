@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:learn_y/core/files/file_models.dart';
 import 'package:learn_y/core/files/file_preview_registry.dart';
@@ -8,8 +10,11 @@ import 'package:learn_y/core/files/preview/file_preview_preparation_service.dart
 void main() {
   group('FilePreviewPreparationService', () {
     const registry = FilePreviewRegistry();
-    const archiveService = ArchivePreviewService(registry: registry);
-    const service = FilePreviewPreparationService(
+    final archiveService = ArchivePreviewService(
+      registry: registry,
+      resolveArchiveRootDirectory: () async => Directory.systemTemp,
+    );
+    final service = FilePreviewPreparationService(
       registry: registry,
       archiveService: archiveService,
     );

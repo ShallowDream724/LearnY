@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth.dart';
 import '../../core/design/app_toast.dart';
@@ -11,12 +12,15 @@ import '../../core/guides/guide_presenter.dart';
 import '../../core/guides/guide_registry.dart';
 import '../../core/providers/app_update_provider.dart';
 import '../../core/providers/auth_preferences_provider.dart';
+import '../../core/router/router.dart';
 import 'widgets/auto_relogin_setup_dialog.dart';
 import 'widgets/identity_auth_flow_screen.dart';
 import 'widgets/login_auto_relogin_card.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({super.key, this.returnTo});
+
+  final String? returnTo;
 
   @override
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
@@ -27,6 +31,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _enableAutoReloginOnLogin = false;
   bool _guidePresentationRecorded = false;
   String? _errorMessage;
+  ProviderSubscription<AuthState>? _authSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _authSubscription = ref.listenManual<AuthState>(authProvider, (
+      previous,
+      next,
+    ) {
+      if (!_shouldAutoLeaveLogin(previous, next)) {
+        return;
+      }
+      _navigateAfterAuthSuccess();
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.close();
+    super.dispose();
+  }
 
   Future<void> _startLogin() async {
     if (_isLaunchingFlow) {
@@ -52,6 +77,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       } else if (result.noticeMessage != null) {
         AppToast.showWarning(context, message: result.noticeMessage!);
       }
+      _navigateAfterAuthSuccess();
     } finally {
       if (mounted) {
         setState(() {
@@ -140,6 +166,50 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         .read(guidePresenterProvider)
         .dismiss(GuideRegistry.loginAutoRelogin);
     ref.invalidate(guideVisibilityProvider(GuideRegistry.loginAutoRelogin.id));
+  }
+
+  bool _shouldAutoLeaveLogin(AuthState? previous, AuthState next) {
+    final becameUsable =
+        next.canAccessCachedData && !next.requiresReauthentication;
+    if (!becameUsable) {
+      return false;
+    }
+
+    final wasUsable =
+        previous != null &&
+        previous.canAccessCachedData &&
+        !previous.requiresReauthentication;
+    return !wasUsable;
+  }
+
+  void _navigateAfterAuthSuccess() {
+    if (!mounted) {
+      return;
+    }
+
+    final auth = ref.read(authProvider);
+    if (!auth.canAccessCachedData || auth.requiresReauthentication) {
+      return;
+    }
+
+    final destination =
+        widget.returnTo != null &&
+            widget.returnTo!.isNotEmpty &&
+            widget.returnTo != Routes.login
+        ? widget.returnTo!
+        : Routes.home;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      final router = GoRouter.of(context);
+      if (router.routerDelegate.currentConfiguration.uri.toString() ==
+          destination) {
+        return;
+      }
+      context.go(destination);
+    });
   }
 
   @override

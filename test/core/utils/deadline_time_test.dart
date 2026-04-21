@@ -18,6 +18,13 @@ void main() {
 
       expect(formatRelativeDeadlineLabel(deadline, now: now), '后天 10:00');
     });
+
+    test('renders two-weeks-later deadlines as 下下周', () {
+      final now = DateTime(2026, 4, 10, 9, 0);
+      final deadline = DateTime(2026, 4, 23, 23, 59);
+
+      expect(formatRelativeDeadlineLabel(deadline, now: now), '下下周四 23:59');
+    });
   });
 
   group('formatRelativeDayCountLabel', () {

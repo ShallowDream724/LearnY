@@ -38,7 +38,15 @@ void main() {
 
   group('ArchivePreviewService', () {
     const registry = FilePreviewRegistry();
-    const service = ArchivePreviewService(registry: registry);
+    late ArchivePreviewService service;
+
+    setUp(() {
+      service = ArchivePreviewService(
+        registry: registry,
+        resolveArchiveRootDirectory: () async =>
+            Directory('${documentsDirectory.path}/LearnY Files/.archive'),
+      );
+    });
 
     test('inspects zip entries and marks previewable formats', () async {
       final zipPath = await _writeArchive(
@@ -55,7 +63,10 @@ void main() {
 
       expect(preview.document.fileCount, 2);
       expect(preview.document.directoryCount, 2);
-      expect(preview.document.nameDecodingMode, ArchiveNameDecodingMode.standard);
+      expect(
+        preview.document.nameDecodingMode,
+        ArchiveNameDecodingMode.standard,
+      );
       expect(preview.document.canCompatibilityOpen, isFalse);
       expect(
         preview.document.entries.map((entry) => entry.path),
@@ -95,7 +106,7 @@ void main() {
       expect(
         extractedPath.replaceAll('\\', '/'),
         contains(
-          '/learnx_files/.archive/course-1/archive_course-1_bundle/nested/notes.md',
+          '/LearnY Files/.archive/course-1/archive_course-1_bundle/nested/notes.md',
         ),
       );
 

@@ -19,6 +19,7 @@ import '../../core/files/file_asset_runtime.dart';
 import '../../core/files/file_models.dart';
 import '../../core/files/file_preview_registry.dart';
 import '../../core/services/file_download_service.dart';
+import '../../core/services/file_manager_reveal_service.dart';
 import 'providers/file_bookmark_providers.dart';
 import 'providers/file_queries.dart';
 import 'widgets/file_preview_view.dart';
@@ -211,6 +212,9 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
             case _FileAction.openExternal:
               await _openExternal(file);
               break;
+            case _FileAction.openContainingFolder:
+              await _openContainingFolder(file);
+              break;
             case _FileAction.toggleInfo:
               setState(() => _showInfo = !_showInfo);
               break;
@@ -236,6 +240,14 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
                 child: Text('外部打开'),
               ),
             );
+            if (supportsRevealInFileManager) {
+              items.add(
+                const PopupMenuItem<_FileAction>(
+                  value: _FileAction.openContainingFolder,
+                  child: Text('在文件夹中打开'),
+                ),
+              );
+            }
           }
           if (_canPreview(file) && isReady) {
             items.add(
@@ -311,9 +323,24 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
       AppToast.showWarning(context, message: '无法打开文件');
     }
   }
+
+  Future<void> _openContainingFolder(FileDetailItem file) async {
+    final opened = await ref
+        .read(fileAssetActionsProvider)
+        .openContainingFolder(file);
+    if (!opened && mounted) {
+      AppToast.showWarning(context, message: '无法打开所在文件夹');
+    }
+  }
 }
 
-enum _FileAction { redownload, share, openExternal, toggleInfo }
+enum _FileAction {
+  redownload,
+  share,
+  openExternal,
+  openContainingFolder,
+  toggleInfo,
+}
 
 class _DownloadingView extends StatelessWidget {
   const _DownloadingView({required this.progress});

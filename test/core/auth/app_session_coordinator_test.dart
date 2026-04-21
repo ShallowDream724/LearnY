@@ -9,6 +9,25 @@ import 'package:learn_y/core/providers/sync_models.dart';
 void main() {
   group('AppSessionCoordinator', () {
     test(
+      'schedules a foreground sync for bootstrapped cached identity',
+      () async {
+        final delegate = _FakeCoordinatorDelegate(
+          authState: const AuthState.cached(username: 'demo'),
+        );
+
+        final coordinator = AppSessionCoordinator(
+          delegate,
+          postAuthSyncDelay: Duration.zero,
+          scheduleTask: (delay, task) async => task(),
+        );
+
+        coordinator.scheduleInitialForegroundSyncIfNeeded();
+
+        expect(delegate.syncCalls, 1);
+      },
+    );
+
+    test(
       'schedules a foreground sync when restore yields cached identity',
       () async {
         final delegate = _FakeCoordinatorDelegate(
@@ -118,29 +137,32 @@ void main() {
       },
     );
 
-    test('recovers and re-syncs after session expiry when recovery succeeds', () async {
-      final delegate = _FakeCoordinatorDelegate(
-        authState: const AuthState.authenticated(username: 'demo'),
-        recoveryResult: const SessionRecoveryResult.success(
-          SessionRecoveryMethod.secureCredential,
-        ),
-      );
-      final coordinator = AppSessionCoordinator(delegate);
+    test(
+      'recovers and re-syncs after session expiry when recovery succeeds',
+      () async {
+        final delegate = _FakeCoordinatorDelegate(
+          authState: const AuthState.authenticated(username: 'demo'),
+          recoveryResult: const SessionRecoveryResult.success(
+            SessionRecoveryMethod.secureCredential,
+          ),
+        );
+        final coordinator = AppSessionCoordinator(delegate);
 
-      coordinator.handleSyncStateChanged(
-        const SyncState(status: SyncStatus.syncing),
-        const SyncState(
-          status: SyncStatus.sessionExpired,
-          errorMessage: 'cookie expired',
-        ),
-      );
+        coordinator.handleSyncStateChanged(
+          const SyncState(status: SyncStatus.syncing),
+          const SyncState(
+            status: SyncStatus.sessionExpired,
+            errorMessage: 'cookie expired',
+          ),
+        );
 
-      await Future<void>.delayed(Duration.zero);
-      expect(delegate.recoveryCalls, 1);
-      expect(delegate.markHealthyCalls, 1);
-      expect(delegate.syncCalls, 1);
-      expect(delegate.markExpiredMessages, isEmpty);
-    });
+        await Future<void>.delayed(Duration.zero);
+        expect(delegate.recoveryCalls, 1);
+        expect(delegate.markHealthyCalls, 1);
+        expect(delegate.syncCalls, 1);
+        expect(delegate.markExpiredMessages, isEmpty);
+      },
+    );
   });
 }
 
@@ -180,7 +202,9 @@ class _FakeCoordinatorDelegate implements AppSessionCoordinatorDelegate {
   Future<SessionRecoveryResult> recoverSession() async {
     recoveryCalls++;
     if (recoveryResult.recovered) {
-      authState = AuthState.authenticated(username: authState.username ?? 'demo');
+      authState = AuthState.authenticated(
+        username: authState.username ?? 'demo',
+      );
     }
     return recoveryResult;
   }

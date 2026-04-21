@@ -45,6 +45,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Future<void> _onRefresh() async {
     final syncState = (await ref.read(syncActionsProvider).refreshAll()).state;
+    await resetHomeScheduleRemoteRefreshState(
+      database: ref.read(databaseProvider),
+    );
     ref.invalidate(homeScheduleSnapshotProvider);
     if (!mounted) return;
     if (syncState.status == SyncStatus.success) {

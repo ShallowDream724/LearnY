@@ -3,11 +3,11 @@ import 'dart:io';
 import 'package:archive/archive.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
 import '../file_preview_registry.dart';
 import 'archive_entry_name_decoder.dart';
 import 'file_preview_models.dart';
+import '../../services/file_storage_workspace_service.dart';
 
 class ArchiveExtractionResult {
   const ArchiveExtractionResult({
@@ -22,14 +22,17 @@ class ArchiveExtractionResult {
 class ArchivePreviewService {
   const ArchivePreviewService({
     required FilePreviewRegistry registry,
+    required Future<Directory> Function() resolveArchiveRootDirectory,
     ArchiveEntryNameDecoder nameDecoder = const ArchiveEntryNameDecoder(),
     this.maxInspectableEntries = 4000,
     this.maxInspectableBytes = 1024 * 1024 * 1024,
     this.maxCacheAge = const Duration(days: 7),
   }) : _registry = registry,
+       _resolveArchiveRootDirectory = resolveArchiveRootDirectory,
        _nameDecoder = nameDecoder;
 
   final FilePreviewRegistry _registry;
+  final Future<Directory> Function() _resolveArchiveRootDirectory;
   final ArchiveEntryNameDecoder _nameDecoder;
   final int maxInspectableEntries;
   final int maxInspectableBytes;
@@ -38,8 +41,7 @@ class ArchivePreviewService {
   Future<ArchivePreparedFilePreview> inspect({
     required FilePreviewDescriptor descriptor,
     required String localPath,
-    ArchiveNameDecodingMode nameDecodingMode =
-        ArchiveNameDecodingMode.standard,
+    ArchiveNameDecodingMode nameDecodingMode = ArchiveNameDecodingMode.standard,
   }) async {
     await cleanupStaleExtractionCaches();
 
@@ -216,8 +218,7 @@ class ArchivePreviewService {
     required String courseId,
     required String containerAssetKey,
     required String containerLocalPath,
-    ArchiveNameDecodingMode nameDecodingMode =
-        ArchiveNameDecodingMode.standard,
+    ArchiveNameDecodingMode nameDecodingMode = ArchiveNameDecodingMode.standard,
   }) async {
     final context = await _decodeArchiveContext(
       containerLocalPath,
@@ -288,7 +289,10 @@ class ArchivePreviewService {
     }
 
     final entries = <String>{};
-    await for (final entity in directory.list(recursive: true, followLinks: false)) {
+    await for (final entity in directory.list(
+      recursive: true,
+      followLinks: false,
+    )) {
       if (entity is! File) {
         continue;
       }
@@ -373,7 +377,8 @@ class ArchivePreviewService {
     final decodedFiles = <_DecodedArchiveFile>[];
 
     for (final decodedEntry in plan.entries) {
-      if (decodedEntry.fileIndex < 0 || decodedEntry.fileIndex >= fileEntries.length) {
+      if (decodedEntry.fileIndex < 0 ||
+          decodedEntry.fileIndex >= fileEntries.length) {
         return _fallbackDecodedFiles(fileEntries);
       }
       final archiveFile = fileEntries[decodedEntry.fileIndex];
@@ -398,7 +403,9 @@ class ArchivePreviewService {
     return decodedFiles;
   }
 
-  List<_DecodedArchiveFile> _fallbackDecodedFiles(List<ArchiveFile> fileEntries) {
+  List<_DecodedArchiveFile> _fallbackDecodedFiles(
+    List<ArchiveFile> fileEntries,
+  ) {
     final usedPaths = <String>{};
     final decodedFiles = <_DecodedArchiveFile>[];
     for (var index = 0; index < fileEntries.length; index += 1) {
@@ -444,8 +451,7 @@ class ArchivePreviewService {
   }
 
   Future<Directory> _archiveRootDirectory() async {
-    final appDir = await getApplicationDocumentsDirectory();
-    return Directory(p.join(appDir.path, 'learnx_files', '.archive'));
+    return _resolveArchiveRootDirectory();
   }
 
   Future<Directory> _containerCacheDirectory({
@@ -576,5 +582,8 @@ class _DecodedArchiveFile {
 final archivePreviewServiceProvider = Provider<ArchivePreviewService>((ref) {
   return ArchivePreviewService(
     registry: ref.watch(filePreviewRegistryProvider),
+    resolveArchiveRootDirectory: ref
+        .watch(fileStorageWorkspaceServiceProvider)
+        .ensureArchiveRootDirectory,
   );
 });

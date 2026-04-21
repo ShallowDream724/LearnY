@@ -142,7 +142,7 @@ HomeData _buildHomeData({
         ..sort((a, b) => b.uploadTime.compareTo(a.uploadTime));
 
   return HomeData(
-    urgentAssignments: urgentAssignments.take(5).toList(),
+    urgentAssignments: urgentAssignments,
     unreadNotifications: notificationSummaries,
     newFiles: fileSummaries,
     recentGrades: recentGradeSummaries.take(5).toList(),

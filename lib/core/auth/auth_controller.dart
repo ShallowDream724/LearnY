@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 
 import '../database/app_state_keys.dart';
 import '../database/database.dart';
@@ -82,10 +83,19 @@ class AuthState {
 class AuthController extends StateNotifier<AuthState> {
   final Ref _ref;
   final AuthSessionRepository _repository;
+  final bool _didBootstrapAppSession;
 
   AuthController(this._ref, this._repository)
-    : super(const AuthState.restoring()) {
-    _restore();
+    : _didBootstrapAppSession = _ref.read(didBootstrapAppSessionProvider),
+      super(
+        buildInitialAuthState(
+          didBootstrapAppSession: _ref.read(didBootstrapAppSessionProvider),
+          initialUsername: _ref.read(initialAuthUsernameProvider),
+        ),
+      ) {
+    if (!_didBootstrapAppSession) {
+      _restore();
+    }
   }
 
   Future<void> _restore() async {
@@ -141,6 +151,22 @@ class AuthController extends StateNotifier<AuthState> {
     _ref.read(currentSemesterIdProvider.notifier).state = null;
     state = const AuthState.signedOut();
   }
+}
+
+@visibleForTesting
+AuthState buildInitialAuthState({
+  required bool didBootstrapAppSession,
+  required String? initialUsername,
+}) {
+  if (!didBootstrapAppSession) {
+    return const AuthState.restoring();
+  }
+
+  final username = initialUsername?.trim();
+  if (username != null && username.isNotEmpty) {
+    return AuthState.cached(username: username);
+  }
+  return const AuthState.signedOut();
 }
 
 final authSessionStoreProvider = Provider<AuthSessionStore>((ref) {

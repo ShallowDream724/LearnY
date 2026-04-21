@@ -1,6 +1,11 @@
 part of '../database.dart';
 
 extension CourseDao on AppDatabase {
+  Future<List<Course>> getAllCourses() => select(courses).get();
+
+  Future<Course?> getCourseById(String id) =>
+      (select(courses)..where((t) => t.id.equals(id))).getSingleOrNull();
+
   Future<List<Course>> getCoursesBySemester(String semesterId) =>
       (select(courses)..where((t) => t.semesterId.equals(semesterId))).get();
 

@@ -36,11 +36,16 @@ String formatRelativeDeadlineLabel(DateTime deadline, {required DateTime now}) {
     deadline.month,
     deadline.day,
   ).subtract(Duration(days: deadline.weekday - 1));
-  final sameWeek = nowMonday == deadlineMonday;
+  final weekOffset = deadlineMonday.difference(nowMonday).inDays ~/ 7;
 
-  if (dayDiff < 14) {
-    final prefix = sameWeek ? '本' : '下';
-    return '$prefix${weekdays[deadline.weekday]} $time';
+  if (weekOffset == 0) {
+    return '本${weekdays[deadline.weekday]} $time';
+  }
+  if (weekOffset == 1) {
+    return '下${weekdays[deadline.weekday]} $time';
+  }
+  if (weekOffset == 2) {
+    return '下下${weekdays[deadline.weekday]} $time';
   }
 
   return '${deadline.month}/${deadline.day} $time';

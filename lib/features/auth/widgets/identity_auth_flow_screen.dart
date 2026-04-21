@@ -3,7 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:webview_flutter/webview_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/api/enums.dart';
 import '../../../core/api/models.dart';
@@ -12,6 +12,7 @@ import '../../../core/auth/auth.dart';
 import '../../../core/design/app_theme_colors.dart';
 import '../../../core/design/colors.dart';
 import '../../../core/design/typography.dart';
+import 'identity_auth_web_surface.dart';
 
 class IdentityAuthFlowScreen extends ConsumerStatefulWidget {
   const IdentityAuthFlowScreen({super.key, required this.request});
@@ -25,11 +26,7 @@ class IdentityAuthFlowScreen extends ConsumerStatefulWidget {
 
 class _IdentityAuthFlowScreenState
     extends ConsumerState<IdentityAuthFlowScreen> {
-  static const _channelName = 'LearnYIdentityAuth';
-
-  final WebViewCookieManager _cookieManager = WebViewCookieManager();
-
-  late final WebViewController _webViewController;
+  late final IdentityAuthWebSurfaceController _webSurfaceController;
 
   Map<String, String>? _capturedFormData;
   String? _capturedTrustedFingerGenPrint;
@@ -42,30 +39,59 @@ class _IdentityAuthFlowScreenState
   bool _isPageLoading = true;
   bool _isProcessing = false;
   bool _didAttemptAutoSubmit = false;
+  bool _isWebSurfaceReady = false;
   String? _errorMessage;
+  IdentityAuthWebAvailability? _webAvailability;
 
   @override
   void initState() {
     super.initState();
-    _webViewController = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..addJavaScriptChannel(
-        _channelName,
-        onMessageReceived: _handleJavaScriptMessage,
-      )
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onPageStarted: _onPageStarted,
-          onPageFinished: _onPageFinished,
-          onNavigationRequest: _onNavigationRequest,
-        ),
-      );
-    unawaited(_prepareLoginPage());
+    _webSurfaceController = createIdentityAuthWebSurfaceController(
+      IdentityAuthWebCallbacks(
+        onPageStarted: _onPageStarted,
+        onPageFinished: _onPageFinished,
+        onNavigationRequest: _onNavigationRequest,
+        onJavaScriptMessage: _handleJavaScriptMessage,
+      ),
+    );
+    unawaited(_initializeWebSurface());
+  }
+
+  @override
+  void dispose() {
+    unawaited(_webSurfaceController.dispose());
+    super.dispose();
+  }
+
+  Future<void> _initializeWebSurface() async {
+    final availability = await _webSurfaceController.initialize();
+    if (!mounted) {
+      return;
+    }
+
+    if (!availability.isAvailable) {
+      setState(() {
+        _webAvailability = availability;
+        _isWebSurfaceReady = false;
+        _isPageLoading = false;
+        _errorMessage = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _webAvailability = availability;
+      _isWebSurfaceReady = true;
+    });
+    await _prepareLoginPage();
   }
 
   Future<void> _prepareLoginPage({
     bool isTrustedBrowserRefreshPass = false,
   }) async {
+    if (!_isWebSurfaceReady) {
+      return;
+    }
     _capturedFormData = null;
     _capturedTrustedFingerGenPrint = null;
     _capturedSingleLoginEnabled = false;
@@ -79,16 +105,10 @@ class _IdentityAuthFlowScreenState
     }
 
     if (widget.request.resetBrowserContext) {
-      try {
-        await _webViewController.clearLocalStorage();
-      } catch (error, stackTrace) {
-        debugPrint('[LearnY] Failed to clear WebView local storage: $error');
-        debugPrint('$stackTrace');
-      }
-      await _cookieManager.clearCookies();
+      await _webSurfaceController.clearBrowsingData();
     }
 
-    await _webViewController.loadRequest(Uri.parse(urls.idLogin()));
+    await _webSurfaceController.loadUrl(urls.idLogin());
   }
 
   void _onPageStarted(String _) {
@@ -130,7 +150,7 @@ class _IdentityAuthFlowScreenState
     }
 
     try {
-      await _webViewController.runJavaScript(
+      await _webSurfaceController.runJavaScript(
         _buildInjectionScript(shouldAutoSubmit: shouldAutoSubmit),
       );
     } catch (error, stackTrace) {
@@ -139,20 +159,28 @@ class _IdentityAuthFlowScreenState
     }
   }
 
-  NavigationDecision _onNavigationRequest(NavigationRequest request) {
+  bool _onNavigationRequest(String url) {
     final instruction = ref
         .read(ssoTicketParserProvider)
-        .inspectNavigation(request.url);
+        .inspectNavigation(url);
     if (instruction.shouldConsumeTicket && instruction.ticket != null) {
       unawaited(_handleTicket(instruction.ticket!));
-      return NavigationDecision.prevent;
+      return true;
     }
-    return NavigationDecision.navigate;
+    return false;
   }
 
-  void _handleJavaScriptMessage(JavaScriptMessage message) {
+  void _handleJavaScriptMessage(Object message) {
     try {
-      final raw = jsonDecode(message.message) as Map<String, dynamic>;
+      final raw = switch (message) {
+        final String value => jsonDecode(value) as Map<String, dynamic>,
+        final Map<dynamic, dynamic> value => value.map<String, dynamic>(
+          (key, value) => MapEntry(key.toString(), value),
+        ),
+        _ => throw const FormatException(
+          'Unexpected JavaScript bridge payload',
+        ),
+      };
       final data = raw['data'];
       if (data is! Map) {
         return;
@@ -315,25 +343,23 @@ class _IdentityAuthFlowScreenState
 
     try {
       await Future<void>.delayed(const Duration(seconds: 2));
-      await _webViewController.loadRequest(
-        Uri.parse(urls.learnStudentCourseListPage()),
-      );
+      await _webSurfaceController.loadUrl(urls.learnStudentCourseListPage());
       await Future<void>.delayed(const Duration(seconds: 3));
 
-      final rawHtml = await _webViewController.runJavaScriptReturningResult(
+      final rawHtml = await _webSurfaceController.runJavaScriptReturningResult(
         'document.documentElement.outerHTML',
       );
       final pageSnapshot = ref
           .read(ssoFallbackPageParserProvider)
-          .parse(rawHtml.toString());
+          .parse(_decodeStringResult(rawHtml));
 
-      final cookieRaw = await _webViewController.runJavaScriptReturningResult(
-        'document.cookie',
-      );
-      var cookieString = cookieRaw.toString();
-      if (cookieString.startsWith('"') && cookieString.endsWith('"')) {
-        cookieString = cookieString.substring(1, cookieString.length - 1);
-      }
+      final cookieString =
+          (await _webSurfaceController.getCurrentCookieHeader()) ??
+          _decodeStringResult(
+            await _webSurfaceController.runJavaScriptReturningResult(
+              'document.cookie',
+            ),
+          );
 
       final enrollmentPayload = await _resolveEnrollmentPayloadIfNeeded();
       if (_isTrustedBrowserRefreshPass) {
@@ -588,7 +614,7 @@ class _IdentityAuthFlowScreenState
   }
 
   Future<Map<String, String>> _readCurrentFormDataFromPage() async {
-    final raw = await _webViewController.runJavaScriptReturningResult('''
+    final raw = await _webSurfaceController.runJavaScriptReturningResult('''
       (function() {
         const data = {};
         const ids = ['i_user', 'i_pass', 'fingerPrint', 'fingerGenPrint', 'fingerGenPrint3', 'deviceName'];
@@ -608,7 +634,7 @@ class _IdentityAuthFlowScreenState
     return _decodeStringMapResult(raw);
   }
 
-  Map<String, String> _decodeStringMapResult(Object raw) {
+  Map<String, String> _decodeStringMapResult(Object? raw) {
     final decoded =
         jsonDecode(_decodeStringResult(raw)) as Map<String, dynamic>;
     return decoded.map<String, String>(
@@ -616,7 +642,7 @@ class _IdentityAuthFlowScreenState
     );
   }
 
-  String _decodeStringResult(Object raw) {
+  String _decodeStringResult(Object? raw) {
     if (raw is String) {
       try {
         final decoded = jsonDecode(raw);
@@ -652,8 +678,37 @@ class _IdentityAuthFlowScreenState
 
     return '''
       (function() {
-        const channel = window.$_channelName;
-        if (!channel) {
+        const hasBridge =
+          (
+            window.LearnYIdentityAuth &&
+            typeof window.LearnYIdentityAuth.postMessage === 'function'
+          ) ||
+          (
+            window.chrome &&
+            window.chrome.webview &&
+            typeof window.chrome.webview.postMessage === 'function'
+          );
+
+        const postMessage = function(message) {
+          if (
+            window.LearnYIdentityAuth &&
+            typeof window.LearnYIdentityAuth.postMessage === 'function'
+          ) {
+            window.LearnYIdentityAuth.postMessage(message);
+            return true;
+          }
+          if (
+            window.chrome &&
+            window.chrome.webview &&
+            typeof window.chrome.webview.postMessage === 'function'
+          ) {
+            window.chrome.webview.postMessage(message);
+            return true;
+          }
+          return false;
+        };
+
+        if (!hasBridge) {
           return false;
         }
 
@@ -668,7 +723,7 @@ class _IdentityAuthFlowScreenState
         });
 
         const send = function(type, data) {
-          channel.postMessage(JSON.stringify({ type: type, data: data }));
+          return postMessage(JSON.stringify({ type: type, data: data }));
         };
 
         const reportTrustedBrowserRequested = function() {
@@ -1003,6 +1058,97 @@ class _IdentityAuthFlowScreenState
     ''';
   }
 
+  Future<void> _openWebView2RuntimeDownload() async {
+    final uri = Uri.parse(
+      'https://developer.microsoft.com/en-us/microsoft-edge/webview2/',
+    );
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  Widget _buildWebSurfaceBody(BuildContext context) {
+    final c = context.colors;
+
+    if (_isProcessing) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(color: AppColors.primary),
+            const SizedBox(height: 16),
+            Text(
+              _processingLabel,
+              style: AppTypography.bodyMedium.copyWith(color: c.subtitle),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (!_isWebSurfaceReady) {
+      final availability = _webAvailability;
+      if (availability != null && !availability.isAvailable) {
+        final isMissingRuntime =
+            availability.status ==
+            IdentityAuthWebAvailabilityStatus.missingRuntime;
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  isMissingRuntime
+                      ? Icons.desktop_windows_outlined
+                      : Icons.error_outline_rounded,
+                  size: 34,
+                  color: c.subtitle,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  availability.message ?? '认证视图初始化失败',
+                  textAlign: TextAlign.center,
+                  style: AppTypography.bodyMedium.copyWith(
+                    color: c.subtitle,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    FilledButton(
+                      onPressed: () {
+                        setState(() {
+                          _errorMessage = null;
+                          _isPageLoading = true;
+                        });
+                        unawaited(_initializeWebSurface());
+                      },
+                      child: const Text('重新尝试'),
+                    ),
+                    if (isMissingRuntime)
+                      OutlinedButton(
+                        onPressed: _openWebView2RuntimeDownload,
+                        child: const Text('安装 WebView2'),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      );
+    }
+
+    return _webSurfaceController.buildView();
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
@@ -1052,27 +1198,7 @@ class _IdentityAuthFlowScreenState
                 style: AppTypography.bodySmall.copyWith(color: AppColors.error),
               ),
             ),
-          Expanded(
-            child: _isProcessing
-                ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const CircularProgressIndicator(
-                          color: AppColors.primary,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          _processingLabel,
-                          style: AppTypography.bodyMedium.copyWith(
-                            color: c.subtitle,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : WebViewWidget(controller: _webViewController),
-          ),
+          Expanded(child: _buildWebSurfaceBody(context)),
         ],
       ),
     );

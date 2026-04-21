@@ -23,7 +23,6 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
 import '../api/learn_api.dart';
 import '../database/database.dart';
@@ -34,6 +33,8 @@ import '../files/preview/archive_preview_service.dart';
 import '../files/file_repository.dart';
 import '../providers/providers.dart';
 import 'file_cache_policy_service.dart';
+import 'file_manager_reveal_service.dart';
+import 'file_storage_workspace_service.dart';
 
 // ---------------------------------------------------------------------------
 //  Download state
@@ -247,8 +248,9 @@ class FileDownloadNotifier
       final payloadInspector = _ref.read(downloadedPayloadInspectorProvider);
 
       // Create download directory
-      final appDir = await getApplicationDocumentsDirectory();
-      final downloadDir = Directory('${appDir.path}/learnx_files/$courseId');
+      final downloadDir = await _ref
+          .read(fileStorageWorkspaceServiceProvider)
+          .ensureCourseDirectory(courseId: courseId);
       if (!await downloadDir.exists()) {
         await downloadDir.create(recursive: true);
       }
@@ -422,16 +424,16 @@ class FileDownloadNotifier
 
   /// Open a downloaded file with the system handler.
   Future<bool> openFile(String assetKey) async {
-    final localPath = await _resolveLocalPath(assetKey);
-    if (localPath == null) return false;
-
-    final file = File(localPath);
-    if (!await file.exists()) {
+    final localPath = await _resolveExistingLocalPath(assetKey);
+    if (localPath == null) {
       // File was deleted externally — reset state
-      await _resetDownloadState(assetKey);
+      if (await _hasStoredLocalPath(assetKey)) {
+        await _resetDownloadState(assetKey);
+      }
       return false;
     }
 
+    final file = File(localPath);
     final accessDescriptor = await _resolveAccessDescriptor(
       assetKey: assetKey,
       localPath: localPath,
@@ -446,16 +448,30 @@ class FileDownloadNotifier
     return result.type == ResultType.done;
   }
 
+  Future<bool> openContainingFolder(String assetKey) async {
+    final revealService = _ref.read(fileManagerRevealServiceProvider);
+    if (!revealService.isSupported) {
+      return false;
+    }
+
+    final localPath = await _resolveExistingLocalPath(assetKey);
+    if (localPath == null) {
+      if (await _hasStoredLocalPath(assetKey)) {
+        await _resetDownloadState(assetKey);
+      }
+      return false;
+    }
+
+    return revealService.revealFile(localPath);
+  }
+
   /// Delete a downloaded file and reset state.
   Future<void> deleteFile(String assetKey) async {
-    final localPath = await _resolveLocalPath(assetKey);
-    String? courseId;
-    if (localPath != null) {
-      final file = await _ref
-          .read(cachedAssetRepositoryProvider)
-          .getAsset(assetKey);
-      courseId = file?.courseId;
-    }
+    final localPath = await _resolveExistingLocalPath(assetKey);
+    final file = await _ref
+        .read(cachedAssetRepositoryProvider)
+        .getAsset(assetKey);
+    final courseId = file?.courseId;
     if (localPath != null) {
       final file = File(localPath);
       if (await file.exists()) {
@@ -523,21 +539,47 @@ class FileDownloadNotifier
     state = Map.from(state)..[fileId] = fileState;
   }
 
-  Future<String?> _resolveLocalPath(String assetKey) async {
+  Future<String?> _resolveExistingLocalPath(String assetKey) async {
+    for (final candidate in await _candidateLocalPaths(assetKey)) {
+      if (await File(candidate).exists()) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  Future<bool> _hasStoredLocalPath(String assetKey) async {
+    return (await _candidateLocalPaths(assetKey)).isNotEmpty;
+  }
+
+  Future<List<String>> _candidateLocalPaths(String assetKey) async {
+    final candidates = <String>[];
     final inMemoryPath = state[assetKey]?.localPath;
     if (inMemoryPath != null && inMemoryPath.isNotEmpty) {
-      return inMemoryPath;
+      candidates.add(inMemoryPath);
     }
-
     final cachedAsset = await _ref
         .read(cachedAssetRepositoryProvider)
         .getAsset(assetKey);
     if (cachedAsset != null && cachedAsset.localPath.isNotEmpty) {
-      return cachedAsset.localPath;
+      candidates.add(cachedAsset.localPath);
     }
 
     final file = await _ref.read(fileRepositoryProvider).getFileById(assetKey);
-    return file?.localFilePath;
+    final persistedPath = file?.localFilePath;
+    if (persistedPath != null && persistedPath.isNotEmpty) {
+      candidates.add(persistedPath);
+    }
+
+    final deduped = <String>[];
+    final seen = <String>{};
+    for (final candidate in candidates) {
+      final normalized = p.normalize(candidate);
+      if (seen.add(normalized)) {
+        deduped.add(candidate);
+      }
+    }
+    return deduped;
   }
 
   Future<void> _resetDownloadState(String assetKey) async {

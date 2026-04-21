@@ -53,4 +53,28 @@ extension CachedAssetDao on AppDatabase {
           updatedAt: Value(accessedAt),
         ),
       );
+
+  Future<void> updateCachedAssetLocalPath(String assetKey, String localPath) =>
+      (update(cachedAssets)..where((t) => t.assetKey.equals(assetKey))).write(
+        CachedAssetsCompanion(localPath: Value(localPath)),
+      );
+
+  Future<void> rewriteCachedAssetPathPrefix(
+    String fromPrefix,
+    String toPrefix,
+  ) {
+    return customUpdate(
+      '''
+      UPDATE cached_assets
+      SET local_path = REPLACE(local_path, ?, ?)
+      WHERE local_path LIKE ?
+      ''',
+      variables: [
+        Variable<String>(fromPrefix),
+        Variable<String>(toPrefix),
+        Variable<String>('$fromPrefix%'),
+      ],
+      updates: {cachedAssets},
+    );
+  }
 }
