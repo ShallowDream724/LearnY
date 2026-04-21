@@ -222,6 +222,11 @@ class _HomeTodayScheduleSectionState
     extends ConsumerState<HomeTodayScheduleSection>
     with AutomaticKeepAliveClientMixin<HomeTodayScheduleSection> {
   late final PageController _pageController;
+  ProviderSubscription<AsyncValue<HomeScheduleSnapshot>>?
+      _scheduleSubscription;
+  Timer? _scheduleLoadingTimer;
+  HomeScheduleSnapshot? _lastScheduleSnapshot;
+  bool _showScheduleLoading = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -232,29 +237,92 @@ class _HomeTodayScheduleSectionState
     _pageController = PageController(
       initialPage: ref.read(homeSchedulePageIndexProvider),
     );
+    _scheduleSubscription =
+        ref.listenManual<AsyncValue<HomeScheduleSnapshot>>(
+          homeScheduleSnapshotProvider,
+          _handleScheduleSnapshotChanged,
+          fireImmediately: true,
+        );
   }
 
   @override
   void dispose() {
+    _scheduleLoadingTimer?.cancel();
+    _scheduleSubscription?.close();
     _pageController.dispose();
     super.dispose();
+  }
+
+  void _handleScheduleSnapshotChanged(
+    AsyncValue<HomeScheduleSnapshot>? previous,
+    AsyncValue<HomeScheduleSnapshot> next,
+  ) {
+    final snapshot = next.valueOrNull;
+    if (snapshot != null) {
+      _scheduleLoadingTimer?.cancel();
+      _scheduleLoadingTimer = null;
+      if (!mounted) {
+        _lastScheduleSnapshot = snapshot;
+        _showScheduleLoading = false;
+        return;
+      }
+      setState(() {
+        _lastScheduleSnapshot = snapshot;
+        _showScheduleLoading = false;
+      });
+      return;
+    }
+
+    if (next.isLoading) {
+      if (_lastScheduleSnapshot != null) {
+        _scheduleLoadingTimer?.cancel();
+        _scheduleLoadingTimer = null;
+        if (_showScheduleLoading && mounted) {
+          setState(() => _showScheduleLoading = false);
+        } else {
+          _showScheduleLoading = false;
+        }
+        return;
+      }
+
+      _scheduleLoadingTimer ??= Timer(const Duration(milliseconds: 180), () {
+        _scheduleLoadingTimer = null;
+        if (!mounted || _lastScheduleSnapshot != null) {
+          return;
+        }
+        final current = ref.read(homeScheduleSnapshotProvider);
+        if (!current.isLoading || current.valueOrNull != null) {
+          return;
+        }
+        setState(() => _showScheduleLoading = true);
+      });
+      return;
+    }
+
+    _scheduleLoadingTimer?.cancel();
+    _scheduleLoadingTimer = null;
+    if (_showScheduleLoading && mounted) {
+      setState(() => _showScheduleLoading = false);
+    } else {
+      _showScheduleLoading = false;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
     final authState = ref.watch(authProvider);
-    if (!authState.isLoggedIn) {
+    if (!shouldShowHomeTodayScheduleSection(authState)) {
       return const SizedBox.shrink();
     }
 
     final scheduleAsync = ref.watch(homeScheduleSnapshotProvider);
+    final displaySnapshot = scheduleAsync.valueOrNull ?? _lastScheduleSnapshot;
     final currentDay = ref.watch(homeScheduleCurrentDayProvider);
     final currentPage = ref.watch(homeSchedulePageIndexProvider);
     final days = ref.watch(homeScheduleVisibleDaysProvider);
     final currentItems =
-        scheduleAsync.valueOrNull?.itemsFor(currentDay) ??
-        const <TodayScheduleItem>[];
+        displaySnapshot?.itemsFor(currentDay) ?? const <TodayScheduleItem>[];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -271,7 +339,11 @@ class _HomeTodayScheduleSectionState
             pageController: _pageController,
             days: days,
             currentPage: currentPage,
-            scheduleAsync: scheduleAsync,
+            snapshot: displaySnapshot,
+            showLoadingPlaceholder:
+                displaySnapshot == null &&
+                scheduleAsync.isLoading &&
+                _showScheduleLoading,
             onPageChanged: (index) {
               ref.read(homeSchedulePageIndexProvider.notifier).state = index;
             },
@@ -281,6 +353,11 @@ class _HomeTodayScheduleSectionState
       ],
     );
   }
+}
+
+@visibleForTesting
+bool shouldShowHomeTodayScheduleSection(AuthState authState) {
+  return authState.canAccessCachedData;
 }
 
 class HomeUnreadNotificationsSection extends ConsumerWidget {
@@ -670,14 +747,16 @@ class _SchedulePagerCard extends StatelessWidget {
     required this.pageController,
     required this.days,
     required this.currentPage,
-    required this.scheduleAsync,
+    required this.snapshot,
+    required this.showLoadingPlaceholder,
     required this.onPageChanged,
   });
 
   final PageController pageController;
   final List<HomeScheduleDayOption> days;
   final int currentPage;
-  final AsyncValue<HomeScheduleSnapshot> scheduleAsync;
+  final HomeScheduleSnapshot? snapshot;
+  final bool showLoadingPlaceholder;
   final ValueChanged<int> onPageChanged;
 
   @override
@@ -727,12 +806,9 @@ class _SchedulePagerCard extends StatelessWidget {
               itemCount: days.length,
               itemBuilder: (context, index) {
                 final day = days[index];
-                final items =
-                    scheduleAsync.valueOrNull?.itemsFor(day) ??
-                    const <TodayScheduleItem>[];
+                final items = snapshot?.itemsFor(day) ?? const <TodayScheduleItem>[];
 
-                if (scheduleAsync.isLoading &&
-                    scheduleAsync.valueOrNull == null) {
+                if (showLoadingPlaceholder) {
                   return const _ScheduleLoadingPage();
                 }
                 return _ScheduleDayPage(day: day, items: items);
