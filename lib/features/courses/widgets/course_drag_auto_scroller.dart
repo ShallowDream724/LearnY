@@ -16,10 +16,12 @@ class CourseDragAutoScroller {
   CourseDragAutoScroller({
     required ScrollController scrollController,
     this.velocityScalar = 38,
+    this.onScrolled,
   }) : _scrollController = scrollController;
 
   final ScrollController _scrollController;
   final double velocityScalar;
+  final VoidCallback? onScrolled;
 
   ScrollableState? _scrollable;
   EdgeInsets _viewportObstruction = EdgeInsets.zero;
@@ -30,19 +32,23 @@ class CourseDragAutoScroller {
     EdgeInsets viewportObstruction = EdgeInsets.zero,
   }) {
     final needsRebind =
-        _scrollable != scrollable || _viewportObstruction != viewportObstruction;
+        _scrollable != scrollable ||
+        _viewportObstruction != viewportObstruction;
     _scrollable = scrollable;
     _viewportObstruction = viewportObstruction;
     if (!needsRebind) {
       return;
     }
+    _delegate?.stopAutoScroll();
     _delegate = EdgeDraggingAutoScroller(
       scrollable,
       velocityScalar: velocityScalar,
       onScrollViewScrolled: () {
         if (!_scrollController.hasClients) {
           _delegate?.stopAutoScroll();
+          return;
         }
+        onScrolled?.call();
       },
     );
   }
@@ -55,9 +61,7 @@ class CourseDragAutoScroller {
       dragRect,
       viewportObstruction: _viewportObstruction,
     );
-    _delegate?.startAutoScrollIfNecessary(
-      adjustedRect,
-    );
+    _delegate?.startAutoScrollIfNecessary(adjustedRect);
   }
 
   void stop() {

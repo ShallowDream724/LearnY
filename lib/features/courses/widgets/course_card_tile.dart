@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../core/design/app_theme_colors.dart';
@@ -24,6 +26,7 @@ class CourseCardTile extends StatelessWidget {
     required this.isEditing,
     required this.onTap,
     this.onLongPress,
+    this.onMenu,
   });
 
   final ResolvedCourseCardModel card;
@@ -31,6 +34,21 @@ class CourseCardTile extends StatelessWidget {
   final bool isEditing;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
+  final ValueChanged<Rect>? onMenu;
+
+  /// Fixed grid tracks retain two title lines and room for wrapped counters.
+  static double gridExtent(BuildContext context, {required bool isEditing}) {
+    final scaler = MediaQuery.textScalerOf(context);
+    final header = math.max(
+      36.0,
+      isEditing ? 44.0 : scaler.scale(10) * 1.2 + 4,
+    );
+    final title = scaler.scale(14) * 1.4 * 2;
+    final subtitle = scaler.scale(12) * 1.5;
+    final counters = math.max(13.0, scaler.scale(11) * 1.5) * 2;
+    return (28 + header + 12 + title + 4 + subtitle + 8 + counters + 6)
+        .ceilToDouble();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,6 +62,12 @@ class CourseCardTile extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
+        mouseCursor: isEditing
+            ? SystemMouseCursors.grab
+            : SystemMouseCursors.click,
+        onSecondaryTapDown: isEditing && onMenu != null
+            ? (details) => onMenu!(details.globalPosition & Size.zero)
+            : null,
         borderRadius: BorderRadius.circular(8),
         child: Container(
           padding: const EdgeInsets.all(14),
@@ -83,10 +107,19 @@ class CourseCardTile extends StatelessWidget {
                   ),
                   const Spacer(),
                   if (isEditing)
-                    IconButton(
-                      tooltip: '编辑课程',
-                      onPressed: onTap,
-                      icon: Icon(Icons.more_horiz_rounded, color: c.subtitle),
+                    Builder(
+                      builder: (context) => IconButton(
+                        tooltip: '编辑课程',
+                        onPressed: () {
+                          final box = context.findRenderObject()! as RenderBox;
+                          if (onMenu != null) {
+                            onMenu!(box.localToGlobal(Offset.zero) & box.size);
+                          } else {
+                            onTap();
+                          }
+                        },
+                        icon: Icon(Icons.more_horiz_rounded, color: c.subtitle),
+                      ),
                     )
                   else if (card.aggregateBadgeCount > 0)
                     Container(

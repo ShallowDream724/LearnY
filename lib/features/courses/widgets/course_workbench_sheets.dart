@@ -4,6 +4,7 @@ import '../../../core/design/app_theme_colors.dart';
 import '../../../core/design/app_surfaces.dart';
 import '../../../core/design/colors.dart';
 import '../../../core/design/typography.dart';
+import '../../../core/design/responsive.dart';
 import '../providers/course_workbench_models.dart';
 
 enum CourseWorkbenchMenuAction {
@@ -36,9 +37,67 @@ class CourseAliasEditorResult {
 Future<CourseWorkbenchMenuAction?> showCourseWorkbenchMenu(
   BuildContext context, {
   required ResolvedCourseCardModel card,
+  required Rect anchor,
   bool canMoveEarlier = false,
   bool canMoveLater = false,
 }) {
+  if (usesDesktopControls(context) || MediaQuery.sizeOf(context).width >= 600) {
+    final overlay =
+        Overlay.of(context).context.findRenderObject()! as RenderBox;
+    final origin = overlay.localToGlobal(Offset.zero);
+    PopupMenuItem<CourseWorkbenchMenuAction> item(
+      CourseWorkbenchMenuAction action,
+      IconData icon,
+      String label,
+    ) => PopupMenuItem(
+      value: action,
+      child: Row(
+        children: [
+          Icon(icon, size: 18),
+          const SizedBox(width: 12),
+          Text(label),
+        ],
+      ),
+    );
+    return showMenu<CourseWorkbenchMenuAction>(
+      context: context,
+      constraints: const BoxConstraints(minWidth: 184, maxWidth: 240),
+      position: RelativeRect.fromRect(
+        anchor.shift(-origin),
+        Offset.zero & overlay.size,
+      ),
+      items: [
+        item(
+          CourseWorkbenchMenuAction.chooseIcon,
+          Icons.grid_view_rounded,
+          '更换图标',
+        ),
+        item(
+          CourseWorkbenchMenuAction.editAlias,
+          Icons.short_text_rounded,
+          '设置简称',
+        ),
+        item(
+          CourseWorkbenchMenuAction.restoreDefault,
+          Icons.restart_alt_rounded,
+          '恢复默认',
+        ),
+        if (canMoveEarlier || canMoveLater) const PopupMenuDivider(),
+        if (canMoveEarlier)
+          item(
+            CourseWorkbenchMenuAction.moveEarlier,
+            Icons.arrow_upward_rounded,
+            '向前移动',
+          ),
+        if (canMoveLater)
+          item(
+            CourseWorkbenchMenuAction.moveLater,
+            Icons.arrow_downward_rounded,
+            '向后移动',
+          ),
+      ],
+    );
+  }
   return _showWorkbenchSheet<CourseWorkbenchMenuAction>(
     context,
     child: Builder(

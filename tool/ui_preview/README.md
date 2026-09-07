@@ -24,7 +24,13 @@ the repository. PNGs are written under `build/ui_preview/`. Application captures
 - 390x844 and 1440x900: home, assignments, courses, profile, unread files, files,
   course detail, homework detail, and the submission editor.
 - 800x1000: home and courses using the actual shell pane constraints.
-- 390x844: enlarged text on home/assignments and dark home.
+- Course editor at all three widths, plus the desktop anchored course menu.
+- 390x844: enlarged text on home/assignments/courses and dark home.
+
+Set `LEARNY_PREVIEW_ROUTES=courses` to capture only course surfaces when changing
+course interactions. The comma-separated filter also accepts the route names
+above. Unset it to restore full coverage. Shadows are rendered rather than the
+test framework's solid-outline substitute.
 
 Detail routes are pushed from the shell so captures include real return controls.
 The editor is opened through its real homework detail action; no submission is

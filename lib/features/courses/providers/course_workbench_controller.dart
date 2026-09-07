@@ -39,7 +39,10 @@ class CourseWorkbenchController extends StateNotifier<CourseWorkbenchState> {
   }
 
   void stopDragging() {
-    if (!state.isEditing) {
+    if (!state.isEditing ||
+        (state.draggingCourseId == null &&
+            state.hoverCourseId == null &&
+            state.hoverInsertIndex == null)) {
       return;
     }
     state = state.copyWith(

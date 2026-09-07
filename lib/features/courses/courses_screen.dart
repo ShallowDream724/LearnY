@@ -21,6 +21,7 @@ import 'providers/course_workbench_models.dart';
 import 'providers/course_workbench_repository.dart';
 import 'widgets/course_card_tile.dart';
 import 'widgets/course_drag_auto_scroller.dart';
+import 'widgets/course_drag_source.dart';
 import 'widgets/course_workbench_sheets.dart';
 
 class CoursesScreen extends ConsumerStatefulWidget {
@@ -32,19 +33,22 @@ class CoursesScreen extends ConsumerStatefulWidget {
 
 class _CoursesScreenState extends ConsumerState<CoursesScreen> {
   final _scrollController = ScrollController();
-  final Map<String, Size> _cardSizes = <String, Size>{};
   final Map<String, GlobalKey> _cardKeys = <String, GlobalKey>{};
   Offset _dragAnchorOffset = Offset.zero;
+  Size _dragSize = Size.zero;
+  Offset? _dragPosition;
+  int _columns = 1;
+  bool _reorderScheduled = false;
   int? _activePointer;
   bool _isSaving = false;
   late final CourseDragAutoScroller _dragAutoScroller;
-  double _latestFallbackCardWidth = 160;
 
   @override
   void initState() {
     super.initState();
     _dragAutoScroller = CourseDragAutoScroller(
       scrollController: _scrollController,
+      onScrolled: _reorderAfterScroll,
     );
   }
 
@@ -106,7 +110,10 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
     }
   }
 
-  Future<void> _openCardMenu(ResolvedCourseCardModel card) async {
+  Future<void> _openCardMenu(
+    ResolvedCourseCardModel card, [
+    Rect? anchor,
+  ]) async {
     if (_isSaving) return;
     _clearTransientDragState();
     final cards = ref.read(courseWorkbenchControllerProvider).draftCards;
@@ -114,6 +121,7 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
     final action = await showCourseWorkbenchMenu(
       context,
       card: card,
+      anchor: anchor ?? _cardBounds(card.course.id) ?? Rect.zero,
       canMoveEarlier: index > 0,
       canMoveLater: index >= 0 && index < cards.length - 1,
     );
@@ -197,45 +205,62 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
     _enterEditMode(cards);
   }
 
-  void _updateAutoScrollForCourse({
-    required String courseId,
-    required Offset globalPosition,
-    required double fallbackWidth,
-  }) {
-    final size = _cardSizes[courseId] ?? Size(fallbackWidth, 184);
-    _dragAutoScroller.updateDragRect(
-      Rect.fromLTWH(
-        globalPosition.dx - _dragAnchorOffset.dx,
-        globalPosition.dy - _dragAnchorOffset.dy,
-        size.width,
-        size.height,
-      ),
-    );
-  }
-
-  void _handleGlobalPointerMove(
-    PointerMoveEvent event,
-    CourseWorkbenchState workbenchState,
-  ) {
+  void _handleGlobalPointerMove(PointerMoveEvent event) {
     if (event.pointer != _activePointer) return;
-    final courseId = workbenchState.draggingCourseId;
-    if (courseId == null) {
+    if (ref.read(courseWorkbenchControllerProvider).draggingCourseId == null) {
       return;
     }
-    _updateAutoScrollForCourse(
-      courseId: courseId,
-      globalPosition: event.position,
-      fallbackWidth: _latestFallbackCardWidth,
+    _dragPosition = event.position;
+    _dragAutoScroller.updateDragRect(
+      (event.position - _dragAnchorOffset) & _dragSize,
     );
   }
 
-  void _handleGlobalPointerEnd(
-    PointerEvent event,
-    CourseWorkbenchState workbenchState,
-  ) {
+  Rect? _cardBounds(String courseId) {
+    final box = _cardKeys[courseId]?.currentContext?.findRenderObject();
+    if (box is! RenderBox || !box.attached || !box.hasSize) return null;
+    return box.localToGlobal(Offset.zero) & box.size;
+  }
+
+  // Auto-scroll changes the target under a stationary pointer.
+  void _reorderAfterScroll() {
+    if (_reorderScheduled || !mounted) return;
+    _reorderScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _reorderScheduled = false;
+      _reorderAtPointer();
+    });
+  }
+
+  void _reorderAtPointer() {
+    if (!mounted || _dragPosition == null) return;
+    final state = ref.read(courseWorkbenchControllerProvider);
+    final dragged = state.draggingCourseId;
+    if (dragged == null) return;
+    for (var index = 0; index < state.draftCards.length; index++) {
+      final id = state.draftCards[index].course.id;
+      final bounds = _cardBounds(id);
+      if (id == dragged || bounds == null || !bounds.contains(_dragPosition!)) {
+        continue;
+      }
+      _workbenchController.previewReorder(
+        draggedCourseId: dragged,
+        targetCourseId: id,
+        insertIndex: _resolvePreviewInsertIndex(
+          localPosition: _dragPosition! - bounds.topLeft,
+          targetIndex: index,
+          targetSize: bounds.size,
+          columns: _columns,
+        ),
+      );
+      break;
+    }
+  }
+
+  void _handleGlobalPointerEnd(PointerEvent event) {
     if (event.pointer != _activePointer) return;
     _activePointer = null;
-    if (workbenchState.draggingCourseId == null) {
+    if (ref.read(courseWorkbenchControllerProvider).draggingCourseId == null) {
       return;
     }
     _clearTransientDragState();
@@ -257,6 +282,7 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
 
   void _clearTransientDragState({bool clearWorkbenchState = true}) {
     _dragAutoScroller.stop();
+    _dragPosition = null;
     if (clearWorkbenchState) {
       _workbenchController.completeDragging();
     }
@@ -287,11 +313,9 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
       body: Listener(
         behavior: HitTestBehavior.translucent,
         onPointerDown: (event) => _activePointer ??= event.pointer,
-        onPointerMove: (event) =>
-            _handleGlobalPointerMove(event, workbenchState),
-        onPointerUp: (event) => _handleGlobalPointerEnd(event, workbenchState),
-        onPointerCancel: (event) =>
-            _handleGlobalPointerEnd(event, workbenchState),
+        onPointerMove: _handleGlobalPointerMove,
+        onPointerUp: _handleGlobalPointerEnd,
+        onPointerCancel: _handleGlobalPointerEnd,
         child: RefreshIndicator(
           onRefresh: workbenchState.isEditing ? () async {} : _handleRefresh,
           color: AppColors.primary,
@@ -420,7 +444,16 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
             .clamp(1, 4)
             .toInt();
         final cardWidth = (width - (cols - 1) * 12) / cols;
-        _latestFallbackCardWidth = cardWidth;
+        final cardHeight = CourseCardTile.gridExtent(
+          context,
+          isEditing: workbenchState.isEditing,
+        );
+        final indices = {
+          for (var index = 0; index < cards.length; index++)
+            cards[index].course.id: index,
+        };
+        _cardKeys.removeWhere((id, _) => !indices.containsKey(id));
+        _columns = cols;
         return SliverPadding(
           padding: EdgeInsets.fromLTRB(
             gutter,
@@ -428,40 +461,29 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
             gutter,
             shellContentBottomInset(context),
           ),
-          sliver: SliverList(
-            delegate: SliverChildBuilderDelegate((context, rowIndex) {
-              final startIndex = rowIndex * cols;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    for (
-                      var columnIndex = 0;
-                      columnIndex < cols;
-                      columnIndex += 1
-                    ) ...[
-                      if (columnIndex > 0) const SizedBox(width: 12),
-                      if (startIndex + columnIndex < cards.length)
-                        Expanded(
-                          child: _buildGridCardCell(
-                            localContext: context,
-                            card: cards[startIndex + columnIndex],
-                            allCards: cards,
-                            cardIndex: startIndex + columnIndex,
-                            columns: cols,
-                            workbenchState: workbenchState,
-                            controller: controller,
-                            feedbackWidth: cardWidth,
-                          ),
-                        )
-                      else
-                        const Expanded(child: SizedBox()),
-                    ],
-                  ],
-                ),
-              );
-            }, childCount: (cards.length + cols - 1) ~/ cols),
+          sliver: SliverGrid.builder(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: cols,
+              mainAxisExtent: cardHeight,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+            ),
+            itemCount: cards.length,
+            findChildIndexCallback: (key) =>
+                indices[(key as ValueKey<String>).value],
+            itemBuilder: (context, index) => KeyedSubtree(
+              key: ValueKey(cards[index].course.id),
+              child: _buildGridCardCell(
+                localContext: context,
+                card: cards[index],
+                allCards: cards,
+                cardIndex: index,
+                columns: cols,
+                workbenchState: workbenchState,
+                controller: controller,
+                feedbackSize: Size(cardWidth, cardHeight),
+              ),
+            ),
           ),
         );
       },
@@ -476,27 +498,23 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
     required int columns,
     required CourseWorkbenchState workbenchState,
     required CourseWorkbenchController controller,
-    required double feedbackWidth,
+    required Size feedbackSize,
   }) {
     _attachDragAutoScroller(localContext);
     final isDragging = workbenchState.draggingCourseId == card.course.id;
     final isHoverTarget = workbenchState.hoverCourseId == card.course.id;
     final colorIndex = _stableColorIndex(card.course.id);
     final targetKey = _cardKeys.putIfAbsent(card.course.id, GlobalKey.new);
-    final baseCard = _MeasureCardSize(
-      onSizeChanged: (size) {
-        _cardSizes[card.course.id] = size;
-      },
-      child: CourseCardTile(
-        key: ValueKey('course-card-${card.course.id}'),
-        card: card,
-        colorIndex: colorIndex,
-        isEditing: workbenchState.isEditing,
-        onTap: () => _handleCardTap(card, workbenchState.isEditing, allCards),
-        onLongPress: workbenchState.isEditing
-            ? null
-            : () => _handleBrowseLongPress(card, allCards),
-      ),
+    final baseCard = CourseCardTile(
+      key: ValueKey('course-card-${card.course.id}'),
+      card: card,
+      colorIndex: colorIndex,
+      isEditing: workbenchState.isEditing,
+      onTap: () => _handleCardTap(card, workbenchState.isEditing, allCards),
+      onMenu: (anchor) => _openCardMenu(card, anchor),
+      onLongPress: workbenchState.isEditing
+          ? null
+          : () => _handleBrowseLongPress(card, allCards),
     );
     final cardWidget = _AnimatedDragCard(
       isDragging: isDragging,
@@ -536,24 +554,24 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
             duration: AppMotion.duration(context, AppMotion.feedback),
             curve: Curves.easeOutCubic,
             scale: isHoverTarget && !isDragging ? 0.985 : 1,
-            child: LongPressDraggable<String>(
-              data: card.course.id,
-              dragAnchorStrategy: (draggable, context, position) {
+            child: CourseDragSource(
+              courseId: card.course.id,
+              anchorStrategy: (draggable, context, position) {
                 final offset = childDragAnchorStrategy(
                   draggable,
                   context,
                   position,
                 );
                 _dragAnchorOffset = offset;
+                _dragSize = (context.findRenderObject()! as RenderBox).size;
                 return offset;
               },
-              maxSimultaneousDrags:
-                  _isSaving ||
-                      (workbenchState.draggingCourseId != null && !isDragging)
-                  ? 0
-                  : 1,
+              enabled:
+                  !_isSaving &&
+                  (workbenchState.draggingCourseId == null || isDragging),
               feedback: SizedBox(
-                width: feedbackWidth,
+                width: feedbackSize.width,
+                height: feedbackSize.height,
                 child: Material(
                   color: Colors.transparent,
                   child: CourseCardTile(
@@ -564,14 +582,12 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
                   ),
                 ),
               ),
-              childWhenDragging: _DragPlaceholderCard(
+              placeholder: _DragPlaceholderCard(
                 card: card,
                 colorIndex: colorIndex,
               ),
-              onDragStarted: () =>
-                  _handleDragStarted(card.course.id, controller),
-              onDragCompleted: () => _handleDragFinished(controller),
-              onDragEnd: (_) => _handleDragFinished(controller),
+              onStarted: () => _handleDragStarted(card.course.id, controller),
+              onFinished: () => _handleDragFinished(controller),
               child: cardWidget,
             ),
           ),
@@ -583,7 +599,9 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
         if (renderBox == null || !renderBox.hasSize) {
           return;
         }
-        final localPosition = renderBox.globalToLocal(details.offset);
+        final localPosition = renderBox.globalToLocal(
+          details.offset + _dragAnchorOffset,
+        );
         controller.previewReorder(
           draggedCourseId: details.data,
           targetCourseId: card.course.id,
@@ -666,36 +684,5 @@ class _AnimatedDragCard extends StatelessWidget {
         child: child,
       ),
     );
-  }
-}
-
-class _MeasureCardSize extends StatefulWidget {
-  const _MeasureCardSize({required this.onSizeChanged, required this.child});
-
-  final ValueChanged<Size> onSizeChanged;
-  final Widget child;
-
-  @override
-  State<_MeasureCardSize> createState() => _MeasureCardSizeState();
-}
-
-class _MeasureCardSizeState extends State<_MeasureCardSize> {
-  Size? _lastSize;
-
-  @override
-  Widget build(BuildContext context) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
-      final renderBox = context.findRenderObject() as RenderBox?;
-      final size = renderBox?.size;
-      if (size == null || size == _lastSize) {
-        return;
-      }
-      _lastSize = size;
-      widget.onSizeChanged(size);
-    });
-    return widget.child;
   }
 }
