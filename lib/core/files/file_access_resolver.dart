@@ -4,6 +4,10 @@ import 'package:path/path.dart' as p;
 
 import '../design/file_type_utils.dart';
 
+String encodeFileStorageIdentity(String value) {
+  return Uri.encodeComponent(value).replaceAll('*', '%2A');
+}
+
 class FileAccessDescriptor {
   const FileAccessDescriptor({
     required this.displayName,
@@ -21,9 +25,15 @@ class FileAccessDescriptor {
 class FileAccessResolver {
   const FileAccessResolver();
 
-  FileAccessDescriptor resolve({required String title, String? fileType}) {
+  FileAccessDescriptor resolve({
+    required String title,
+    String? fileType,
+    String? assetKey,
+  }) {
     final displayName = _buildDisplayName(title: title, fileType: fileType);
-    final storedFileName = _sanitizeFileName(displayName);
+    final storedFileName = _sanitizeFileName(
+      _buildStoredFileName(displayName: displayName, assetKey: assetKey),
+    );
     final extension = p
         .extension(storedFileName)
         .replaceFirst('.', '')
@@ -37,6 +47,23 @@ class FileAccessResolver {
       extension: extension,
       mimeType: mimeType,
     );
+  }
+
+  String _buildStoredFileName({
+    required String displayName,
+    required String? assetKey,
+  }) {
+    final storageIdentity = assetKey ?? '';
+    if (storageIdentity.isEmpty) {
+      return displayName;
+    }
+
+    final extension = p.extension(displayName);
+    final baseName = extension.isEmpty
+        ? displayName
+        : displayName.substring(0, displayName.length - extension.length);
+    final identity = encodeFileStorageIdentity(storageIdentity);
+    return '$baseName [$identity]$extension';
   }
 
   String _buildDisplayName({required String title, String? fileType}) {

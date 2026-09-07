@@ -230,6 +230,13 @@ class FileDownloadNotifier
     if (_activeDownloads.contains(assetKey)) return;
     _activeDownloads.add(assetKey);
 
+    String? previousLocalPath;
+    try {
+      previousLocalPath = await _resolveExistingLocalPath(assetKey);
+    } catch (_) {
+      // A stale registry entry must not prevent a fresh download attempt.
+    }
+
     // Update state to downloading
     _updateState(
       assetKey,
@@ -237,9 +244,12 @@ class FileDownloadNotifier
         fileId: assetKey,
         status: DownloadStatus.downloading,
         progress: 0.0,
+        localPath: previousLocalPath,
       ),
     );
 
+    String? temporaryPath;
+    String? publishedPath;
     try {
       final api = _ref.read(apiClientProvider);
       final fileRepository = _ref.read(fileRepositoryProvider);
@@ -258,20 +268,29 @@ class FileDownloadNotifier
       final resolvedFileAccess = accessResolver.resolve(
         title: fileName,
         fileType: fileType,
+        assetKey: assetKey,
       );
       final filePath = p.join(
         downloadDir.path,
         resolvedFileAccess.storedFileName,
       );
+      publishedPath = filePath;
+      temporaryPath = await _uniqueSiblingPath(filePath, marker: 'download');
 
       await _downloadWithRecovery(
         api: api,
         assetKey: assetKey,
         downloadUrl: downloadUrl,
-        filePath: filePath,
+        temporaryPath: temporaryPath,
+        publishedPath: filePath,
         fileType: fileType,
         payloadInspector: payloadInspector,
       );
+      await _publishValidatedDownload(
+        temporaryPath: temporaryPath,
+        publishedPath: filePath,
+      );
+      temporaryPath = null;
 
       final downloadedFile = File(filePath);
       final downloadedStat = await downloadedFile.stat();
@@ -321,15 +340,38 @@ class FileDownloadNotifier
         clearTrackedStates(clearedKeys);
       }
     } catch (e) {
-      _updateState(
-        assetKey,
-        FileDownloadState(
-          fileId: assetKey,
-          status: DownloadStatus.failed,
-          errorMessage: e.toString(),
-        ),
-      );
+      String? existingPath;
+      for (final candidate in [publishedPath, previousLocalPath]) {
+        if (candidate != null && await File(candidate).exists()) {
+          existingPath = candidate;
+          break;
+        }
+      }
+      if (existingPath != null && await File(existingPath).exists()) {
+        _updateState(
+          assetKey,
+          FileDownloadState(
+            fileId: assetKey,
+            status: DownloadStatus.downloaded,
+            progress: 1.0,
+            localPath: existingPath,
+            errorMessage: e.toString(),
+          ),
+        );
+      } else {
+        _updateState(
+          assetKey,
+          FileDownloadState(
+            fileId: assetKey,
+            status: DownloadStatus.failed,
+            errorMessage: e.toString(),
+          ),
+        );
+      }
     } finally {
+      if (temporaryPath != null) {
+        await _deleteIfExists(temporaryPath);
+      }
       _activeDownloads.remove(assetKey);
     }
   }
@@ -338,7 +380,8 @@ class FileDownloadNotifier
     required Learn2018Helper api,
     required String assetKey,
     required String downloadUrl,
-    required String filePath,
+    required String temporaryPath,
+    required String publishedPath,
     required String? fileType,
     required DownloadedPayloadInspector payloadInspector,
   }) async {
@@ -346,10 +389,11 @@ class FileDownloadNotifier
       api: api,
       assetKey: assetKey,
       downloadUrl: downloadUrl,
-      filePath: filePath,
+      temporaryPath: temporaryPath,
+      publishedPath: publishedPath,
     );
     final firstValidation = await payloadInspector.inspect(
-      file: File(filePath),
+      file: File(temporaryPath),
       headers: firstResponse.headers,
       statusCode: firstResponse.statusCode,
       expectedFileType: fileType,
@@ -358,7 +402,7 @@ class FileDownloadNotifier
       return firstResponse;
     }
 
-    await _deleteIfExists(filePath);
+    await _deleteIfExists(temporaryPath);
     if (!firstValidation.looksLikeSessionExpired) {
       throw StateError(firstValidation.errorMessage ?? '文件下载失败');
     }
@@ -374,16 +418,17 @@ class FileDownloadNotifier
       api: api,
       assetKey: assetKey,
       downloadUrl: downloadUrl,
-      filePath: filePath,
+      temporaryPath: temporaryPath,
+      publishedPath: publishedPath,
     );
     final retryValidation = await payloadInspector.inspect(
-      file: File(filePath),
+      file: File(temporaryPath),
       headers: retryResponse.headers,
       statusCode: retryResponse.statusCode,
       expectedFileType: fileType,
     );
     if (!retryValidation.isValid) {
-      await _deleteIfExists(filePath);
+      await _deleteIfExists(temporaryPath);
       throw StateError(retryValidation.errorMessage ?? '文件下载失败');
     }
     return retryResponse;
@@ -393,11 +438,12 @@ class FileDownloadNotifier
     required Learn2018Helper api,
     required String assetKey,
     required String downloadUrl,
-    required String filePath,
+    required String temporaryPath,
+    required String publishedPath,
   }) {
     return api.dio.download(
       downloadUrl,
-      filePath,
+      temporaryPath,
       onReceiveProgress: (received, total) {
         if (total > 0) {
           final progress = received / total;
@@ -407,7 +453,7 @@ class FileDownloadNotifier
               fileId: assetKey,
               status: DownloadStatus.downloading,
               progress: progress,
-              localPath: filePath,
+              localPath: publishedPath,
             ),
           );
         }
@@ -415,10 +461,72 @@ class FileDownloadNotifier
     );
   }
 
+  Future<String> _uniqueSiblingPath(
+    String publishedPath, {
+    required String marker,
+  }) async {
+    var attempt = 0;
+    while (true) {
+      final suffix = '${DateTime.now().microsecondsSinceEpoch}-$pid-$attempt';
+      final candidate = p.join(
+        p.dirname(publishedPath),
+        '.learny-$marker-$suffix.tmp',
+      );
+      if (!await File(candidate).exists()) {
+        return candidate;
+      }
+      attempt++;
+    }
+  }
+
+  Future<void> _publishValidatedDownload({
+    required String temporaryPath,
+    required String publishedPath,
+  }) async {
+    final stagedFile = File(temporaryPath);
+    if (!await stagedFile.exists()) {
+      throw StateError('文件下载失败 (temporary file missing)');
+    }
+
+    final publishedFile = File(publishedPath);
+    String? backupPath;
+    var preserveBackup = false;
+    if (await publishedFile.exists()) {
+      backupPath = await _uniqueSiblingPath(publishedPath, marker: 'backup');
+      await publishedFile.copy(backupPath);
+    }
+
+    try {
+      await stagedFile.rename(publishedPath);
+    } catch (_) {
+      if (backupPath != null &&
+          await File(backupPath).exists() &&
+          !await publishedFile.exists()) {
+        try {
+          await File(backupPath).rename(publishedPath);
+          backupPath = null;
+        } on FileSystemException {
+          // Preserve the last good copy if the destination cannot be restored.
+          preserveBackup = true;
+          rethrow;
+        }
+      }
+      rethrow;
+    } finally {
+      if (backupPath != null && !preserveBackup) {
+        await _deleteIfExists(backupPath);
+      }
+    }
+  }
+
   Future<void> _deleteIfExists(String path) async {
     final file = File(path);
-    if (await file.exists()) {
-      await file.delete();
+    try {
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } on FileSystemException {
+      // Cleanup must not hide the download or publication result.
     }
   }
 

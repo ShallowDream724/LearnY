@@ -43,7 +43,7 @@ void main() {
 
       expect(root.path, endsWith('LearnY Files'));
       expect(await root.exists(), isTrue);
-      expect(courseDir.path, endsWith('软件工程'));
+      expect(courseDir.path, endsWith('软件工程 [course-1]'));
       expect(await courseDir.exists(), isTrue);
       expect(
         await Directory(
@@ -81,6 +81,16 @@ void main() {
         );
         await legacyFile.writeAsString('hello');
 
+        await db.upsertCourse(
+          CoursesCompanion.insert(
+            id: 'course-1',
+            name: '软件工程',
+            chineseName: '软件工程',
+            courseType: 'student',
+            semesterId: '2026-spring',
+          ),
+        );
+
         await db.upsertFile(
           CourseFilesCompanion.insert(
             id: 'file-1',
@@ -115,7 +125,7 @@ void main() {
         expect(await legacyRoot.exists(), isFalse);
 
         final migratedFile = File(
-          '${root.path}${Platform.pathSeparator}course-1${Platform.pathSeparator}notes.pdf',
+          '${root.path}${Platform.pathSeparator}软件工程 [course-1]${Platform.pathSeparator}notes [file-1].pdf',
         );
         expect(await migratedFile.exists(), isTrue);
 
@@ -194,10 +204,10 @@ void main() {
 
         final root = await service.ensureFilesRootDirectory();
         final renamedCourseDir = Directory(
-          '${root.path}${Platform.pathSeparator}土力学',
+          '${root.path}${Platform.pathSeparator}土力学 [2025-2026-2151368409]',
         );
         final renamedFile = File(
-          '${renamedCourseDir.path}${Platform.pathSeparator}week1.pdf',
+          '${renamedCourseDir.path}${Platform.pathSeparator}week1 [file-1].pdf',
         );
 
         expect(await renamedCourseDir.exists(), isTrue);
@@ -289,7 +299,7 @@ void main() {
 
         final root = await service.ensureFilesRootDirectory();
         final migratedFile = File(
-          '${root.path}${Platform.pathSeparator}土力学${Platform.pathSeparator}notes.pdf',
+          '${root.path}${Platform.pathSeparator}土力学 [2025-2026-2151368409]${Platform.pathSeparator}notes [file-1].pdf',
         );
 
         expect(await migratedFile.exists(), isTrue);
@@ -305,7 +315,7 @@ void main() {
       },
     );
 
-    test('reuses the same course-name directory for duplicate names', () async {
+    test('separates same-name courses by stable course id', () async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
 
@@ -345,81 +355,94 @@ void main() {
       final dirA = await service.ensureCourseDirectory(courseId: 'course-a');
       final dirB = await service.ensureCourseDirectory(courseId: 'course-b');
 
-      expect(dirA.path, endsWith('高等数学'));
-      expect(dirB.path, dirA.path);
+      expect(dirA.path, endsWith('高等数学 [course-a]'));
+      expect(dirB.path, endsWith('高等数学 [course-b]'));
+      expect(dirB.path, isNot(dirA.path));
     });
 
-    test('keeps downloading into the existing course-name directory', () async {
-      final db = AppDatabase(NativeDatabase.memory());
-      addTearDown(db.close);
+    test(
+      'migrates a cache record out of a shared course-name directory',
+      () async {
+        final db = AppDatabase(NativeDatabase.memory());
+        addTearDown(db.close);
 
-      final documentsDirectory = await Directory.systemTemp.createTemp(
-        'learny-course-alias-merge-',
-      );
-      addTearDown(() async {
-        if (await documentsDirectory.exists()) {
-          await documentsDirectory.delete(recursive: true);
-        }
-      });
+        final documentsDirectory = await Directory.systemTemp.createTemp(
+          'learny-course-alias-merge-',
+        );
+        addTearDown(() async {
+          if (await documentsDirectory.exists()) {
+            await documentsDirectory.delete(recursive: true);
+          }
+        });
 
-      await db.upsertCourse(
-        CoursesCompanion.insert(
-          id: 'course-a',
-          name: '生物化学基础实验',
-          chineseName: '生物化学基础实验',
-          courseType: 'student',
-          semesterId: '2025-2026-1',
-        ),
-      );
-      await db.upsertCourse(
-        CoursesCompanion.insert(
-          id: 'course-b',
-          name: '生物化学基础实验',
-          chineseName: '生物化学基础实验',
-          courseType: 'student',
-          semesterId: '2025-2026-2',
-        ),
-      );
+        await db.upsertCourse(
+          CoursesCompanion.insert(
+            id: 'course-a',
+            name: '生物化学基础实验',
+            chineseName: '生物化学基础实验',
+            courseType: 'student',
+            semesterId: '2025-2026-1',
+          ),
+        );
+        await db.upsertCourse(
+          CoursesCompanion.insert(
+            id: 'course-b',
+            name: '生物化学基础实验',
+            chineseName: '生物化学基础实验',
+            courseType: 'student',
+            semesterId: '2025-2026-2',
+          ),
+        );
 
-      final primaryRoot = Directory(
-        '${documentsDirectory.path}${Platform.pathSeparator}LearnY Files',
-      );
-      final legacyNamedDir = Directory(
-        '${primaryRoot.path}${Platform.pathSeparator}生物化学基础实验',
-      );
-      await legacyNamedDir.create(recursive: true);
-      final legacyFile = File(
-        '${legacyNamedDir.path}${Platform.pathSeparator}report.pdf',
-      );
-      await legacyFile.writeAsString('report');
+        final primaryRoot = Directory(
+          '${documentsDirectory.path}${Platform.pathSeparator}LearnY Files',
+        );
+        final legacyNamedDir = Directory(
+          '${primaryRoot.path}${Platform.pathSeparator}生物化学基础实验',
+        );
+        await legacyNamedDir.create(recursive: true);
+        final legacyFile = File(
+          '${legacyNamedDir.path}${Platform.pathSeparator}report.pdf',
+        );
+        await legacyFile.writeAsString('report');
 
-      await db.upsertFile(
-        CourseFilesCompanion.insert(
-          id: 'file-1',
+        await db.upsertFile(
+          CourseFilesCompanion.insert(
+            id: 'file-1',
+            courseId: 'course-b',
+            fileId: 'remote-1',
+            title: 'report.pdf',
+            uploadTime: '2026-04-12 10:00:00',
+            downloadUrl: 'https://example.com/report.pdf',
+            previewUrl: 'https://example.com/report.pdf/preview',
+            localDownloadState: const Value('downloaded'),
+            localFilePath: Value(legacyFile.path),
+          ),
+        );
+
+        final service = FileStorageWorkspaceService(
+          database: db,
+          getDocumentsDirectory: () async => documentsDirectory,
+        );
+
+        final targetDir = await service.ensureCourseDirectory(
           courseId: 'course-b',
-          fileId: 'remote-1',
-          title: 'report.pdf',
-          uploadTime: '2026-04-12 10:00:00',
-          downloadUrl: 'https://example.com/report.pdf',
-          previewUrl: 'https://example.com/report.pdf/preview',
-          localDownloadState: const Value('downloaded'),
-          localFilePath: Value(legacyFile.path),
-        ),
-      );
+        );
 
-      final service = FileStorageWorkspaceService(
-        database: db,
-        getDocumentsDirectory: () async => documentsDirectory,
-      );
+        final migratedFile = File(
+          '${targetDir.path}${Platform.pathSeparator}report [file-1].pdf',
+        );
 
-      final targetDir = await service.ensureCourseDirectory(
-        courseId: 'course-b',
-      );
-
-      expect(targetDir.path, legacyNamedDir.path);
-      expect(await legacyFile.exists(), isTrue);
-      expect((await db.getFileById('file-1'))?.localFilePath, legacyFile.path);
-    });
+        expect(targetDir.path, isNot(legacyNamedDir.path));
+        expect(targetDir.path, endsWith('生物化学基础实验 [course-b]'));
+        expect(await migratedFile.readAsString(), 'report');
+        expect(await legacyFile.exists(), isTrue);
+        expect(
+          (await db.getFileById('file-1'))?.localFilePath,
+          migratedFile.path,
+        );
+      },
+    );
 
     test(
       'merges legacy files into an existing LearnY workspace without blocking old users',
@@ -462,7 +485,7 @@ void main() {
           '${documentsDirectory.path}${Platform.pathSeparator}LearnY Files',
         );
         final primaryCourseDir = Directory(
-          '${primaryRoot.path}${Platform.pathSeparator}土力学',
+          '${primaryRoot.path}${Platform.pathSeparator}土力学 [course-1]',
         );
         await primaryCourseDir.create(recursive: true);
         final primaryFile = File(
@@ -491,7 +514,7 @@ void main() {
 
         final root = await service.ensureFilesRootDirectory();
         final migratedLegacyFile = File(
-          '${root.path}${Platform.pathSeparator}土力学${Platform.pathSeparator}legacy.pdf',
+          '${root.path}${Platform.pathSeparator}土力学 [course-1]${Platform.pathSeparator}legacy [file-1].pdf',
         );
 
         expect(await migratedLegacyFile.exists(), isTrue);

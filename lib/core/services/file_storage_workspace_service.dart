@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../database/database.dart';
+import '../files/file_access_resolver.dart';
 import '../providers/app_providers.dart';
 
 typedef AppDocumentsDirectoryResolver = Future<Directory> Function();
@@ -25,6 +26,7 @@ class FileStorageWorkspaceService {
 
   final AppDatabase _database;
   final AppDocumentsDirectoryResolver _getDocumentsDirectory;
+  final FileAccessResolver _fileAccessResolver = const FileAccessResolver();
 
   Future<void>? _prepareTask;
 
@@ -68,13 +70,6 @@ class FileStorageWorkspaceService {
       return preferredDirectory;
     }
 
-    final existingDirectory = await _existingCourseDirectoryForDownloads(
-      courseId: courseId,
-    );
-    if (existingDirectory != null) {
-      return existingDirectory;
-    }
-
     final legacyDirectory = Directory(
       p.join(root.path, _sanitizePathSegment(courseId)),
     );
@@ -110,7 +105,7 @@ class FileStorageWorkspaceService {
     }
 
     await _migrateCourseDirectories(primaryRoot);
-    await _repairPersistedCourseIdPaths(primaryRoot);
+    await _migratePersistedDownloadPaths(primaryRoot);
   }
 
   Future<Directory> _primaryRootDirectory() async {
@@ -304,45 +299,144 @@ class FileStorageWorkspaceService {
     }
   }
 
-  Future<void> _repairPersistedCourseIdPaths(Directory primaryRoot) async {
+  Future<void> _migratePersistedDownloadPaths(Directory primaryRoot) async {
     final courses = await _database.getAllCourses();
     if (courses.isEmpty) {
       return;
     }
 
     final directoryNamesByCourseId = _directoryNamesByCourseId(courses);
+    final cachedAssets = await _database.getAllCachedAssets();
+    final targetPathByPersistedFileId = <String, String>{};
+    for (final asset in cachedAssets) {
+      final persistedFileId = asset.persistedFileId;
+      if (persistedFileId != null && persistedFileId.isNotEmpty) {
+        final courseDirectoryName = directoryNamesByCourseId[asset.courseId];
+        if (courseDirectoryName != null) {
+          targetPathByPersistedFileId[persistedFileId] = p.join(
+            primaryRoot.path,
+            courseDirectoryName,
+            _fileAccessResolver
+                .resolve(
+                  title: asset.title,
+                  fileType: asset.fileType,
+                  assetKey: asset.assetKey,
+                )
+                .storedFileName,
+          );
+        }
+      }
+    }
+
     await _database.transaction(() async {
+      for (final asset in cachedAssets) {
+        if (asset.localPath.isEmpty) {
+          continue;
+        }
+        final courseDirectoryName = directoryNamesByCourseId[asset.courseId];
+        if (courseDirectoryName == null) {
+          continue;
+        }
+        final storedFileName = _fileAccessResolver
+            .resolve(
+              title: asset.title,
+              fileType: asset.fileType,
+              assetKey: asset.assetKey,
+            )
+            .storedFileName;
+        final targetPath = p.join(
+          primaryRoot.path,
+          courseDirectoryName,
+          storedFileName,
+        );
+        if (!await _materializeMigratedFile(
+          sourcePath: asset.localPath,
+          targetPath: targetPath,
+        )) {
+          continue;
+        }
+        if (!p.equals(p.normalize(asset.localPath), p.normalize(targetPath))) {
+          await _database.updateCachedAssetLocalPath(
+            asset.assetKey,
+            targetPath,
+          );
+        }
+      }
+
       for (final file in await _database.getAllFiles()) {
         final localPath = file.localFilePath;
         if (localPath == null || localPath.isEmpty) {
           continue;
         }
-        final rewrittenPath = _repairWorkspaceCourseIdPath(
-          localPath,
-          primaryRootPath: primaryRoot.path,
-          directoryNamesByCourseId: directoryNamesByCourseId,
-        );
-        if (rewrittenPath == null || rewrittenPath == localPath) {
+        final courseDirectoryName = directoryNamesByCourseId[file.courseId];
+        if (courseDirectoryName == null) {
           continue;
         }
-        await _database.updateFileLocalPath(file.id, rewrittenPath);
-      }
-
-      for (final asset in await _database.getAllCachedAssets()) {
-        final rewrittenPath = _repairWorkspaceCourseIdPath(
-          asset.localPath,
-          primaryRootPath: primaryRoot.path,
-          directoryNamesByCourseId: directoryNamesByCourseId,
-        );
-        if (rewrittenPath == null || rewrittenPath == asset.localPath) {
+        final targetPath =
+            targetPathByPersistedFileId[file.id] ??
+            p.join(
+              primaryRoot.path,
+              courseDirectoryName,
+              _fileAccessResolver
+                  .resolve(
+                    title: file.title,
+                    fileType: file.fileType,
+                    assetKey: file.id,
+                  )
+                  .storedFileName,
+            );
+        if (!await _materializeMigratedFile(
+          sourcePath: localPath,
+          targetPath: targetPath,
+        )) {
           continue;
         }
-        await _database.updateCachedAssetLocalPath(
-          asset.assetKey,
-          rewrittenPath,
-        );
+        if (!p.equals(p.normalize(localPath), p.normalize(targetPath))) {
+          await _database.updateFileLocalPath(file.id, targetPath);
+        }
       }
     });
+  }
+
+  Future<bool> _materializeMigratedFile({
+    required String sourcePath,
+    required String targetPath,
+  }) async {
+    final source = File(sourcePath);
+    final target = File(targetPath);
+    if (p.equals(p.normalize(source.path), p.normalize(target.path))) {
+      return target.exists();
+    }
+
+    if (await target.exists() && await target.length() > 0) {
+      return true;
+    }
+    if (!await source.exists()) {
+      return false;
+    }
+
+    await target.parent.create(recursive: true);
+    final temporaryTarget = File(
+      '${target.path}.migrating-${DateTime.now().microsecondsSinceEpoch}-$pid',
+    );
+    try {
+      await source.copy(temporaryTarget.path);
+      if (await target.exists()) {
+        await target.delete();
+      }
+      await temporaryTarget.rename(target.path);
+      return true;
+    } on FileSystemException {
+      return false;
+    } finally {
+      if (await temporaryTarget.exists()) {
+        try {
+          await temporaryTarget.delete();
+        } on FileSystemException {
+          // A later preparation pass can remove or replace this staging file.
+        }
+      }
+    }
   }
 
   Future<String> _preferredCourseDirectoryName({
@@ -375,10 +469,11 @@ class FileStorageWorkspaceService {
     required String? semesterId,
   }) {
     final baseName = _sanitizePathSegment(courseName ?? '');
+    final identity = encodeFileStorageIdentity(courseId);
     if (baseName.isEmpty || baseName == '_') {
-      return _sanitizePathSegment(courseId);
+      return identity.isEmpty ? '_' : identity;
     }
-    return baseName;
+    return identity.isEmpty ? baseName : '$baseName [$identity]';
   }
 
   String? _rebasePersistedPath(
@@ -411,70 +506,6 @@ class FileStorageWorkspaceService {
         .where((segment) => segment.isNotEmpty)
         .toList(growable: false);
     return p.joinAll([p.normalize(toPrefix), ...suffixSegments]);
-  }
-
-  String? _repairWorkspaceCourseIdPath(
-    String? currentPath, {
-    required String primaryRootPath,
-    required Map<String, String> directoryNamesByCourseId,
-  }) {
-    if (currentPath == null || currentPath.isEmpty) {
-      return currentPath;
-    }
-
-    final normalizedCurrentPath = _normalizePathForComparison(currentPath);
-    final normalizedPrimaryRoot = _normalizePathForComparison(primaryRootPath);
-    final prefixWithSeparator = '$normalizedPrimaryRoot/';
-    if (!normalizedCurrentPath.startsWith(prefixWithSeparator)) {
-      return currentPath;
-    }
-
-    final relativePath = normalizedCurrentPath.substring(
-      prefixWithSeparator.length,
-    );
-    final segments = relativePath
-        .split('/')
-        .where((segment) => segment.isNotEmpty)
-        .toList(growable: false);
-    if (segments.isEmpty) {
-      return currentPath;
-    }
-
-    final preferredCourseDirectory = directoryNamesByCourseId[segments.first];
-    if (preferredCourseDirectory == null ||
-        preferredCourseDirectory == segments.first) {
-      return currentPath;
-    }
-    final repairedSegments = [...segments];
-    repairedSegments[0] = preferredCourseDirectory;
-    return p.joinAll([p.normalize(primaryRootPath), ...repairedSegments]);
-  }
-
-  Future<Directory?> _existingCourseDirectoryForDownloads({
-    required String courseId,
-  }) async {
-    for (final file in await _database.getFilesByCourse(courseId)) {
-      final localPath = file.localFilePath;
-      if (localPath == null || localPath.isEmpty) {
-        continue;
-      }
-      final localFile = File(localPath);
-      if (await localFile.exists()) {
-        return localFile.parent;
-      }
-    }
-
-    for (final asset in await _database.getAllCachedAssets()) {
-      if (asset.courseId != courseId || asset.localPath.isEmpty) {
-        continue;
-      }
-      final localFile = File(asset.localPath);
-      if (await localFile.exists()) {
-        return localFile.parent;
-      }
-    }
-
-    return null;
   }
 
   String _normalizePathForComparison(String path) {
