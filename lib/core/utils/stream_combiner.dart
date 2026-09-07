@@ -1,5 +1,15 @@
 import 'dart:async';
 
+// Start every cancellation before waiting for potentially slow sources.
+Future<void> _cancelSubscriptions(
+  List<StreamSubscription<dynamic>?> sources,
+) async {
+  await Future.wait([
+    for (final source in sources)
+      if (source != null) Future<void>.sync(source.cancel),
+  ]);
+}
+
 Stream<R> combineLatest2<A, B, R>(
   Stream<A> streamA,
   Stream<B> streamB,
@@ -41,10 +51,7 @@ Stream<R> combineLatest2<A, B, R>(
       subA?.resume();
       subB?.resume();
     },
-    onCancel: () async {
-      await subA?.cancel();
-      await subB?.cancel();
-    },
+    onCancel: () => _cancelSubscriptions([subA, subB]),
   );
 
   return controller.stream;
@@ -102,11 +109,7 @@ Stream<R> combineLatest3<A, B, C, R>(
       subB?.resume();
       subC?.resume();
     },
-    onCancel: () async {
-      await subA?.cancel();
-      await subB?.cancel();
-      await subC?.cancel();
-    },
+    onCancel: () => _cancelSubscriptions([subA, subB, subC]),
   );
 
   return controller.stream;
@@ -177,12 +180,7 @@ Stream<R> combineLatest4<A, B, C, D, R>(
       subC?.resume();
       subD?.resume();
     },
-    onCancel: () async {
-      await subA?.cancel();
-      await subB?.cancel();
-      await subC?.cancel();
-      await subD?.cancel();
-    },
+    onCancel: () => _cancelSubscriptions([subA, subB, subC, subD]),
   );
 
   return controller.stream;
@@ -270,13 +268,7 @@ Stream<R> combineLatest5<A, B, C, D, E, R>(
       subD?.resume();
       subE?.resume();
     },
-    onCancel: () async {
-      await subA?.cancel();
-      await subB?.cancel();
-      await subC?.cancel();
-      await subD?.cancel();
-      await subE?.cancel();
-    },
+    onCancel: () => _cancelSubscriptions([subA, subB, subC, subD, subE]),
   );
 
   return controller.stream;

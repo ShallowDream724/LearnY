@@ -122,7 +122,7 @@ class DemoLearnApi extends Learn2018Helper {
             status: '',
             startTime: '08:00',
             endTime: '09:35',
-            date: DemoData.timestamp(date).substring(0, 10),
+            date: DemoData.dateKey(date),
             courseName: courses[date.weekday - 1].name,
           ),
     ];
@@ -177,8 +177,8 @@ class DemoLearnApi extends Learn2018Helper {
         submitUrl: '',
         completionType: previous.completionType,
         submissionType: previous.submissionType,
-        isLateSubmission: DateTime.parse(
-          previous.deadline,
+        isLateSubmission: DateTime.fromMillisecondsSinceEpoch(
+          int.parse(previous.deadline),
         ).isBefore(DateTime.now()),
         submitted: true,
         graded: false,

@@ -14,20 +14,25 @@ String buildHomeScheduleEmptyLabel(HomeScheduleDayOption day) {
 
 List<HomeScheduleDayOption> buildHomeScheduleDays(
   DateTime startDay, {
-  int length = 6,
+  int length = 7,
+  DateTime? today,
 }) {
-  final today = DateTime(startDay.year, startDay.month, startDay.day);
+  final start = DateTime(startDay.year, startDay.month, startDay.day);
+  final reference = today ?? start;
   return List<HomeScheduleDayOption>.generate(length, (index) {
-    final date = today.add(Duration(days: index));
+    final date = start.add(Duration(days: index));
     return HomeScheduleDayOption(
       date: date,
-      label: _buildDayLabel(date, today: today),
+      label: _buildDayLabel(date, today: reference),
       weekdayLabel: _weekdayLabel(date),
       shortDateLabel: DateFormat('M/d').format(date),
-      isToday: _isSameDay(date, today),
+      isToday: _isSameDay(date, reference),
     );
   });
 }
+
+DateTime scheduleWeekStart(DateTime date) =>
+    DateTime(date.year, date.month, date.day - date.weekday + 1);
 
 HomeScheduleSnapshot buildHomeScheduleSnapshotFromCalendarEvents({
   required List<HomeScheduleDayOption> days,
@@ -70,6 +75,7 @@ HomeScheduleSnapshot buildHomeScheduleSnapshotFromCachedCourses({
   required List<HomeScheduleDayOption> days,
   required List<db.Course> courses,
   required String semesterStartDate,
+  String? semesterEndDate,
 }) {
   final cache = schedule_cache.buildSemesterScheduleCacheFromCourses(
     semesterId: '',
@@ -79,6 +85,7 @@ HomeScheduleSnapshot buildHomeScheduleSnapshotFromCachedCourses({
   return buildHomeScheduleSnapshotFromSemesterScheduleCache(
     days: days,
     cache: cache,
+    semesterEndDate: semesterEndDate,
   );
 }
 
@@ -96,6 +103,26 @@ HomeScheduleSnapshot mergeHomeScheduleSnapshots({
         .toSet();
 
     for (final item in fallback.itemsFor(day)) {
+      // A calendar occurrence overrides a local estimate of the same class,
+      // even when the registrar changed its room or duration.
+      final overlapping = primaryItems.indexWhere(
+        (known) =>
+            _matchesScheduleCourse(known, item) &&
+            _overlapsScheduleTime(known, item),
+      );
+      if (overlapping >= 0) {
+        final preferred = primaryItems[overlapping];
+        primaryItems[overlapping] = TodayScheduleItem(
+          courseId: preferred.courseId ?? item.courseId,
+          courseName: preferred.courseName,
+          startTime: preferred.startTime,
+          endTime: preferred.endTime,
+          location: preferred.location.isEmpty
+              ? item.location
+              : preferred.location,
+        );
+        continue;
+      }
       final identityKey = _scheduleItemIdentityKey(item);
       if (identityKey != null && knownKeys.contains(identityKey)) {
         continue;
@@ -132,10 +159,15 @@ HomeScheduleSnapshot mergeHomeScheduleSnapshots({
 HomeScheduleSnapshot buildHomeScheduleSnapshotFromSemesterScheduleCache({
   required List<HomeScheduleDayOption> days,
   required schedule_cache.SemesterScheduleCache cache,
+  String? semesterEndDate,
 }) {
+  final endDate = DateTime.tryParse(semesterEndDate ?? '');
   final resolved = schedule_cache.resolveSemesterScheduleItemsByDateKey(
     cache: cache,
-    dates: days.map((day) => day.date).toList(growable: false),
+    dates: days
+        .map((day) => day.date)
+        .where((date) => endDate == null || !date.isAfter(endDate))
+        .toList(growable: false),
   );
   return HomeScheduleSnapshot(
     days: days,
@@ -312,10 +344,8 @@ String _scheduleCourseSortKey(TodayScheduleItem item) {
 bool _matchesScheduleCourse(TodayScheduleItem left, TodayScheduleItem right) {
   final leftCourseId = left.courseId?.trim() ?? '';
   final rightCourseId = right.courseId?.trim() ?? '';
-  if (leftCourseId.isNotEmpty &&
-      rightCourseId.isNotEmpty &&
-      leftCourseId == rightCourseId) {
-    return true;
+  if (leftCourseId.isNotEmpty && rightCourseId.isNotEmpty) {
+    return leftCourseId == rightCourseId;
   }
 
   final leftCourseName = left.courseName.trim();
@@ -327,6 +357,27 @@ bool _matchesScheduleCourse(TodayScheduleItem left, TodayScheduleItem right) {
   }
 
   return false;
+}
+
+bool _overlapsScheduleTime(TodayScheduleItem left, TodayScheduleItem right) {
+  int? minutes(String value) {
+    final match = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(value.trim());
+    if (match == null) return null;
+    final hours = int.parse(match[1]!);
+    final minutes = int.parse(match[2]!);
+    return hours < 24 && minutes < 60 ? hours * 60 + minutes : null;
+  }
+
+  final leftStart = minutes(left.startTime);
+  final rightStart = minutes(right.startTime);
+  if (leftStart == null || rightStart == null) return false;
+  if (leftStart == rightStart) return true;
+  final leftEnd = minutes(left.endTime);
+  final rightEnd = minutes(right.endTime);
+  return leftEnd != null &&
+      rightEnd != null &&
+      leftStart < rightEnd &&
+      rightStart < leftEnd;
 }
 
 bool _isAdjacentScheduleBoundary({

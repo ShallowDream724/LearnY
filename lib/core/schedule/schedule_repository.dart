@@ -33,6 +33,15 @@ class ScheduleRepository {
     required SyncOperation operation,
   }) async* {
     var displayed = emptyScheduleSnapshot(days);
+    var hasCalendarData = false;
+    final snapshotKey = AppStateKeys.scheduleWeekSnapshot(
+      semesterId,
+      days.first.dateKey,
+    );
+    final refreshKey = AppStateKeys.scheduleWeekRefresh(
+      semesterId,
+      days.first.dateKey,
+    );
     try {
       await for (final courses in _database.watchCoursesBySemester(
         semesterId,
@@ -43,6 +52,7 @@ class ScheduleRepository {
           days: days,
           courses: courses,
           semesterStartDate: semester?.startDate ?? '',
+          semesterEndDate: semester?.endDate,
         );
         final semesterRaw = await _database.getState(
           AppStateKeys.homeScheduleSemesterCache(semesterId),
@@ -58,8 +68,11 @@ class ScheduleRepository {
             : buildHomeScheduleSnapshotFromSemesterScheduleCache(
                 days: days,
                 cache: semesterCache,
+                semesterEndDate: semester?.endDate,
               );
-        final raw = await _database.getState(AppStateKeys.homeScheduleSnapshot);
+        final raw =
+            await _database.getState(snapshotKey) ??
+            await _database.getState(AppStateKeys.homeScheduleSnapshot);
         final cached = raw == null
             ? null
             : decodeHomeScheduleSnapshotCachePayload(
@@ -67,9 +80,7 @@ class ScheduleRepository {
                 days: days,
                 raw: raw,
               );
-        final refreshRaw = await _database.getState(
-          AppStateKeys.homeScheduleRemoteRefreshState,
-        );
+        final refreshRaw = await _database.getState(refreshKey);
         final refreshState = refreshRaw == null
             ? null
             : decodeHomeScheduleRemoteRefreshPayload(refreshRaw);
@@ -82,6 +93,7 @@ class ScheduleRepository {
         displayed = cached == null
             ? fallback
             : mergeHomeScheduleSnapshots(primary: cached, fallback: fallback);
+        hasCalendarData = cached != null || hasScheduleItems(fallback);
         final shouldRefresh =
             fetchRemote &&
             shouldFetchHomeScheduleRemoteSnapshot(
@@ -98,6 +110,7 @@ class ScheduleRepository {
         yield ScheduleState(
           semesterId: semesterId,
           snapshot: displayed,
+          hasCalendarData: hasCalendarData,
           failure: !shouldRefresh && previousFailure
               ? ScheduleFailure.network
               : null,
@@ -107,17 +120,10 @@ class ScheduleRepository {
         }
 
         operation.ensureActive();
-        await _saveRefreshState(
-          HomeScheduleRemoteRefreshState(
-            semesterId: semesterId,
-            lastAttemptAt: _now(),
-            hasSuccessfulRefresh: false,
-          ),
-          operation,
-        );
         yield ScheduleState(
           semesterId: semesterId,
           snapshot: displayed,
+          hasCalendarData: hasCalendarData,
           isRefreshing: true,
         );
         try {
@@ -137,14 +143,14 @@ class ScheduleRepository {
           await _database.transaction(() async {
             operation.ensureActive();
             await _database.setState(
-              AppStateKeys.homeScheduleSnapshot,
+              snapshotKey,
               encodeHomeScheduleSnapshotCachePayload(
                 semesterId: semesterId,
                 snapshot: merged,
               ),
             );
             await _database.setState(
-              AppStateKeys.homeScheduleRemoteRefreshState,
+              refreshKey,
               encodeHomeScheduleRemoteRefreshPayload(
                 HomeScheduleRemoteRefreshState(
                   semesterId: semesterId,
@@ -157,14 +163,30 @@ class ScheduleRepository {
           });
           operation.ensureActive();
           displayed = merged;
-          yield ScheduleState(semesterId: semesterId, snapshot: displayed);
+          hasCalendarData = true;
+          yield ScheduleState(
+            semesterId: semesterId,
+            snapshot: displayed,
+            hasCalendarData: true,
+          );
         } on SyncCancelled {
           return;
         } catch (error) {
           operation.ensureActive();
+          await _saveRefreshState(
+            HomeScheduleRemoteRefreshState(
+              semesterId: semesterId,
+              lastAttemptAt: _now(),
+              hasSuccessfulRefresh: false,
+            ),
+            operation,
+            refreshKey,
+          );
+          operation.ensureActive();
           yield ScheduleState(
             semesterId: semesterId,
             snapshot: displayed,
+            hasCalendarData: hasCalendarData,
             failure: _failureFor(error),
           );
         }
@@ -176,22 +198,26 @@ class ScheduleRepository {
       yield ScheduleState(
         semesterId: semesterId,
         snapshot: displayed,
+        hasCalendarData: hasCalendarData,
         failure: ScheduleFailure.storage,
       );
     }
   }
 
-  Future<void> resetRemoteRefresh() =>
-      _database.deleteState(AppStateKeys.homeScheduleRemoteRefreshState);
+  Future<void> resetRemoteRefresh(String semesterId, String firstDay) =>
+      _database.deleteState(
+        AppStateKeys.scheduleWeekRefresh(semesterId, firstDay),
+      );
 
   Future<void> _saveRefreshState(
     HomeScheduleRemoteRefreshState state,
     SyncOperation operation,
+    String key,
   ) {
     return _database.transaction(() async {
       operation.ensureActive();
       await _database.setState(
-        AppStateKeys.homeScheduleRemoteRefreshState,
+        key,
         encodeHomeScheduleRemoteRefreshPayload(state),
       );
       operation.ensureActive();

@@ -1,3 +1,5 @@
+import 'package:intl/intl.dart';
+
 import '../core/api/enums.dart';
 import '../core/api/models.dart' as api;
 
@@ -145,10 +147,8 @@ class DemoData {
   api.SemesterInfo _semester(int year, int term, DateTime start) =>
       api.SemesterInfo(
         id: '$year-${year + 1}-$term',
-        startDate: timestamp(start).substring(0, 10),
-        endDate: timestamp(
-          start.add(const Duration(days: 126)),
-        ).substring(0, 10),
+        startDate: dateKey(start),
+        endDate: dateKey(start.add(const Duration(days: 126))),
         startYear: year,
         endYear: year + 1,
         type: term == 1 ? SemesterType.fall : SemesterType.spring,
@@ -187,5 +187,8 @@ class DemoData {
   );
 
   static String timestamp(DateTime value) =>
-      value.toIso8601String().substring(0, 19).replaceFirst('T', ' ');
+      value.millisecondsSinceEpoch.toString();
+
+  static String dateKey(DateTime value) =>
+      DateFormat('yyyy-MM-dd').format(value);
 }

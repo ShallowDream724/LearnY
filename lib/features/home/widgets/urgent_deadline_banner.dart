@@ -1,26 +1,12 @@
-// Urgent deadline banner — premium "X个作业即将截止" card
-// with live countdown timers (<24h), 本周/下周 date text,
-// sequence number urgency indicators, and configurable threshold.
-//
-// Design: warm cream gradient background, three urgency tiers
-//   critical (<24h): #FF3B30 red
-//   warning  (24-72h): #E8590C burnt orange
-//   normal   (>72h):   #007AFF Apple blue
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/design/app_theme_colors.dart';
-import '../../../core/design/typography.dart';
 import '../../../core/providers/providers.dart';
 import '../../../core/providers/sync_provider.dart';
 import '../../../core/utils/deadline_time.dart';
 
-class UrgentDeadlineBanner extends ConsumerStatefulWidget {
-  final List<HomeworkSummary> assignments;
-  final int pendingAssignments;
-  final void Function(HomeworkSummary hw)? onTap;
-  final Future<void> Function(HomeworkSummary hw, Offset anchor)? onLongPress;
-
+class UrgentDeadlineBanner extends ConsumerWidget {
   const UrgentDeadlineBanner({
     super.key,
     required this.assignments,
@@ -29,479 +15,187 @@ class UrgentDeadlineBanner extends ConsumerStatefulWidget {
     this.onLongPress,
   });
 
-  @override
-  ConsumerState<UrgentDeadlineBanner> createState() =>
-      _UrgentDeadlineBannerState();
-}
+  final List<HomeworkSummary> assignments;
+  final int pendingAssignments;
+  final void Function(HomeworkSummary hw)? onTap;
+  final Future<void> Function(HomeworkSummary hw, Offset anchor)? onLongPress;
 
-class _UrgentDeadlineBannerState extends ConsumerState<UrgentDeadlineBanner>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _pulseController;
-
-  @override
-  void initState() {
-    super.initState();
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _pulseController.dispose();
-    super.dispose();
-  }
-
-  // ── Urgency tier ──
-
-  _UrgencyTier _tier(HomeworkSummary hw) {
-    if (hw.isOverdue) return _UrgencyTier.critical;
-    if (hw.timeRemaining.inHours < 24) return _UrgencyTier.critical;
-    if (hw.timeRemaining.inHours < 72) return _UrgencyTier.warning;
-    return _UrgencyTier.normal;
-  }
-
-  Color _tierColor(_UrgencyTier t) => switch (t) {
-    _UrgencyTier.critical => const Color(0xFFFF3B30),
-    _UrgencyTier.warning => const Color(0xFFE8590C),
-    _UrgencyTier.normal => const Color(0xFF007AFF),
-  };
-
-  // ── Time formatting ──
-
-  String _formatCountdown(HomeworkSummary hw) {
-    if (hw.isOverdue) return '已截止';
-
-    final deadline = tryParseEpochMillisToLocal(hw.deadline);
-    if (deadline == null) return '';
-    final now = nowInShanghai();
-    final remaining = deadline.difference(now);
-
-    if (remaining.isNegative) return '已截止';
-
-    if (remaining.inHours < 24) {
-      final h = remaining.inHours;
-      final m = remaining.inMinutes.remainder(60);
-      if (h > 0) {
-        return '剩余 ${h}h ${m}m';
-      } else {
-        return '剩余 $m分钟';
-      }
-    }
-
-    return formatRelativeDeadlineLabel(deadline, now: now);
-  }
-
-  String _formatDateSub(HomeworkSummary hw) {
-    if (hw.isOverdue) return '';
-    final deadline = tryParseEpochMillisToLocal(hw.deadline);
-    if (deadline == null) return '';
-    final remaining = deadline.difference(nowInShanghai());
-    if (remaining.inHours < 24) {
-      return '今天 ${formatHourMinuteLabel(deadline)}';
-    }
-    return '${deadline.month}月${deadline.day}日';
-  }
-
-  // ── Threshold dialog ──
-
-  void _showThresholdDialog() {
-    final controller = TextEditingController(
-      text: ref.read(deadlineThresholdHoursProvider).toString(),
-    );
-    showDialog(
+  Future<void> _configure(BuildContext context, WidgetRef ref) async {
+    final hours = await showDialog<int>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('设置截止提醒阈值'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
+      builder: (_) => _DeadlineThresholdDialog(
+        hours: ref.read(deadlineThresholdHoursProvider),
+      ),
+    );
+    if (hours != null && context.mounted) {
+      await ref.read(deadlineThresholdHoursProvider.notifier).setHours(hours);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final threshold = ref.watch(deadlineThresholdHoursProvider);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            const Text('显示多少小时内即将截止的作业：'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                suffixText: '小时',
-                border: OutlineInputBorder(),
+            Icon(
+              assignments.isEmpty
+                  ? Icons.assignment_turned_in_outlined
+                  : Icons.assignment_late_outlined,
+              size: 18,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                assignments.isNotEmpty
+                    ? '${assignments.length} 项作业即将截止'
+                    : pendingAssignments == 0
+                    ? '暂无待交作业'
+                    : '$pendingAssignments 项待交作业，近期无截止',
+                style: assignments.isEmpty
+                    ? theme.textTheme.bodySmall
+                    : theme.textTheme.titleSmall,
               ),
-              autofocus: true,
+            ),
+            IconButton(
+              tooltip: '截止提醒：${threshold}h',
+              onPressed: () => _configure(context, ref),
+              icon: const Icon(Icons.tune, size: 18),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final v = int.tryParse(controller.text);
-              if (v != null && v > 0) {
-                ref.read(deadlineThresholdHoursProvider.notifier).setHours(v);
-              }
-              Navigator.pop(ctx);
-            },
-            child: const Text('确定'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Build ──
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final c = context.colors;
-    final assignments = widget.assignments;
-    final hasUrgentAssignments = assignments.isNotEmpty;
-
-    final thresholdHours = ref.watch(deadlineThresholdHoursProvider);
-    final backgroundColors = isDark
-        ? const [Color(0xFF1E2430), Color(0xFF1A1F28)]
-        : const [Color(0xFFFFF7EE), Color(0xFFFFF3E4)];
-    final panelBorderColor = isDark
-        ? const Color(0xFF3A4250).withAlpha(180)
-        : const Color(0xFFC8A064).withAlpha(30);
-    final dividerColor = isDark
-        ? Colors.white.withAlpha(14)
-        : const Color(0xFFB4783C).withAlpha(15);
-    final titleColor = isDark
-        ? const Color(0xFFFFC56F)
-        : const Color(0xFFB5710D);
-    final secondaryTextColor = isDark
-        ? const Color(0xFF98A3B5)
-        : const Color(0xFFA08060);
-    final tertiaryTextColor = isDark
-        ? const Color(0xFF8B95A5)
-        : const Color(0xFFB09880);
-    final controlFillColor = isDark
-        ? Colors.white.withAlpha(10)
-        : const Color(0xFFB4783C).withAlpha(18);
-    final controlIconColor = isDark
-        ? const Color(0xFFE5B779)
-        : const Color(0xFFB5710D);
-    final emptyStateText = widget.pendingAssignments > 0
-        ? '当前还有 ${widget.pendingAssignments} 项待交，但都不在 ${thresholdHours}h 阈值内。'
-        : '当前没有待交作业，你仍可在这里调整提醒阈值。';
-    final emptyStateHint = widget.pendingAssignments > 0
-        ? '如需更早提醒，可以适当调大阈值。'
-        : '后续有新作业时，会按这里的阈值提醒。';
-
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: backgroundColors,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: isDark
-                ? Colors.black.withAlpha(24)
-                : const Color(0xFFC8A064).withAlpha(8),
-            blurRadius: isDark ? 18 : 3,
-            offset: isDark ? const Offset(0, 6) : const Offset(0, 1),
-          ),
-        ],
-        border: Border.all(color: panelBorderColor, width: 0.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Header ──
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 12, 8),
-            child: Row(
-              children: [
-                // Status dot
-                hasUrgentAssignments
-                    ? AnimatedBuilder(
-                        animation: _pulseController,
-                        builder: (context, child) => Opacity(
-                          opacity: 0.5 + 0.5 * _pulseController.value,
-                          child: Transform.scale(
-                            scale: 0.85 + 0.15 * _pulseController.value,
-                            child: child,
-                          ),
-                        ),
-                        child: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFFF9F0A),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      )
-                    : Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: controlIconColor.withAlpha(150),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                const SizedBox(width: 8),
-                // Title
-                Text(
-                  hasUrgentAssignments
-                      ? '${assignments.length} 个作业即将截止'
-                      : widget.pendingAssignments > 0
-                      ? '当前阈值内暂无截止作业'
-                      : '当前没有待交作业',
-                  style: AppTypography.labelMedium.copyWith(
-                    color: titleColor,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
-                const Spacer(),
-                // Threshold badge
-                Container(
+        for (final homework in assignments)
+          GestureDetector(
+            onLongPressStart: onLongPress == null
+                ? null
+                : (details) => onLongPress!(homework, details.globalPosition),
+            onSecondaryTapDown: onLongPress == null
+                ? null
+                : (details) => onLongPress!(homework, details.globalPosition),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onTap == null ? null : () => onTap!(homework),
+                child: Padding(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
+                    vertical: 9,
+                    horizontal: 4,
                   ),
-                  decoration: BoxDecoration(
-                    color: controlFillColor,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    '${thresholdHours}h',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
-                      color: controlIconColor,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                // Settings gear
-                GestureDetector(
-                  onTap: _showThresholdDialog,
-                  child: Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: controlFillColor,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      Icons.tune_rounded,
-                      size: 14,
-                      color: controlIconColor,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          if (!hasUrgentAssignments)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 2, 16, 14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    emptyStateText,
-                    style: AppTypography.bodyMedium.copyWith(
-                      color: isDark ? c.text : const Color(0xFF1C1C1E),
-                      fontWeight: FontWeight.w500,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    emptyStateHint,
-                    style: AppTypography.bodySmall.copyWith(
-                      color: secondaryTextColor,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else
-            ...assignments.asMap().entries.map((entry) {
-              final index = entry.key;
-              final hw = entry.value;
-              final isLast = index == assignments.length - 1;
-              final tier = _tier(hw);
-              final color = _tierColor(tier);
-              final dateSub = _formatDateSub(hw);
-
-              return GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onLongPressStart: widget.onLongPress == null
-                    ? null
-                    : (details) =>
-                          widget.onLongPress?.call(hw, details.globalPosition),
-                child: InkWell(
-                  onTap: () => widget.onTap?.call(hw),
-                  child: Container(
-                    padding: EdgeInsets.fromLTRB(16, 11, 16, isLast ? 14 : 11),
-                    decoration: BoxDecoration(
-                      border: isLast
-                          ? null
-                          : Border(bottom: BorderSide(color: dividerColor)),
-                    ),
-                    child: Row(
-                      children: [
-                        // Sequence number
-                        SizedBox(
-                          width: 18,
-                          child: Text(
-                            '${index + 1}',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontFamily: 'JetBrains Mono',
-                              fontFamilyFallback: const ['monospace'],
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: color.withAlpha(
-                                tier == _UrgencyTier.critical
-                                    ? 153 // 0.6
-                                    : tier == _UrgencyTier.warning
-                                    ? 128 // 0.5
-                                    : 89, // 0.35
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        // Content
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                hw.courseName,
-                                style: AppTypography.bodySmall.copyWith(
-                                  color: secondaryTextColor,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                  letterSpacing: 0.2,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                hw.title,
-                                style: AppTypography.bodyMedium.copyWith(
-                                  color: isDark
-                                      ? c.text
-                                      : const Color(0xFF1C1C1E),
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 15,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        // Time display
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              _formatCountdown(hw),
-                              style: TextStyle(
-                                fontFamily: 'JetBrains Mono',
-                                fontFamilyFallback: const ['monospace'],
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: -0.5,
-                                color: color,
+                              homework.courseName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
                               ),
                             ),
-                            if (dateSub.isNotEmpty) ...[
-                              const SizedBox(height: 2),
-                              Text(
-                                dateSub,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w500,
-                                  color: tertiaryTextColor,
-                                ),
-                              ),
-                            ],
-                            // Progress bar for critical items
-                            if (tier == _UrgencyTier.critical &&
-                                !hw.isOverdue) ...[
-                              const SizedBox(height: 3),
-                              _ProgressBar(remaining: hw.timeRemaining),
-                            ],
+                            const SizedBox(height: 2),
+                            Text(
+                              homework.title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleSmall,
+                            ),
                           ],
                         ),
-                        const SizedBox(width: 4),
-                        // Chevron
-                        Icon(
-                          Icons.chevron_right_rounded,
-                          size: 16,
-                          color: isDark
-                              ? const Color(0xFF48484A)
-                              : const Color(0xFFD0C0B0),
+                      ),
+                      const SizedBox(width: 12),
+                      Flexible(
+                        fit: FlexFit.tight,
+                        child: Text(
+                          _deadlineLabel(homework),
+                          textAlign: TextAlign.right,
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: homework.isOverdue
+                                ? theme.colorScheme.error
+                                : theme.colorScheme.onSurfaceVariant,
+                          ),
                         ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            }),
-        ],
-      ),
-    );
-  }
-}
-
-enum _UrgencyTier { critical, warning, normal }
-
-/// Thin progress bar showing how much time has elapsed.
-/// 24h = full width. Shows gradient from blue to orange to red.
-class _ProgressBar extends StatelessWidget {
-  final Duration remaining;
-
-  const _ProgressBar({required this.remaining});
-
-  @override
-  Widget build(BuildContext context) {
-    // Fraction elapsed out of 24h
-    final fraction = (1.0 - remaining.inSeconds / (24 * 3600)).clamp(0.0, 1.0);
-
-    return SizedBox(
-      width: 56,
-      height: 2,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(1),
-        child: Stack(
-          children: [
-            Container(color: const Color(0xFFB4783C).withAlpha(18)),
-            FractionallySizedBox(
-              widthFactor: fraction,
-              child: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Color(0xFFD4A574),
-                      Color(0xFFC97030),
-                      Color(0xFFC93400),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.chevron_right, size: 16),
                     ],
                   ),
                 ),
               ),
             ),
-          ],
-        ),
-      ),
+          ),
+      ],
     );
   }
+
+  String _deadlineLabel(HomeworkSummary homework) {
+    if (homework.isOverdue) return '已截止';
+    final deadline = tryParseEpochMillisToLocal(homework.deadline);
+    if (deadline == null) return '';
+    final now = nowInShanghai();
+    final remaining = deadline.difference(now);
+    if (remaining.isNegative) return '已截止';
+    if (remaining.inHours < 24) {
+      final hours = remaining.inHours;
+      final minutes = remaining.inMinutes.remainder(60);
+      return hours > 0 ? '剩余 ${hours}h ${minutes}m' : '剩余 $minutes 分钟';
+    }
+    return formatRelativeDeadlineLabel(deadline, now: now);
+  }
+}
+
+class _DeadlineThresholdDialog extends StatefulWidget {
+  const _DeadlineThresholdDialog({required this.hours});
+  final int hours;
+  @override
+  State<_DeadlineThresholdDialog> createState() =>
+      _DeadlineThresholdDialogState();
+}
+
+class _DeadlineThresholdDialogState extends State<_DeadlineThresholdDialog> {
+  final _form = GlobalKey<FormState>();
+  late final _controller = TextEditingController(text: widget.hours.toString());
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (_form.currentState!.validate()) {
+      Navigator.pop(context, int.parse(_controller.text));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('截止提醒'),
+    content: Form(
+      key: _form,
+      child: TextFormField(
+        controller: _controller,
+        autofocus: true,
+        keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        decoration: const InputDecoration(labelText: '提前提醒', suffixText: '小时'),
+        validator: (text) =>
+            (int.tryParse(text ?? '') ?? 0) > 0 ? null : '请输入大于 0 的小时数',
+        onFieldSubmitted: (_) => _submit(),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('取消'),
+      ),
+      FilledButton(onPressed: _submit, child: const Text('确定')),
+    ],
+  );
 }

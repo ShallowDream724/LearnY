@@ -249,7 +249,7 @@ void main() {
   );
 
   test(
-    'duplicate requests share a completion and historical schedule emits empty',
+    'duplicate requests share a completion and uncached offline calendar settles',
     () async {
       final fixture = Fixture();
       addTearDown(fixture.dispose);

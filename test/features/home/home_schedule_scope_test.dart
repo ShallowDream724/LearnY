@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:learn_y/core/auth/auth_controller.dart';
 import 'package:learn_y/core/api/learning_read_api.dart';
+import 'package:learn_y/core/api/models.dart' as api;
 import 'package:learn_y/core/database/app_state_keys.dart';
 import 'package:learn_y/core/database/database.dart';
 import 'package:learn_y/core/providers/app_providers.dart';
@@ -17,6 +18,56 @@ import 'package:learn_y/core/semester/semester_repository.dart';
 import 'package:learn_y/features/home/providers/home_schedule_provider.dart';
 
 void main() {
+  test(
+    'calendar can fetch next week before the new semester becomes official',
+    () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      final client = _CalendarApi();
+      final official = StreamController<String?>.broadcast();
+      addTearDown(official.close);
+      final container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          authProvider.overrideWith((ref) => _OnlineAuth()),
+          initialCurrentSemesterIdProvider.overrideWithValue('2026-2027-1'),
+          serverCurrentSemesterIdProvider.overrideWith(
+            (ref) => official.stream,
+          ),
+          minuteTickProvider.overrideWith(
+            (ref) => Stream.value(DateTime(2026, 9, 7)),
+          ),
+          learningReadApiProvider.overrideWithValue(client),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(minuteTickProvider.future);
+      container.read(homeScheduleSelectedDateProvider.notifier).state =
+          DateTime(2026, 9, 14);
+      final completed = Completer<ScheduleState>();
+      container.listen(homeScheduleProvider, (_, next) {
+        final state = next.valueOrNull;
+        if (state != null &&
+            state.hasCalendarData &&
+            !state.isRefreshing &&
+            !completed.isCompleted) {
+          completed.complete(state);
+        }
+      });
+      final state = await completed.future;
+      expect(client.calls, ['2026-09-14/2026-09-20']);
+      expect(
+        state.snapshot.itemsByDateKey.values.expand((items) => items),
+        isEmpty,
+      );
+      expect(state.isRefreshing, isFalse);
+      container.read(homeScheduleSelectedDateProvider.notifier).state =
+          DateTime(2026, 9, 15);
+      await container.pump();
+      expect(client.calls, hasLength(1));
+    },
+  );
+
   test('the visible date window advances at Shanghai midnight', () async {
     final ticks = StreamController<DateTime>();
     final container = ProviderContainer(
@@ -25,22 +76,22 @@ void main() {
     addTearDown(container.dispose);
     addTearDown(ticks.close);
     container.listen(homeScheduleVisibleDaysProvider, (_, _) {});
-    ticks.add(DateTime(2026, 9, 7, 23, 59));
+    ticks.add(DateTime(2026, 9, 13, 23, 59));
     await container.read(minuteTickProvider.future);
     expect(
       container.read(homeScheduleVisibleDaysProvider).first.dateKey,
       '2026-09-07',
     );
-    ticks.add(DateTime(2026, 9, 8));
+    ticks.add(DateTime(2026, 9, 14));
     await container.pump();
     expect(
       container.read(homeScheduleVisibleDaysProvider).first.dateKey,
-      '2026-09-08',
+      '2026-09-14',
     );
   });
 
   test(
-    'missing official semester metadata does not hide validated local cache or request a calendar',
+    'offline cached calendar does not depend on official semester metadata',
     () async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
@@ -88,14 +139,14 @@ void main() {
         state.snapshot.itemsFor(days.first).single.courseName,
         'Cached course',
       );
-      expect(state.isHistorical, isFalse);
+      expect(state.hasCalendarData, isTrue);
+      expect(state.isRefreshing, isFalse);
     },
   );
 }
 
 class _CachedAuth extends StateNotifier<AuthState> implements AuthController {
-  _CachedAuth()
-    : super(const AuthState.authenticated(username: 'test-student'));
+  _CachedAuth() : super(const AuthState.cached(username: 'test-student'));
   @override
   dynamic noSuchMethod(Invocation invocation) =>
       throw StateError('Unexpected auth operation');
@@ -103,7 +154,31 @@ class _CachedAuth extends StateNotifier<AuthState> implements AuthController {
 
 class _NoCalendarCalls implements LearningReadApi {
   @override
-  dynamic noSuchMethod(Invocation invocation) => throw StateError(
-    'Calendar must not be fetched without a confirmed official semester',
-  );
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw StateError('Offline identity must not request the calendar');
+}
+
+class _OnlineAuth extends StateNotifier<AuthState> implements AuthController {
+  _OnlineAuth()
+    : super(const AuthState.authenticated(username: 'test-student'));
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw StateError('Unexpected auth operation');
+}
+
+class _CalendarApi implements LearningReadApi {
+  final calls = <String>[];
+  @override
+  Future<List<api.CalendarEvent>> getCalendar(
+    String startDate,
+    String endDate, {
+    bool graduate = false,
+  }) async {
+    calls.add('$startDate/$endDate');
+    return [];
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw StateError('Unexpected API call');
 }

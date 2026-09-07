@@ -126,7 +126,7 @@ void main() {
       expect(find.byType(HomeScreen), findsOneWidget);
       expect(find.byType(AppShell), findsOneWidget);
       expect(find.byType(LoginScreen), findsNothing);
-      expect(find.text('cached-student'), findsOneWidget);
+      expect(find.textContaining('cached-student'), findsOneWidget);
 
       final homeContext = tester.element(find.byType(HomeScreen));
       final router = GoRouter.of(homeContext);

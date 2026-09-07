@@ -14,9 +14,11 @@ the test. They cover login controls and cached/expired-session routing.
 Office preview tests share a table of supported Office extensions and verify the
 external-open policy without depending on complete explanatory UI sentences.
 
-Schedule tests exercise mouse date selection, keyboard boundaries, touch swiping,
-responsive text layout, cached results during network failure, timeout and late
-response cancellation. Projection and cache codec checks run without widgets.
+Schedule tests exercise week/date navigation, mouse and keyboard actions, touch
+swiping, sparse and dense schedules, large text, independent week caches, network
+failure, timeout, cancellation, and account cleanup. Projection and cache codec
+checks run without widgets. The optional `tool/ui_preview/` runner renders real
+widgets with local fonts and demo data for visual inspection.
 
 ## Manual diagnostics
 

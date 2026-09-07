@@ -137,21 +137,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             SliverAppBar(
               floating: true,
               snap: true,
-              title: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _greeting(),
-                    style: AppTypography.bodySmall.copyWith(color: c.subtitle),
-                  ),
-                  Text(
-                    authState.username ?? 'LearnY',
-                    style: AppTypography.headlineSmall.copyWith(color: c.text),
-                  ),
-                ],
+              title: Text(
+                '${_greeting()}，${authState.username ?? "LearnY"}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.titleMedium.copyWith(color: c.text),
               ),
               actions: [
                 IconButton(
+                  tooltip: '搜索',
                   icon: const Icon(Icons.search_rounded),
                   onPressed: () {
                     context.push('/search');
@@ -244,7 +238,7 @@ class _HomeContentSliver extends StatelessWidget {
       sliver: SliverList(
         delegate: SliverChildListDelegate([
           HomeStatsSection(onUnreadTap: onUnreadStatTap),
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
           const HomeTodayScheduleSection(),
           const HomeUrgentAssignmentsSection(),
           HomeUnreadNotificationsSection(
@@ -252,7 +246,6 @@ class _HomeContentSliver extends StatelessWidget {
             onBeforeSwipeRead: onBeforeNotificationSwipeRead,
           ),
           const HomeUnreadFilesSection(),
-          const HomeEmptyStateSection(),
         ]),
       ),
     );

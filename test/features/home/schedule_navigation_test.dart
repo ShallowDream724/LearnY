@@ -5,169 +5,287 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:learn_y/core/schedule/schedule_models.dart';
 import 'package:learn_y/core/schedule/schedule_projection.dart';
-import 'package:learn_y/features/home/widgets/home_schedule_section.dart';
+import 'package:learn_y/features/home/widgets/schedule_browser.dart';
 
-void main() {
-  final days = buildHomeScheduleDays(DateTime(2026, 9, 7));
-  final snapshot = HomeScheduleSnapshot(
-    days: days,
-    itemsByDateKey: {
-      for (var i = 0; i < days.length; i++)
-        days[i].dateKey: [
-          TodayScheduleItem(
-            courseId: 'course-$i',
-            courseName: 'Course $i',
-            startTime: '08:00',
-            endTime: '09:35',
-            location: 'Room 101',
-          ),
-        ],
-    },
-  );
+final scheduleToday = DateTime(2026, 9, 7);
 
-  Future<void> pumpBrowser(
-    WidgetTester tester, {
-    double width = 1000,
-    double scale = 1,
-    TargetPlatform platform = TargetPlatform.windows,
-    ValueChanged<String>? open,
-    HomeScheduleSnapshot? data,
-    ScheduleFailure? failure,
-    bool refreshing = false,
-  }) async {
-    await tester.pumpWidget(const SizedBox());
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = Size(width, 900);
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: ThemeData(platform: platform),
-        home: Scaffold(
-          body: MediaQuery(
-            data: MediaQueryData(
-              size: Size(width, 900),
-              textScaler: TextScaler.linear(scale),
-            ),
-            child: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: ScheduleBrowser(
-                  days: days,
-                  snapshot: data ?? snapshot,
-                  onOpenCourse: open ?? (_) {},
-                  onRetry: () {},
-                  failure: failure,
-                  isRefreshing: refreshing,
-                ),
+class ScheduleFixture extends StatefulWidget {
+  const ScheduleFixture({
+    super.key,
+    this.counts = const [1, 1, 1, 1, 1, 0, 0],
+    this.onOpen,
+    this.onDate,
+    this.failure,
+    this.scale = 1,
+  });
+  final List<int> counts;
+  final ValueChanged<String>? onOpen;
+  final ValueChanged<DateTime>? onDate;
+  final ScheduleFailure? failure;
+  final double scale;
+  @override
+  State<ScheduleFixture> createState() => _ScheduleFixtureState();
+}
+
+class _ScheduleFixtureState extends State<ScheduleFixture> {
+  DateTime selected = scheduleToday;
+  @override
+  Widget build(BuildContext context) {
+    final days = buildHomeScheduleDays(
+      scheduleWeekStart(selected),
+      today: scheduleToday,
+    );
+    final snapshot = HomeScheduleSnapshot(
+      days: days,
+      itemsByDateKey: {
+        for (final day in days)
+          day.dateKey: [
+            for (var i = 0; i < widget.counts[day.date.weekday - 1]; i++)
+              TodayScheduleItem(
+                courseId: '${day.date.weekday}-$i',
+                courseName:
+                    '${['计算机系统结构', '概率论与数理统计', '操作系统实验', '算法设计与分析', '线性代数', '体育专项', '课程研讨'][day.date.weekday - 1]} ${i + 1}',
+                startTime: '${(8 + i * 2).toString().padLeft(2, '0')}:00',
+                endTime: '${(9 + i * 2).toString().padLeft(2, '0')}:35',
+                location: '第六教学楼 6A301',
               ),
+          ],
+      },
+    );
+    return MediaQuery(
+      data: MediaQuery.of(
+        context,
+      ).copyWith(textScaler: TextScaler.linear(widget.scale)),
+      child: ScheduleBrowser(
+        days: days,
+        today: scheduleToday,
+        selectedDate: selected,
+        onDateSelected: (date) {
+          setState(() => selected = date);
+          widget.onDate?.call(date);
+        },
+        snapshot: snapshot,
+        onOpenCourse: widget.onOpen ?? (_) {},
+        onRetry: () {},
+        failure: widget.failure,
+      ),
+    );
+  }
+}
+
+Future<void> pumpScheduleFixture(
+  WidgetTester tester, {
+  double width = 1280,
+  double scale = 1,
+  List<int> counts = const [1, 1, 1, 1, 1, 0, 0],
+  ValueChanged<String>? onOpen,
+  ValueChanged<DateTime>? onDate,
+  ScheduleFailure? failure,
+}) async {
+  await tester.pumpWidget(const SizedBox());
+  tester.view.devicePixelRatio = 1;
+  tester.view.physicalSize = Size(width, 900);
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: ThemeData(
+        platform: width < 600 ? TargetPlatform.android : TargetPlatform.windows,
+      ),
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: ScheduleFixture(
+              counts: counts,
+              onOpen: onOpen,
+              onDate: onDate,
+              failure: failure,
+              scale: scale,
             ),
           ),
         ),
       ),
-    );
-    await tester.pumpAndSettle();
-  }
-
-  Future<void> clickMouse(WidgetTester tester, Finder finder) async {
-    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
-    await gesture.addPointer(location: tester.getCenter(finder));
-    await gesture.down(tester.getCenter(finder));
-    await gesture.up();
-    await gesture.removePointer();
-    await tester.pumpAndSettle();
-  }
-
-  testWidgets(
-    'mouse can select dates, use arrows, and open the selected course',
-    (tester) async {
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      final opened = <String>[];
-      await pumpBrowser(tester, open: opened.add);
-      await clickMouse(tester, find.text('明天'));
-      expect(find.text('Course 1').hitTestable(), findsOneWidget);
-      await clickMouse(tester, find.byTooltip('后一天'));
-      expect(find.text('Course 2').hitTestable(), findsOneWidget);
-      await clickMouse(tester, find.text('Course 2'));
-      expect(opened, ['course-2']);
-      await clickMouse(tester, find.byTooltip('前一天'));
-      expect(find.text('Course 1').hitTestable(), findsOneWidget);
-    },
+    ),
   );
+  await tester.pumpAndSettle();
+}
 
-  testWidgets(
-    'focused date navigation supports arrows, Home and End without wrapping',
-    (tester) async {
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      await pumpBrowser(tester);
-      await clickMouse(tester, find.text('明天'));
-      await tester.sendKeyEvent(LogicalKeyboardKey.end);
-      await tester.pumpAndSettle();
-      expect(find.text('Course 5').hitTestable(), findsOneWidget);
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-      await tester.pumpAndSettle();
-      expect(find.text('Course 5').hitTestable(), findsOneWidget);
-      await tester.sendKeyEvent(LogicalKeyboardKey.home);
-      await tester.pumpAndSettle();
-      expect(find.text('Course 0').hitTestable(), findsOneWidget);
-    },
-  );
+Future<void> clickScheduleMouse(WidgetTester tester, Finder finder) async {
+  final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+  await gesture.addPointer(location: tester.getCenter(finder));
+  await gesture.down(tester.getCenter(finder));
+  await gesture.up();
+  await gesture.removePointer();
+  await tester.pumpAndSettle();
+}
 
-  testWidgets('phone touch swipe and visible date tabs stay synchronized', (
-    tester,
-  ) async {
+void main() {
+  void resetView(WidgetTester tester) {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await pumpBrowser(tester, width: 360, platform: TargetPlatform.android);
-    await tester.drag(find.byType(TabBarView), const Offset(-300, 0));
+  }
+
+  testWidgets(
+    'sparse desktop week uses a short agenda with direct course access',
+    (tester) async {
+      resetView(tester);
+      final opened = <String>[];
+      await pumpScheduleFixture(
+        tester,
+        counts: const [1, 0, 1, 0, 0, 0, 0],
+        onOpen: opened.add,
+      );
+      expect(find.text('周二 9/8'), findsNothing);
+      expect(
+        tester.getSize(find.byType(ScheduleBrowser)).height,
+        lessThan(200),
+      );
+      await clickScheduleMouse(tester, find.text('操作系统实验 1'));
+      expect(opened, ['3-0']);
+    },
+  );
+
+  testWidgets(
+    'desktop week overview opens courses and navigates beyond the original six days',
+    (tester) async {
+      resetView(tester);
+      final opened = <String>[];
+      final selected = <DateTime>[];
+      await pumpScheduleFixture(
+        tester,
+        onOpen: opened.add,
+        onDate: selected.add,
+      );
+      await clickScheduleMouse(tester, find.text('概率论与数理统计 1'));
+      expect(opened, ['2-0']);
+      await clickScheduleMouse(tester, find.byTooltip('下一周'));
+      expect(selected.last, DateTime(2026, 9, 14));
+      expect(find.text('9/14 - 9/20'), findsOneWidget);
+      await clickScheduleMouse(tester, find.byTooltip('上一周'));
+      expect(selected.last, scheduleToday);
+      await clickScheduleMouse(tester, find.byTooltip('上一周'));
+      expect(selected.last, DateTime(2026, 8, 31));
+      await clickScheduleMouse(tester, find.byTooltip('回到今天'));
+      expect(selected.last, scheduleToday);
+    },
+  );
+
+  testWidgets('date picker jumps directly to an arbitrary day', (tester) async {
+    resetView(tester);
+    final selected = <DateTime>[];
+    await pumpScheduleFixture(tester, onDate: selected.add);
+    await tester.tap(find.text('9/7 - 9/13'));
     await tester.pumpAndSettle();
-    expect(find.text('Course 1').hitTestable(), findsOneWidget);
-    await tester.tap(find.text('今天'));
+    await tester.tap(find.text('21'));
+    await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
-    expect(find.text('Course 0').hitTestable(), findsOneWidget);
+    expect(selected.last, DateTime(2026, 9, 21));
+  });
+
+  testWidgets('keyboard and touch can cross week boundaries in the day view', (
+    tester,
+  ) async {
+    resetView(tester);
+    final selected = <DateTime>[];
+    await pumpScheduleFixture(tester, width: 360, onDate: selected.add);
+    await tester.fling(find.text('计算机系统结构 1'), const Offset(-200, 0), 600);
+    await tester.pumpAndSettle();
+    expect(find.text('概率论与数理统计 1'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.end);
+    await tester.pumpAndSettle();
+    expect(selected.last, DateTime(2026, 9, 13));
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(selected.last, DateTime(2026, 9, 14));
+    await tester.sendKeyEvent(LogicalKeyboardKey.home);
+    await tester.pumpAndSettle();
+    expect(selected.last, scheduleToday);
+  });
+
+  testWidgets('dense week stays compact and exposes all six courses in a day', (
+    tester,
+  ) async {
+    resetView(tester);
+    await pumpScheduleFixture(tester, counts: const [6, 1, 2, 0, 1, 0, 0]);
+    expect(find.text('计算机系统结构 6'), findsNothing);
+    expect(tester.getSize(find.byType(ScheduleBrowser)).height, lessThan(350));
+    await clickScheduleMouse(tester, find.text('+3 节'));
+    expect(find.text('计算机系统结构 6'), findsOneWidget);
+    expect(tester.getSize(find.byType(ScheduleBrowser)).height, lessThan(350));
+  });
+
+  testWidgets('empty weekends are hidden but can be explicitly restored', (
+    tester,
+  ) async {
+    resetView(tester);
+    await pumpScheduleFixture(tester);
+    expect(find.text('周六 9/12'), findsNothing);
+    await clickScheduleMouse(tester, find.byTooltip('课表显示选项'));
+    await tester.tap(find.byType(CheckedPopupMenuItem<bool>));
+    await tester.pumpAndSettle();
+    expect(find.text('周六 9/12'), findsOneWidget);
+    await pumpScheduleFixture(tester, counts: const [1, 0, 0, 0, 0, 1, 0]);
+    expect(find.text('周六 9/12'), findsOneWidget);
+    expect(find.text('体育专项 1'), findsOneWidget);
   });
 
   testWidgets(
-    'date navigation and long course names fit responsive widths and text scaling',
+    'phone shows three classes first and expands the remaining day on demand',
     (tester) async {
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      final longData = HomeScheduleSnapshot(
-        days: days,
-        itemsByDateKey: {
-          days.first.dateKey: const [
-            TodayScheduleItem(
-              courseName: '计算机系统结构与高性能并行程序设计课程实验',
-              startTime: '13:30',
-              endTime: '15:05',
-              location: '第六教学楼长名称实验教室 6A301',
-            ),
-          ],
-        },
+      resetView(tester);
+      await pumpScheduleFixture(
+        tester,
+        width: 360,
+        counts: const [6, 0, 0, 0, 0, 0, 0],
       );
-      for (final width in [320.0, 600.0, 1440.0]) {
-        for (final scale in [1.0, 2.0]) {
-          await pumpBrowser(tester, width: width, scale: scale, data: longData);
-          expect(tester.takeException(), isNull, reason: '$width / $scale');
-          await clickMouse(tester, find.byTooltip('后一天'));
-          expect(tester.takeException(), isNull);
-        }
-      }
+      expect(find.text('计算机系统结构 6'), findsNothing);
+      await tester.tap(find.text('还有 3 节课'));
+      await tester.pumpAndSettle();
+      expect(find.text('计算机系统结构 6'), findsOneWidget);
+      await tester.tap(find.text('周'));
+      await tester.pumpAndSettle();
+      expect(find.text('6 节'), findsOneWidget);
     },
   );
 
   testWidgets(
-    'failed empty schedule is not presented as a day without classes',
+    'empty state uses little space and a settled failure never claims no classes',
     (tester) async {
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      await pumpBrowser(
+      resetView(tester);
+      await pumpScheduleFixture(tester, counts: const [0, 0, 0, 0, 0, 0, 0]);
+      expect(find.text('本周没有课'), findsOneWidget);
+      expect(
+        tester.getSize(find.byType(ScheduleBrowser)).height,
+        lessThan(120),
+      );
+      await pumpScheduleFixture(
         tester,
-        data: emptyScheduleSnapshot(days),
+        width: 360,
+        counts: const [0, 0, 0, 0, 0, 0, 0],
         failure: ScheduleFailure.timeout,
       );
       expect(find.text('今天没有课'), findsNothing);
-      expect(find.text('课表更新超时，请重试'), findsOneWidget);
+      expect(find.text('课表更新超时'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
     },
   );
+
+  testWidgets('phone tablet and desktop layouts accommodate large text', (
+    tester,
+  ) async {
+    resetView(tester);
+    for (final width in [320.0, 600.0, 1440.0]) {
+      for (final scale in [1.0, 2.0]) {
+        await pumpScheduleFixture(
+          tester,
+          width: width,
+          scale: scale,
+          counts: const [6, 1, 0, 2, 1, 1, 0],
+        );
+        expect(tester.takeException(), isNull, reason: '$width / $scale');
+        await tester.tap(find.text('周'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull, reason: 'week $width / $scale');
+      }
+    }
+  });
 }

@@ -77,13 +77,13 @@ class ScheduleState {
     required this.semesterId,
     required this.snapshot,
     this.isRefreshing = false,
-    this.isHistorical = false,
+    this.hasCalendarData = false,
     this.failure,
   });
 
   final String? semesterId;
   final HomeScheduleSnapshot snapshot;
   final bool isRefreshing;
-  final bool isHistorical;
+  final bool hasCalendarData;
   final ScheduleFailure? failure;
 }

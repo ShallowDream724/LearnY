@@ -16,6 +16,51 @@ void main() {
   const semester = '2026-2027-1';
   final days = buildHomeScheduleDays(DateTime(2026, 9, 7));
 
+  test(
+    'each week is fetched and cached independently, including a confirmed empty week',
+    () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      final client = CalendarFake();
+      final repository = ScheduleRepository(database: db, apiClient: client);
+      for (final start in [DateTime(2026, 9, 7), DateTime(2026, 9, 14)]) {
+        final result = await repository
+            .watch(
+              semesterId: semester,
+              days: buildHomeScheduleDays(start),
+              fetchRemote: true,
+              operation: SyncOperation(),
+            )
+            .take(3)
+            .toList();
+        expect(result.last.hasCalendarData, isTrue);
+      }
+      expect(client.calls, ['2026-09-07/2026-09-13', '2026-09-14/2026-09-20']);
+      final cached = await repository
+          .watch(
+            semesterId: semester,
+            days: days,
+            fetchRemote: true,
+            operation: SyncOperation(),
+          )
+          .first;
+      expect(cached.hasCalendarData, isTrue);
+      expect(cached.isRefreshing, isFalse);
+      expect(client.calls, hasLength(2));
+      await db.clearUserScopedData();
+      for (final first in ['2026-09-07', '2026-09-14']) {
+        expect(
+          await db.getState(AppStateKeys.scheduleWeekSnapshot(semester, first)),
+          isNull,
+        );
+        expect(
+          await db.getState(AppStateKeys.scheduleWeekRefresh(semester, first)),
+          isNull,
+        );
+      }
+    },
+  );
+
   test('cached classes remain available when remote refresh fails', () async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
@@ -81,7 +126,12 @@ void main() {
     expect(states.last.isRefreshing, isFalse);
     expect(states.last.failure, isNull);
     expect(states.last.snapshot.itemsFor(days.first), isEmpty);
-    expect(await db.getState(AppStateKeys.homeScheduleSnapshot), isNotNull);
+    expect(
+      await db.getState(
+        AppStateKeys.scheduleWeekSnapshot(semester, days.first.dateKey),
+      ),
+      isNotNull,
+    );
   });
 
   test(
@@ -137,9 +187,16 @@ void main() {
       await db.clearUserScopedData();
       client.pending!.complete([event]);
       await task;
-      expect(await db.getState(AppStateKeys.homeScheduleSnapshot), isNull);
       expect(
-        await db.getState(AppStateKeys.homeScheduleRemoteRefreshState),
+        await db.getState(
+          AppStateKeys.scheduleWeekSnapshot(semester, days.first.dateKey),
+        ),
+        isNull,
+      );
+      expect(
+        await db.getState(
+          AppStateKeys.scheduleWeekRefresh(semester, days.first.dateKey),
+        ),
         isNull,
       );
     },
@@ -170,7 +227,12 @@ void main() {
       expect(states.last.isRefreshing, isFalse);
       client.pending!.complete([event]);
       await Future<void>.delayed(Duration.zero);
-      expect(await db.getState(AppStateKeys.homeScheduleSnapshot), isNull);
+      expect(
+        await db.getState(
+          AppStateKeys.scheduleWeekSnapshot(semester, days.first.dateKey),
+        ),
+        isNull,
+      );
     },
   );
 
@@ -203,6 +265,7 @@ const event = api.CalendarEvent(
 );
 
 class CalendarFake implements LearningReadApi {
+  final calls = <String>[];
   bool fail = false;
   Completer<List<api.CalendarEvent>>? pending;
   final started = Completer<void>();
@@ -213,6 +276,7 @@ class CalendarFake implements LearningReadApi {
     String endDate, {
     bool graduate = false,
   }) async {
+    calls.add('$startDate/$endDate');
     if (!started.isCompleted) started.complete();
     if (fail) throw StateError('offline');
     return pending?.future ?? [];

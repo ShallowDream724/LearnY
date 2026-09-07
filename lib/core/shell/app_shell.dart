@@ -72,7 +72,7 @@ class AppShell extends ConsumerWidget {
     // Wrap child with app-level banners.
     final content = Column(
       children: [
-        const SemesterToolbar(),
+        if (!useRail) const SemesterToolbar(),
         AnimatedSize(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
@@ -119,6 +119,7 @@ class AppShell extends ConsumerWidget {
               border: Border(right: BorderSide(color: c.border, width: 0.5)),
             ),
             child: NavigationRail(
+              scrollable: true,
               selectedIndex: index,
               onDestinationSelected: (i) => _onTap(context, i),
               extended: extended,
@@ -143,30 +144,40 @@ class AppShell extends ConsumerWidget {
               leading: Padding(
                 padding: EdgeInsets.symmetric(
                   vertical: 16,
-                  horizontal: extended ? 20 : 0,
+                  horizontal: extended ? 8 : 0,
                 ),
-                child: extended
-                    ? Text(
-                        'LearnY',
-                        style: AppTypography.headlineSmall.copyWith(
-                          color: c.text,
-                        ),
-                      )
-                    : Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [AppColors.primary, AppColors.primaryDark],
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    extended
+                        ? Text(
+                            'LearnY',
+                            style: AppTypography.headlineSmall.copyWith(
+                              color: c.text,
+                            ),
+                          )
+                        : Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [
+                                  AppColors.primary,
+                                  AppColors.primaryDark,
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(
+                              Icons.school_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
                           ),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(
-                          Icons.school_rounded,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
+                    const SizedBox(height: 12),
+                    SemesterToolbar(inRail: true, iconOnly: !extended),
+                  ],
+                ),
               ),
               destinations: [
                 for (final destination in _shellDestinations)

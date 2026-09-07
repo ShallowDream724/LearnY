@@ -266,6 +266,7 @@ resolveSemesterScheduleItemsByDateKey({
       }
 
       final weekNumber = (dayOffset ~/ 7) + 1;
+      if (weekNumber > _fullWeekCount) continue;
       final dateKey = DateFormat('yyyy-MM-dd').format(date);
       final dayOccurrences = occurrencesByDateKey[dateKey]!;
 

@@ -12,123 +12,133 @@ import 'semester_models.dart';
 import 'semester_repository.dart';
 
 class SemesterToolbar extends ConsumerWidget {
-  const SemesterToolbar({super.key});
+  const SemesterToolbar({
+    super.key,
+    this.inRail = false,
+    this.iconOnly = false,
+  });
+
+  final bool inRail;
+  final bool iconOnly;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final selected = ref.watch(currentSemesterIdProvider);
+    final identity = selected == null
+        ? null
+        : SemesterIdentity.tryParse(selected);
     final sync = ref.watch(syncStateProvider);
     final busy = sync.status == SyncStatus.syncing;
     final message =
         sync.errorMessage ?? (sync.syncWarnings.isNotEmpty ? '部分内容未能更新' : null);
 
+    Future<void> selectSemester() async {
+      final id = await showDialog<String>(
+        context: context,
+        builder: (_) => const _SemesterDialog(),
+      );
+      if (id == null || id == selected || !context.mounted) return;
+      if (GoRouterState.of(context).uri.path.startsWith('/courses/')) {
+        context.go(Routes.courses);
+      }
+      unawaited(ref.read(syncStateProvider.notifier).selectSemester(id));
+    }
+
+    final selector = iconOnly
+        ? IconButton(
+            tooltip: semesterLabel(selected),
+            onPressed: selectSemester,
+            icon: const Icon(Icons.calendar_month_outlined, size: 20),
+          )
+        : TextButton.icon(
+            onPressed: selectSemester,
+            icon: const Icon(Icons.calendar_month_outlined, size: 17),
+            label: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    inRail && identity != null
+                        ? '${identity.startYear}-${identity.endYear}\n${identity.termLabel}学期'
+                        : semesterLabel(selected),
+                    maxLines: inRail ? 2 : 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+                const Icon(Icons.expand_more, size: 16),
+              ],
+            ),
+          );
+    final actions = <Widget>[
+      if (message != null)
+        IconButton(
+          tooltip: message,
+          icon: Icon(
+            Icons.error_outline,
+            size: 19,
+            color: Theme.of(context).colorScheme.error,
+          ),
+          onPressed: () => showDialog<void>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('同步状态'),
+              content: SingleChildScrollView(
+                child: Text(
+                  [
+                    if (sync.errorMessage != null) sync.errorMessage!,
+                    ...sync.syncWarnings,
+                  ].join('\n'),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('关闭'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      IconButton(
+        tooltip: busy ? '正在刷新' : '刷新当前学期',
+        onPressed: busy
+            ? null
+            : () => ref.read(syncStateProvider.notifier).syncAll(force: true),
+        icon: busy
+            ? const SizedBox.square(
+                dimension: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.refresh, size: 19),
+      ),
+    ];
+    if (inRail) {
+      return SizedBox(
+        width: iconOnly ? 64 : 184,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            selector,
+            Wrap(alignment: WrapAlignment.center, children: actions),
+          ],
+        ),
+      );
+    }
     return Material(
       color: Theme.of(context).colorScheme.surface,
       child: SafeArea(
         bottom: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              height: 48,
-              child: Row(
-                children: [
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        icon: const Icon(
-                          Icons.calendar_month_outlined,
-                          size: 18,
-                        ),
-                        label: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                semesterLabel(selected),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            const Icon(Icons.expand_more, size: 18),
-                          ],
-                        ),
-                        onPressed: () async {
-                          final id = await showDialog<String>(
-                            context: context,
-                            builder: (_) => const _SemesterDialog(),
-                          );
-                          if (id == null ||
-                              id == selected ||
-                              !context.mounted) {
-                            return;
-                          }
-                          // Leave any semester-specific detail route before switching scope.
-                          if (GoRouterState.of(
-                            context,
-                          ).uri.path.startsWith('/courses/')) {
-                            context.go(Routes.courses);
-                          }
-                          unawaited(
-                            ref
-                                .read(syncStateProvider.notifier)
-                                .selectSemester(id),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                  if (message != null)
-                    IconButton(
-                      tooltip: message,
-                      icon: Icon(
-                        Icons.error_outline,
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                      onPressed: () => showDialog<void>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('同步状态'),
-                          content: SingleChildScrollView(
-                            child: Text(
-                              [
-                                if (sync.errorMessage != null)
-                                  sync.errorMessage!,
-                                ...sync.syncWarnings,
-                              ].join('\n'),
-                            ),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('关闭'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  IconButton(
-                    tooltip: busy ? '正在刷新' : '刷新当前学期',
-                    onPressed: busy
-                        ? null
-                        : () => ref
-                              .read(syncStateProvider.notifier)
-                              .syncAll(force: true),
-                    icon: busy
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.refresh, size: 21),
-                  ),
-                  const SizedBox(width: 8),
-                ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Align(alignment: Alignment.centerLeft, child: selector),
               ),
-            ),
-            const Divider(height: 1),
-          ],
+              ...actions,
+            ],
+          ),
         ),
       ),
     );

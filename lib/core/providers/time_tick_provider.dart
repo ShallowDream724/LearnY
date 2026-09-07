@@ -1,12 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../utils/deadline_time.dart';
 
-Stream<DateTime> minuteTickStream() async* {
-  yield nowInShanghai();
-
-  while (true) {
+Stream<DateTime> minuteTickStream() {
+  Timer? timer;
+  late StreamController<DateTime> controller;
+  void emit() {
     final now = nowInShanghai();
+    controller.add(now);
     final nextMinute = DateTime(
       now.year,
       now.month,
@@ -15,9 +18,16 @@ Stream<DateTime> minuteTickStream() async* {
       now.minute,
     ).add(const Duration(minutes: 1));
 
-    await Future<void>.delayed(nextMinute.difference(now));
-    yield nowInShanghai();
+    timer = Timer(nextMinute.difference(now), emit);
   }
+
+  controller = StreamController<DateTime>(
+    onListen: emit,
+    onPause: () => timer?.cancel(),
+    onResume: emit,
+    onCancel: () => timer?.cancel(),
+  );
+  return controller.stream;
 }
 
 final minuteTickProvider = StreamProvider.autoDispose<DateTime>((ref) {

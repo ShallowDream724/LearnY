@@ -9,6 +9,73 @@ import 'package:learn_y/core/schedule/schedule_projection.dart';
 import 'package:learn_y/core/schedule/schedule_cache_codec.dart';
 
 void main() {
+  test('a week can span years while retaining the actual today marker', () {
+    final today = DateTime(2027, 1, 1);
+    final days = buildHomeScheduleDays(scheduleWeekStart(today), today: today);
+    expect(days.first.dateKey, '2026-12-28');
+    expect(days.last.dateKey, '2027-01-03');
+    expect(days.singleWhere((day) => day.isToday).dateKey, '2027-01-01');
+  });
+  test(
+    'calendar changes replace overlapping local estimates without duplicating the course',
+    () {
+      final days = buildHomeScheduleDays(DateTime(2026, 9, 7));
+      HomeScheduleSnapshot snapshot(List<TodayScheduleItem> items) =>
+          HomeScheduleSnapshot(
+            days: days,
+            itemsByDateKey: {days.first.dateKey: items},
+          );
+      final merged = mergeHomeScheduleSnapshots(
+        primary: snapshot(const [
+          TodayScheduleItem(
+            courseName: '算法设计',
+            startTime: '08:00',
+            endTime: '09:35',
+            location: '新教室',
+          ),
+        ]),
+        fallback: snapshot(const [
+          TodayScheduleItem(
+            courseId: 'course-1',
+            courseName: '算法设计',
+            startTime: '08:00',
+            endTime: '12:15',
+            location: '旧教室',
+          ),
+          TodayScheduleItem(
+            courseId: 'course-1',
+            courseName: '算法设计',
+            startTime: '19:20',
+            endTime: '20:55',
+            location: '实验室',
+          ),
+        ]),
+      );
+      final items = merged.itemsFor(days.first);
+      expect(items, hasLength(2));
+      expect(items.first.courseId, 'course-1');
+      expect(items.first.endTime, '09:35');
+      expect(items.first.location, '新教室');
+      expect(items.last.startTime, '19:20');
+    },
+  );
+
+  test(
+    'local all-week teaching patterns do not continue after the semester ends',
+    () {
+      final days = buildHomeScheduleDays(DateTime(2026, 7, 20));
+      final snapshot = buildHomeScheduleSnapshotFromCachedCourses(
+        days: days,
+        courses: [
+          _course(name: '算法设计', timeAndLocation: ['星期一第1节(全周)，教室']),
+        ],
+        semesterStartDate: '2026-03-16',
+        semesterEndDate: '2026-07-19',
+      );
+      expect(snapshot.itemsByDateKey.values.expand((items) => items), isEmpty);
+    },
+  );
+
   group('buildHomeScheduleSnapshotFromCachedCourses', () {
     test('maps cached teaching blocks to the correct clock times', () {
       final days = buildHomeScheduleDays(DateTime(2026, 3, 16), length: 1);

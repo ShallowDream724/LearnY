@@ -23,4 +23,10 @@ abstract final class AppStateKeys {
 
   static String homeScheduleSemesterCache(String semesterId) =>
       '$homeScheduleSemesterCachePrefix::$semesterId';
+
+  static const scheduleWeekPrefix = 'schedule_week';
+  static String scheduleWeekSnapshot(String semesterId, String firstDay) =>
+      '$scheduleWeekPrefix::$semesterId::$firstDay::snapshot';
+  static String scheduleWeekRefresh(String semesterId, String firstDay) =>
+      '$scheduleWeekPrefix::$semesterId::$firstDay::refresh';
 }

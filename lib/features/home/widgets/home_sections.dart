@@ -438,58 +438,6 @@ class _HomeUnreadFilesSectionState
   }
 }
 
-class HomeEmptyStateSection extends ConsumerWidget {
-  const HomeEmptyStateSection({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final counts = ref.watch(
-      homeDataProvider.select(
-        (async) => async.valueOrNull == null
-            ? null
-            : (
-                async.valueOrNull!.urgentAssignments.length,
-                async.valueOrNull!.unreadNotifications.length,
-                async.valueOrNull!.newFiles.length,
-              ),
-      ),
-    );
-
-    if (counts == null) return const SizedBox.shrink();
-
-    final (urgentCount, notificationCount, fileCount) = counts;
-    if (urgentCount != 0 || notificationCount != 0 || fileCount != 0) {
-      return const SizedBox.shrink();
-    }
-
-    final c = context.colors;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 48),
-      child: Center(
-        child: Column(
-          children: [
-            Icon(
-              Icons.check_circle_outline_rounded,
-              size: 56,
-              color: c.tertiary,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              '一切完成',
-              style: AppTypography.headlineSmall.copyWith(color: c.tertiary),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '没有紧急事项',
-              style: AppTypography.bodyMedium.copyWith(color: c.tertiary),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class HomeNewFileCard extends StatelessWidget {
   const HomeNewFileCard({super.key, required this.file, this.onTap});
 
