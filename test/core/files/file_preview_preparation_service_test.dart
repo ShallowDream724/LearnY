@@ -19,44 +19,35 @@ void main() {
       archiveService: archiveService,
     );
 
-    test('treats Word files as external-open only', () async {
-      final preview = await service.prepare(
-        item: _item('sample.docx'),
-        localPath: 'unused',
-      );
+    for (final (extension, capability) in const [
+      ('doc', FilePreviewCapability.document),
+      ('docx', FilePreviewCapability.document),
+      ('docm', FilePreviewCapability.document),
+      ('xls', FilePreviewCapability.spreadsheet),
+      ('xlsx', FilePreviewCapability.spreadsheet),
+      ('xlsm', FilePreviewCapability.spreadsheet),
+      ('ppt', FilePreviewCapability.presentation),
+      ('pptx', FilePreviewCapability.presentation),
+      ('pptm', FilePreviewCapability.presentation),
+    ]) {
+      test(
+        'keeps .$extension external-open only without reading the file',
+        () async {
+          final preview = await service.prepare(
+            item: _item('sample.$extension'),
+            localPath: 'nonexistent-office-file.$extension',
+          );
 
-      expect(preview, isA<UnsupportedPreparedFilePreview>());
-      expect(
-        (preview as UnsupportedPreparedFilePreview).message,
-        'Word 文档暂不支持内置预览，请使用外部应用打开。',
+          expect(preview, isA<UnsupportedPreparedFilePreview>());
+          expect(preview.descriptor.capability, capability);
+          expect(preview.descriptor.canInlinePreview, isFalse);
+          expect(
+            (preview as UnsupportedPreparedFilePreview).message,
+            contains('外部应用'),
+          );
+        },
       );
-    });
-
-    test('treats spreadsheet files as external-open only', () async {
-      final preview = await service.prepare(
-        item: _item('grades.xlsx'),
-        localPath: 'unused',
-      );
-
-      expect(preview, isA<UnsupportedPreparedFilePreview>());
-      expect(
-        (preview as UnsupportedPreparedFilePreview).message,
-        '表格文档暂不支持内置预览，请使用外部应用打开。',
-      );
-    });
-
-    test('treats presentation files as external-open only', () async {
-      final preview = await service.prepare(
-        item: _item('deck.pptx'),
-        localPath: 'unused',
-      );
-
-      expect(preview, isA<UnsupportedPreparedFilePreview>());
-      expect(
-        (preview as UnsupportedPreparedFilePreview).message,
-        '演示文稿暂不支持内置预览，请使用外部应用打开。',
-      );
-    });
+    }
   });
 }
 
