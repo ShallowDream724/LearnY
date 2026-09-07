@@ -1,0 +1,55 @@
+# 设计资料研读与应用
+
+## 来源与阅读范围
+
+来源：[Emil Kowalski skills](https://github.com/emilkowalski/skills/tree/d23d7f88a2e21c9e4b1418c7abe420f5c1052ba7)，固定版本 `d23d7f88a2e21c9e4b1418c7abe420f5c1052ba7`。2026-09-07 已补齐 12 份指南、7 份配套 Markdown，以及 README 和 LICENSE。全局安装名为 `emil-design-eng`；所有指南与配方保存在其 `references/`，源 `SKILL.md` 改名为 `GUIDE.md`，由一个入口按任务读取。
+
+全局版保留技术解释与代码配方、来源和 MIT 许可；调整推广开场、强制委派、禁止直接修复、固定报告格式和固定原型选择器。LearnY 的产品约定仍保存在项目内。阅读完成不等于已验证资料中的每项平台版本或性能断言，更不等于界面已经达到设计目标。
+
+| 指南与配套文件 | 对本项目有意义的内容 |
+| --- | --- |
+| `emil-design-eng/SKILL.md` | 隐性细节的累积、合理默认值、频率与目的、组件整体一致性、输入和生命周期边界 |
+| `apple-design/SKILL.md` | 可预测性、用户控制、熟悉感、简洁与精工；当前呈现值、速度交接、空间路径、材质与字体 |
+| `animate/SKILL.md` + `RECIPES.md` | 完整组件的进入、退出、中断与状态反馈；按钮、菜单、提示、抽屉、通知、折叠与拖动配方 |
+| `animate-expo/SKILL.md` + `RECIPES.md` | 手势识别器身份、轴向竞争、列表复用、键盘同步、运行时职责与触觉时机 |
+| `review-animations/SKILL.md` + `STANDARDS.md` | 按影响审查动效，核对位置和实际代码；对不确定手感补充针对性观察 |
+| `improve-animations/SKILL.md` + `AUDIT.md` + `PLAN-TEMPLATE.md` | 覆盖范围、分类审查、过滤误报、使无上下文的接手者理解目标与依据 |
+| `find-animation-opportunities/SKILL.md` | 增加动效之前先判断用户是否获益，避免把改进任务变成装饰清单 |
+| `animation-vocabulary/SKILL.md` | 用准确术语描述动效及其差异，减少实现时的含糊猜测 |
+| `pick-ui-library/SKILL.md` | 优先成熟输入、焦点与生命周期能力；具体 React 库不直接用于 Flutter |
+| `prototype/SKILL.md` + `PICKER.md` | 在真实尺度与相同内容下比较行为、布局或密度；避免把换色当成不同方案 |
+| `ask-sonner/SKILL.md` + `API.md` | 同一操作按 ID 更新状态、通知层级、计时暂停、关闭和超时的区别 |
+| `write-swift/SKILL.md` | 状态建模、异步所有权、取消、生命周期与性能测量；具体语法不移植到 Dart，版本声明需另核实 |
+
+上表路径均相对于固定版本仓库的 `skills/`。例如：[Web 配方](https://github.com/emilkowalski/skills/blob/d23d7f88a2e21c9e4b1418c7abe420f5c1052ba7/skills/animate/RECIPES.md)、[原生交互配方](https://github.com/emilkowalski/skills/blob/d23d7f88a2e21c9e4b1418c7abe420f5c1052ba7/skills/animate-expo/RECIPES.md)、[Apple 设计](https://github.com/emilkowalski/skills/blob/d23d7f88a2e21c9e4b1418c7abe420f5c1052ba7/skills/apple-design/SKILL.md)。
+
+## 要保留的深层关系
+
+1. **用户预期决定界面关系。** 控件靠近什么，用户就会认为它影响什么。首页学期与周课表局部学期必须保持各自范围；打开课程详情后能回到刚才的位置，是允许用户放心浏览的基础。原文依据：`apple-design` 第 7、16 节。
+2. **简洁需要减少判断成本。** 空作业页保留大型零统计和多组筛选，会让无用内容占据主要层级；把所有操作藏起来同样会增加成本。需要根据当前数据和任务决定信息层级。依据：`apple-design` 第 16 节的 Simplicity、Grouping 与 Wayfinding。
+3. **流畅需要状态连续。** 按下马上反馈，取消不会误执行，拖动能反向，关闭中的弹层不会突然跳回端点。速度、位置、背景遮罩、焦点和生命周期必须由一致的行为驱动。依据：`apple-design` 第 1-10 节及两套拖动配方。
+4. **体验的一致性包含工程接口。** 加载、完成和失败应属于同一个操作；课程列表刷新、通知计时、组件复用都需要正确身份和所有权。共享 token 只能统一取值，共享行为才能降低后续组件出错的概率。依据：主指南 Sonner principles、Sonner API、Expo 列表与键盘配方。
+5. **视觉细节服务辨认。** 字重、行距、对比、数字宽度、材质厚度和空间位置共同解释内容主次。苹果式设计的价值包括这些协调关系；中性色、玻璃或圆角都只是可选手段。依据：`apple-design` 第 12、14-16 节。
+6. **手感必须落到具体观察。** 同一个页面空、密、加载、失败、返回时是否仍清楚；一个动作是否可以打断；一个按钮是否有立即反馈。仅凭规则命中或截图不能证明这些。依据：主指南 Debugging、审查标准和 Prototype。
+
+## 不机械移植的地方
+
+- 通用审查写短于 300ms，抽屉配方却有 500ms，通知示例有 400ms。保留场景差异，分别判断首次反馈、运动距离、可中断性和总时长。
+- `PICKER.md` 明确解释了滑块宽度动画的例外；主指南也谈到高度与透明度配合。Flutter 中评估布局、绘制和合成的真实代价，不能凭属性名认定免费或卡顿。
+- 原文对键盘动画、强自定义曲线、纯淡入和组入场有强烈偏好。它们用于提醒审视反复等待、运动来源和阅读稳定性；合适的原生曲线、静态反馈或即时呈现可以成立。
+- `apple-design` 第 14 节允许减少动态效果时使用静态过渡。因此 `Duration.zero` 不能单独判为 bug；需要看反馈与状态是否仍清楚。
+- 材质与排版示例主要来自 Web 和英文语境。中文阅读、Android 与 Windows 字体、Flutter 约束布局和混合输入需要独立判断。
+- 核心目标是可靠而自然的操作。依据用户的明确要求决定实施、审阅或比较阶段，原文的固定开场、委派数和强制停止不参与产品设计。
+
+## 现有草稿待复审
+
+本节记录待检查的实现事实，不表示这些草稿已经集成或通过验证。
+
+- `lib/core/design/app_surfaces.dart` 的 `pageGutter` 读取整个窗口的宽度，注释却称依据内容宽度。在有侧栏或分栏时，需按实际布局约束核对并修正边距计算。
+- `AppMotion` 只有少量时长和单一默认曲线，不能代替各组件的进入、退出、中断、焦点和异步生命周期设计。无需为了满足原文偏好而机械增加一套曲线目录。
+- `lib/core/design/theme.dart` 全局 `NoSplash` 需要逐类确认剩余按压状态是否足够清楚。它不自动证明没有反馈，也不自动证明具备高质量反馈。
+- 暗色主题定义了 `primaryLight`，导航选中态却直接使用 `AppColors.primary`。需在实际背景上核对状态对比和主题角色，不能以统一蓝色为由忽略差异。
+- 通用 `AppEmptyState` 与 `ReadingWidth` 仍需检验用途：页面空态、课表局部提示、筛选无结果和长文阅读具有不同的信息密度。先确认行为与层级，再抽取真正共用的部分。
+- 已修改的课程、文件、搜索、登录与设置 UI 需要与首页、作业、导航一起复审，尤其动作重复、长标题、大字号、分栏对齐与返回上下文。此前各页的样式清理不能被当成全产品重塑完成。
+
+后续实现遵循 [设计体系](DESIGN_SYSTEM.md)、[课表设计](SCHEDULE_DESIGN.md) 及相关业务文档；验证规模按实际风险和用户已确认的设备测试分工控制。
