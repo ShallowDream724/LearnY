@@ -46,3 +46,6 @@ final initialAutoReloginEnabledProvider = Provider<bool>((ref) => false);
 final currentSemesterIdProvider = StateProvider<String?>((ref) {
   return ref.watch(initialCurrentSemesterIdProvider);
 });
+
+/// Invalidates in-flight account work before login/logout changes persisted data.
+final dataSessionEpochProvider = StateProvider<int>((ref) => 0);

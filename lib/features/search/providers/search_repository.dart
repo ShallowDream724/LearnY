@@ -126,7 +126,7 @@ class SearchRepository {
   }
 
   Future<List<String>> addRecentSearch(String query) async {
-    final next = await loadRecentSearches();
+    final next = (await loadRecentSearches()).toList();
     next.remove(query);
     next.insert(0, query);
     if (next.length > 10) {

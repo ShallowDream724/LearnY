@@ -9,6 +9,17 @@ import 'package:learn_y/core/providers/app_providers.dart';
 import 'package:learn_y/core/providers/auth_preferences_provider.dart';
 
 void main() {
+  test(
+    'disposing during status restore does not publish to a dead notifier',
+    () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      final notifier = AutoReloginStatusNotifier(db);
+      notifier.dispose();
+      await db.getState(AppStateKeys.autoReloginStatus);
+      await db.close();
+    },
+  );
+
   group('preferredIdentityAccountProvider', () {
     test('prefers secure credential username over local hint', () async {
       final db = AppDatabase(NativeDatabase.memory());

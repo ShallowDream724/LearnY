@@ -17,6 +17,7 @@ import '../design/typography.dart';
 import '../providers/providers.dart';
 import '../providers/connectivity_provider.dart';
 import '../router/router.dart';
+import '../semester/semester_switcher.dart';
 import 'jelly_bottom_nav_bar.dart';
 import 'shell_nav_motion.dart';
 
@@ -71,6 +72,7 @@ class AppShell extends ConsumerWidget {
     // Wrap child with app-level banners.
     final content = Column(
       children: [
+        const SemesterToolbar(),
         AnimatedSize(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
@@ -413,10 +415,7 @@ class _AppShellBranchContainerState
         _ => 400,
       },
     );
-    _navProgressAnimation = Tween<double>(
-      begin: from,
-      end: to,
-    ).animate(
+    _navProgressAnimation = Tween<double>(begin: from, end: to).animate(
       CurvedAnimation(
         parent: _navProgressController,
         curve: Curves.easeOutCubic,

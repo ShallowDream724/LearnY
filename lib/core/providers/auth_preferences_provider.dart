@@ -79,8 +79,10 @@ class AutoReloginStatusNotifier
   Future<void> _load() async {
     try {
       final raw = await _db.getState(AppStateKeys.autoReloginStatus);
+      if (!mounted) return;
       state = AutoReloginStatusSnapshot.fromJsonString(raw);
     } catch (error, stackTrace) {
+      if (!mounted) return;
       debugPrint('[LearnY] Failed to load auto relogin status: $error');
       debugPrint('$stackTrace');
       state = const AutoReloginStatusSnapshot.disabled();

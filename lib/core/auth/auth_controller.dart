@@ -84,6 +84,8 @@ class AuthController extends StateNotifier<AuthState> {
   final Ref _ref;
   final AuthSessionRepository _repository;
   final bool _didBootstrapAppSession;
+  int _mutationGeneration = 0;
+  Future<void> _mutationTail = Future.value();
 
   AuthController(this._ref, this._repository)
     : _didBootstrapAppSession = _ref.read(didBootstrapAppSessionProvider),
@@ -99,7 +101,9 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<void> _restore() async {
+    final generation = _mutationGeneration;
     final session = await _repository.restore();
+    if (!mounted || generation != _mutationGeneration) return;
     if (session.hasPersistedUser) {
       state = AuthState.cached(username: session.username!);
       return;
@@ -108,13 +112,19 @@ class AuthController extends StateNotifier<AuthState> {
     state = const AuthState.signedOut();
   }
 
-  Future<void> onLoginSuccess(String username) async {
-    await _repository.persistAuthenticatedUser(username);
-    final cachedSemesterId = await _ref
-        .read(databaseProvider)
-        .getState(AppStateKeys.currentSemesterId);
-    _ref.read(currentSemesterIdProvider.notifier).state = cachedSemesterId;
-    state = AuthState.authenticated(username: username);
+  Future<void> onLoginSuccess(String username) {
+    final generation = ++_mutationGeneration;
+    _ref.read(dataSessionEpochProvider.notifier).state++;
+    state = const AuthState.restoring();
+    return _enqueueMutation(generation, () async {
+      await _repository.persistAuthenticatedUser(username);
+      final cachedSemesterId = await _ref
+          .read(databaseProvider)
+          .getState(AppStateKeys.currentSemesterId);
+      if (!mounted || generation != _mutationGeneration) return;
+      _ref.read(currentSemesterIdProvider.notifier).state = cachedSemesterId;
+      state = AuthState.authenticated(username: username);
+    });
   }
 
   void markSessionHealthy([String? username]) {
@@ -145,11 +155,39 @@ class AuthController extends StateNotifier<AuthState> {
     );
   }
 
-  Future<void> logout() async {
-    await _ref.read(autoReloginCapabilityStoreProvider).reset();
-    await _repository.logout();
-    _ref.read(currentSemesterIdProvider.notifier).state = null;
+  Future<void> logout() {
+    final generation = ++_mutationGeneration;
+    _ref.read(dataSessionEpochProvider.notifier).state++;
     state = const AuthState.signedOut();
+    return _enqueueMutation(generation, () async {
+      try {
+        await _ref.read(autoReloginCapabilityStoreProvider).reset();
+      } finally {
+        await _repository.logout();
+      }
+      if (!mounted || generation != _mutationGeneration) return;
+      _ref.read(currentSemesterIdProvider.notifier).state = null;
+      state = const AuthState.signedOut();
+    });
+  }
+
+  Future<void> _enqueueMutation(
+    int generation,
+    Future<void> Function() mutate,
+  ) {
+    final task = _mutationTail.then((_) async {
+      if (!mounted || generation != _mutationGeneration) return;
+      try {
+        await mutate();
+      } catch (_) {
+        if (mounted && generation == _mutationGeneration) {
+          state = const AuthState.signedOut(errorMessage: '会话状态保存失败，请重试');
+        }
+        rethrow;
+      }
+    });
+    _mutationTail = task.catchError((Object _) {});
+    return task;
   }
 }
 

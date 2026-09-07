@@ -8,7 +8,15 @@ library;
 // Sync state
 // ---------------------------------------------------------------------------
 
-enum SyncStatus { idle, syncing, success, error, sessionExpired, cooldown }
+enum SyncStatus {
+  idle,
+  syncing,
+  success,
+  error,
+  sessionExpired,
+  cooldown,
+  cancelled,
+}
 
 class SyncState {
   final SyncStatus status;

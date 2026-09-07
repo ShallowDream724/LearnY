@@ -9,6 +9,7 @@ import '../../../core/database/app_state_keys.dart';
 import '../../../core/database/database.dart' as db;
 import '../../../core/providers/providers.dart';
 import '../../../core/schedule/semester_schedule_cache.dart' as schedule_cache;
+import '../../../core/semester/semester_repository.dart';
 
 class TodayScheduleItem {
   const TodayScheduleItem({
@@ -97,6 +98,7 @@ final homeScheduleVisibleDaysProvider = Provider<List<HomeScheduleDayOption>>((
 
 final homeScheduleCurrentDayProvider = Provider<HomeScheduleDayOption>((ref) {
   final days = ref.watch(homeScheduleVisibleDaysProvider);
+
   final pageIndex = ref.watch(homeSchedulePageIndexProvider);
   final resolvedIndex = pageIndex.clamp(0, days.length - 1);
   return days[resolvedIndex];
@@ -106,11 +108,19 @@ final homeScheduleSnapshotProvider = StreamProvider<HomeScheduleSnapshot>((
   ref,
 ) {
   final authState = ref.watch(authProvider);
+  ref.watch(dataSessionEpochProvider);
   final database = ref.watch(databaseProvider);
   final semesterId = ref.watch(currentSemesterIdProvider);
   final days = ref.watch(homeScheduleVisibleDaysProvider);
+  final officialSemesterId = ref
+      .watch(serverCurrentSemesterIdProvider)
+      .valueOrNull;
+  var active = true;
+  ref.onDispose(() => active = false);
 
-  if (semesterId == null || !authState.canAccessCachedData) {
+  if (semesterId == null ||
+      !authState.canAccessCachedData ||
+      semesterId != officialSemesterId) {
     return Stream.value(_emptyScheduleSnapshot(days));
   }
 
@@ -137,6 +147,7 @@ final homeScheduleSnapshotProvider = StreamProvider<HomeScheduleSnapshot>((
 
     final cachedSnapshot = await cachedSnapshotFuture;
     final cachedSemesterSnapshot = await cachedSemesterSnapshotFuture;
+    if (!active) return;
     final persistedSnapshot = _mergePersistedScheduleSnapshots(
       cachedSnapshot: cachedSnapshot,
       semesterSnapshot: cachedSemesterSnapshot,
@@ -147,6 +158,7 @@ final homeScheduleSnapshotProvider = StreamProvider<HomeScheduleSnapshot>((
     }
 
     final localArtifacts = await localArtifactsFuture;
+    if (!active) return;
     final localCache = localArtifacts.cache;
     if (localCache != null && localCache.hasAnyMeetings) {
       await _persistSemesterScheduleCache(
@@ -165,7 +177,12 @@ final homeScheduleSnapshotProvider = StreamProvider<HomeScheduleSnapshot>((
       yield localSnapshot;
     }
 
-    if (!authState.isLoggedIn) {
+    if (emittedSnapshot == null) {
+      emittedSnapshot = _emptyScheduleSnapshot(days);
+      yield emittedSnapshot;
+    }
+
+    if (!active || !authState.isLoggedIn) {
       return;
     }
 
@@ -196,6 +213,7 @@ final homeScheduleSnapshotProvider = StreamProvider<HomeScheduleSnapshot>((
       final events = await ref
           .read(apiClientProvider)
           .getCalendar(days.first.dateKey, days.last.dateKey);
+      if (!active) return;
       final remoteSnapshot = buildHomeScheduleSnapshotFromCalendarEvents(
         days: days,
         events: events,
@@ -218,8 +236,7 @@ final homeScheduleSnapshotProvider = StreamProvider<HomeScheduleSnapshot>((
           hasSuccessfulRefresh: true,
         ),
       );
-      if (emittedSnapshot == null ||
-          !_scheduleSnapshotsEqual(mergedSnapshot, emittedSnapshot)) {
+      if (!_scheduleSnapshotsEqual(mergedSnapshot, emittedSnapshot)) {
         yield mergedSnapshot;
       }
     } catch (error, stackTrace) {
@@ -798,9 +815,9 @@ List<TodayScheduleItem> _mergeAdjacentScheduleItems(
       if (byStart != 0) {
         return byStart;
       }
-      final byCourse = _scheduleCourseSortKey(left).compareTo(
-        _scheduleCourseSortKey(right),
-      );
+      final byCourse = _scheduleCourseSortKey(
+        left,
+      ).compareTo(_scheduleCourseSortKey(right));
       if (byCourse != 0) {
         return byCourse;
       }
@@ -818,7 +835,9 @@ List<TodayScheduleItem> _mergeAdjacentScheduleItems(
             : next.courseName,
         startTime: current.startTime,
         endTime: next.endTime.isNotEmpty ? next.endTime : current.endTime,
-        location: current.location.isNotEmpty ? current.location : next.location,
+        location: current.location.isNotEmpty
+            ? current.location
+            : next.location,
       );
       continue;
     }

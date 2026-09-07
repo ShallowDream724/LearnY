@@ -11,6 +11,8 @@ import '../database/database.dart';
 import '../files/file_models.dart';
 import '../files/file_repository.dart';
 import '../schedule/semester_schedule_cache.dart';
+import '../semester/semester_repository.dart';
+import 'sync_operation.dart';
 
 class SyncExecutionResult {
   const SyncExecutionResult({
@@ -29,25 +31,42 @@ class SyncEngine {
     required this.apiClient,
     required this.database,
     required this.fileRepository,
-    required this.setCurrentSemesterId,
+    required this.semesterRepository,
   });
 
   final Learn2018Helper apiClient;
   final AppDatabase database;
   final FileRepository fileRepository;
-  final void Function(String semesterId) setCurrentSemesterId;
+  final SemesterRepository semesterRepository;
 
-  Future<SyncExecutionResult> syncAll() async {
+  Future<SyncExecutionResult> syncAll(
+    String semesterId, {
+    SyncOperation? operation,
+  }) async {
+    operation ??= SyncOperation();
     final warnings = <String>[];
-    final courses = await _syncSemesterAndCourses();
+    final courses = await _syncSemesterAndCourses(semesterId, operation);
 
-    await _syncTypeForAllCourses(courses, _SyncContentType.homework, warnings);
+    await _syncTypeForAllCourses(
+      courses,
+      _SyncContentType.homework,
+      warnings,
+      operation,
+    );
     await _syncTypeForAllCourses(
       courses,
       _SyncContentType.notification,
       warnings,
+      operation,
     );
-    await _syncTypeForAllCourses(courses, _SyncContentType.file, warnings);
+    await _syncTypeForAllCourses(
+      courses,
+      _SyncContentType.file,
+      warnings,
+      operation,
+    );
+    operation.ensureActive();
+    _requireSomeContentSucceeded(courses.length * 3, warnings);
 
     return SyncExecutionResult(
       updatedCount: courses.length,
@@ -56,11 +75,22 @@ class SyncEngine {
     );
   }
 
-  Future<SyncExecutionResult> syncHomeworksOnly(String? semesterId) async {
+  Future<SyncExecutionResult> syncHomeworksOnly(
+    String? semesterId, {
+    SyncOperation? operation,
+  }) async {
+    operation ??= SyncOperation();
     final warnings = <String>[];
     final courses = await _getStoredCourses(semesterId);
 
-    await _syncTypeForAllCourses(courses, _SyncContentType.homework, warnings);
+    await _syncTypeForAllCourses(
+      courses,
+      _SyncContentType.homework,
+      warnings,
+      operation,
+    );
+    operation.ensureActive();
+    _requireSomeContentSucceeded(courses.length, warnings);
 
     return SyncExecutionResult(
       updatedCount: courses.length,
@@ -69,11 +99,22 @@ class SyncEngine {
     );
   }
 
-  Future<SyncExecutionResult> syncFilesOnly(String? semesterId) async {
+  Future<SyncExecutionResult> syncFilesOnly(
+    String? semesterId, {
+    SyncOperation? operation,
+  }) async {
+    operation ??= SyncOperation();
     final warnings = <String>[];
     final courses = await _getStoredCourses(semesterId);
 
-    await _syncTypeForAllCourses(courses, _SyncContentType.file, warnings);
+    await _syncTypeForAllCourses(
+      courses,
+      _SyncContentType.file,
+      warnings,
+      operation,
+    );
+    operation.ensureActive();
+    _requireSomeContentSucceeded(courses.length, warnings);
 
     return SyncExecutionResult(
       updatedCount: courses.length,
@@ -82,15 +123,21 @@ class SyncEngine {
     );
   }
 
-  Future<SyncExecutionResult> syncCourse(String courseId) async {
+  Future<SyncExecutionResult> syncCourse(
+    String courseId, {
+    SyncOperation? operation,
+  }) async {
+    operation ??= SyncOperation();
     final warnings = <String>[];
     final course = _SyncCourseRef(courseId, '');
 
     await Future.wait([
-      _syncHomeworks(course, warnings),
-      _syncNotifications(course, warnings),
-      _syncFiles(course, warnings),
+      _syncHomeworks(course, warnings, operation),
+      _syncNotifications(course, warnings, operation),
+      _syncFiles(course, warnings, operation),
     ]);
+    operation.ensureActive();
+    _requireSomeContentSucceeded(3, warnings);
 
     return SyncExecutionResult(
       updatedCount: 1,
@@ -99,72 +146,81 @@ class SyncEngine {
     );
   }
 
-  Future<List<_SyncCourseRef>> _syncSemesterAndCourses() async {
-    final semester = await apiClient.getCurrentSemester();
-
-    await database.upsertSemester(
-      SemestersCompanion.insert(
-        id: semester.id,
-        startDate: semester.startDate,
-        endDate: semester.endDate,
-        startYear: semester.startYear,
-        endYear: semester.endYear,
-        type: semester.type.value,
-      ),
+  Future<List<_SyncCourseRef>> _syncSemesterAndCourses(
+    String semesterId,
+    SyncOperation operation,
+  ) async {
+    operation.ensureActive();
+    final semester = await semesterRepository.ensureSemester(
+      semesterId,
+      ensureActive: operation.ensureActive,
     );
-
     final courses = await apiClient.getCourseList(semester.id);
+    operation.ensureActive();
     final syncedAt = DateTime.now();
     final cachedCourses = <Course>[];
-    for (final course in courses) {
-      final cachedCourse = Course(
-        id: course.id,
-        name: course.name,
-        chineseName: course.chineseName,
-        englishName: course.englishName,
-        teacherName: course.teacherName,
-        teacherNumber: course.teacherNumber,
-        courseNumber: course.courseNumber,
-        courseIndex: course.courseIndex,
-        courseType: course.courseType.value,
-        semesterId: semester.id,
-        timeAndLocationJson: jsonEncode(course.timeAndLocation),
-        sortOrder: 0,
-        lastSynced: syncedAt,
-      );
-      cachedCourses.add(cachedCourse);
-      await database.upsertCourse(
-        CoursesCompanion.insert(
-          id: cachedCourse.id,
-          name: cachedCourse.name,
-          chineseName: cachedCourse.chineseName,
-          englishName: Value(cachedCourse.englishName),
-          teacherName: Value(cachedCourse.teacherName),
-          teacherNumber: Value(cachedCourse.teacherNumber),
-          courseNumber: Value(cachedCourse.courseNumber),
-          courseIndex: Value(cachedCourse.courseIndex),
-          courseType: cachedCourse.courseType,
+    await database.transaction(() async {
+      for (final course in courses) {
+        operation.ensureActive();
+        final cachedCourse = Course(
+          id: course.id,
+          name: course.name,
+          chineseName: course.chineseName,
+          englishName: course.englishName,
+          teacherName: course.teacherName,
+          teacherNumber: course.teacherNumber,
+          courseNumber: course.courseNumber,
+          courseIndex: course.courseIndex,
+          courseType: course.courseType.value,
           semesterId: semester.id,
-          timeAndLocationJson: Value(cachedCourse.timeAndLocationJson),
-          lastSynced: Value(syncedAt),
-        ),
-      );
-    }
+          timeAndLocationJson: jsonEncode(course.timeAndLocation),
+          sortOrder: 0,
+          lastSynced: syncedAt,
+        );
+        cachedCourses.add(cachedCourse);
+        await database.upsertCourse(
+          CoursesCompanion.insert(
+            id: cachedCourse.id,
+            name: cachedCourse.name,
+            chineseName: cachedCourse.chineseName,
+            englishName: Value(cachedCourse.englishName),
+            teacherName: Value(cachedCourse.teacherName),
+            teacherNumber: Value(cachedCourse.teacherNumber),
+            courseNumber: Value(cachedCourse.courseNumber),
+            courseIndex: Value(cachedCourse.courseIndex),
+            courseType: cachedCourse.courseType,
+            semesterId: semester.id,
+            timeAndLocationJson: Value(cachedCourse.timeAndLocationJson),
+            lastSynced: Value(syncedAt),
+          ),
+        );
+      }
+      final retainedIds = courses.map((course) => course.id).toSet();
+      for (final stored in await database.getCoursesBySemester(semesterId)) {
+        if (!retainedIds.contains(stored.id)) {
+          await database.clearCourseDependentData(stored.id);
+          await (database.delete(
+            database.courses,
+          )..where((row) => row.id.equals(stored.id))).go();
+        }
+      }
+      operation.ensureActive();
+    });
 
     final semesterScheduleCache = buildSemesterScheduleCacheFromCourses(
       semesterId: semester.id,
       semesterStartDate: semester.startDate,
       courses: cachedCourses,
     );
-    if (semesterScheduleCache.hasAnyMeetings) {
+    await database.transaction(() async {
+      operation.ensureActive();
       await database.setState(
         AppStateKeys.homeScheduleSemesterCache(semester.id),
         encodeSemesterScheduleCachePayload(semesterScheduleCache),
       );
-    }
+      operation.ensureActive();
+    });
 
-    setCurrentSemesterId(semester.id);
-    await database.setState(AppStateKeys.currentSemesterId, semester.id);
     return courses
         .map((course) => _SyncCourseRef(course.id, course.name))
         .toList();
@@ -183,24 +239,40 @@ class SyncEngine {
     List<_SyncCourseRef> courses,
     _SyncContentType type,
     List<String> warnings,
+    SyncOperation operation,
   ) async {
-    await Future.wait(
-      courses.map((course) {
-        return switch (type) {
-          _SyncContentType.homework => _syncHomeworks(course, warnings),
-          _SyncContentType.notification => _syncNotifications(course, warnings),
-          _SyncContentType.file => _syncFiles(course, warnings),
-        };
-      }),
-    );
+    // Bound fan-out so a large semester does not saturate the school service.
+    for (var offset = 0; offset < courses.length; offset += 3) {
+      operation.ensureActive();
+      await Future.wait(
+        courses.skip(offset).take(3).map((course) {
+          return switch (type) {
+            _SyncContentType.homework => _syncHomeworks(
+              course,
+              warnings,
+              operation,
+            ),
+            _SyncContentType.notification => _syncNotifications(
+              course,
+              warnings,
+              operation,
+            ),
+            _SyncContentType.file => _syncFiles(course, warnings, operation),
+          };
+        }),
+      );
+    }
   }
 
   Future<void> _syncHomeworks(
     _SyncCourseRef course,
     List<String> warnings,
+    SyncOperation operation,
   ) async {
     try {
+      operation.ensureActive();
       final homeworks = await apiClient.getHomeworkList(course.id);
+      operation.ensureActive();
       await database.transaction(() async {
         for (final homework in homeworks) {
           await database.upsertHomework(
@@ -220,6 +292,8 @@ class SyncEngine {
               gradeTime: Value(homework.gradeTime),
               submitTime: Value(homework.submitTime),
               isLateSubmission: Value(homework.isLateSubmission),
+              completionType: Value(homework.completionType?.value),
+              submissionType: Value(homework.submissionType?.value),
               isFavorite: Value(homework.isFavorite),
               comment: Value(homework.comment),
               description: Value(homework.description),
@@ -252,7 +326,16 @@ class SyncEngine {
             ),
           );
         }
+        await (database.delete(database.homeworks)..where(
+              (row) =>
+                  row.courseId.equals(course.id) &
+                  row.id.isNotIn(homeworks.map((item) => item.id)),
+            ))
+            .go();
+        operation.ensureActive();
       });
+    } on SyncCancelled {
+      rethrow;
     } on api.ApiError catch (error) {
       if (_isSessionError(error)) rethrow;
       warnings.add('${course.name}: 作业同步失败 ($error)');
@@ -264,9 +347,12 @@ class SyncEngine {
   Future<void> _syncNotifications(
     _SyncCourseRef course,
     List<String> warnings,
+    SyncOperation operation,
   ) async {
     try {
+      operation.ensureActive();
       final notifications = await apiClient.getNotificationList(course.id);
+      operation.ensureActive();
       await database.transaction(() async {
         for (final notification in notifications) {
           await database.upsertNotification(
@@ -291,7 +377,16 @@ class SyncEngine {
             ),
           );
         }
+        await (database.delete(database.notifications)..where(
+              (row) =>
+                  row.courseId.equals(course.id) &
+                  row.id.isNotIn(notifications.map((item) => item.id)),
+            ))
+            .go();
+        operation.ensureActive();
       });
+    } on SyncCancelled {
+      rethrow;
     } on api.ApiError catch (error) {
       if (_isSessionError(error)) rethrow;
       warnings.add('${course.name}: 通知同步失败 ($error)');
@@ -300,10 +395,28 @@ class SyncEngine {
     }
   }
 
-  Future<void> _syncFiles(_SyncCourseRef course, List<String> warnings) async {
+  Future<void> _syncFiles(
+    _SyncCourseRef course,
+    List<String> warnings,
+    SyncOperation operation,
+  ) async {
     try {
+      operation.ensureActive();
       final files = await apiClient.getFileList(course.id);
-      await fileRepository.saveRemoteFiles(courseId: course.id, files: files);
+      operation.ensureActive();
+      await database.transaction(() async {
+        await fileRepository.saveRemoteFiles(courseId: course.id, files: files);
+        await (database.delete(database.courseFiles)..where(
+              (row) =>
+                  row.courseId.equals(course.id) &
+                  row.id.isNotIn(files.map((item) => item.id)) &
+                  row.localDownloadState.equals('none'),
+            ))
+            .go();
+        operation.ensureActive();
+      });
+    } on SyncCancelled {
+      rethrow;
     } on api.ApiError catch (error) {
       if (_isSessionError(error)) rethrow;
       debugPrint('[Sync] File sync failed for ${course.name}: $error');
@@ -318,6 +431,21 @@ class SyncEngine {
     return error.reason == FailReason.notLoggedIn ||
         error.reason == FailReason.noCredential;
   }
+
+  void _requireSomeContentSucceeded(int attempted, List<String> warnings) {
+    if (attempted > 0 && warnings.length >= attempted) {
+      throw SyncContentFailure(warnings);
+    }
+  }
+}
+
+class SyncContentFailure implements Exception {
+  const SyncContentFailure(this.warnings);
+
+  final List<String> warnings;
+
+  @override
+  String toString() => '课程内容未能更新，已保留本地缓存';
 }
 
 String? _encodeAttachment(

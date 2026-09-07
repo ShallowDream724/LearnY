@@ -148,7 +148,9 @@ HomeData _buildHomeData({
     recentGrades: recentGradeSummaries.take(5).toList(),
     totalCourses: courses.length,
     pendingAssignments: pendingCount,
-    unreadCount: notificationSummaries.length,
+    unreadCount: unreadNotifications
+        .where((notification) => courseMap.containsKey(notification.courseId))
+        .length,
     totalUnreadFiles: fileSummaries.length,
   );
 }

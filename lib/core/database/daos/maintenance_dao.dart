@@ -36,6 +36,7 @@ extension MaintenanceDao on AppDatabase {
   Future<void> clearUserScopedData() async {
     await clearLearningData();
     await deleteState(AppStateKeys.currentSemesterId);
+    await deleteState(AppStateKeys.serverCurrentSemesterId);
     await deleteState(AppStateKeys.userDepartment);
   }
 

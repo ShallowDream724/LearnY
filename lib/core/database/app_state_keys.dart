@@ -4,6 +4,7 @@ abstract final class AppStateKeys {
   static const String learningDataOwner = 'learning_data_owner';
   static const String userDepartment = 'user_department';
   static const String currentSemesterId = 'current_semester_id';
+  static const String serverCurrentSemesterId = 'server_current_semester_id';
   static const String themeMode = 'theme_mode';
   static const String deadlineThresholdHours = 'deadline_threshold_hours';
   static const String fileCacheLimitMb = 'file_cache_limit_mb';

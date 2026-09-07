@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/providers.dart';
@@ -40,7 +38,7 @@ class HomeworkSubmissionCoordinator {
 
   Future<void> submit(HomeworkSubmissionRequest request) async {
     await _repository.submit(request);
-    unawaited(_refreshHomeworks());
+    await _refreshHomeworks();
   }
 }
 
@@ -53,8 +51,10 @@ final homeworkSubmissionCoordinatorProvider =
     Provider<HomeworkSubmissionCoordinator>((ref) {
       return HomeworkSubmissionCoordinator(
         repository: ref.watch(homeworkSubmissionRepositoryProvider),
-        refreshHomeworks: ref
-            .read(syncStateProvider.notifier)
-            .syncHomeworksOnly,
+        refreshHomeworks: () async {
+          await ref
+              .read(syncStateProvider.notifier)
+              .syncHomeworksOnly(force: true);
+        },
       );
     });

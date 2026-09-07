@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/providers.dart';
+import '../../../core/providers/sync_provider.dart';
 import 'search_engine.dart';
 import 'search_models.dart';
 import 'search_repository.dart';
@@ -37,6 +38,7 @@ class SearchController extends StateNotifier<SearchState> {
   Future<void> _loadRecentSearches() async {
     try {
       final recentSearches = await _repository.loadRecentSearches();
+      if (!mounted) return;
       state = state.copyWith(recentSearches: recentSearches);
     } catch (error, stackTrace) {
       debugPrint('Failed to load recent searches: $error\n$stackTrace');
@@ -58,6 +60,7 @@ class SearchController extends StateNotifier<SearchState> {
   void onQueryChanged(String rawQuery) {
     final query = rawQuery.trim();
     _debounce?.cancel();
+    _searchGeneration++;
 
     if (query.isEmpty) {
       state = state.copyWith(
@@ -78,6 +81,7 @@ class SearchController extends StateNotifier<SearchState> {
   Future<void> searchImmediately(String rawQuery) async {
     final query = rawQuery.trim();
     _debounce?.cancel();
+    _searchGeneration++;
     if (query.isEmpty) {
       state = state.copyWith(
         query: '',
@@ -96,7 +100,7 @@ class SearchController extends StateNotifier<SearchState> {
     final generation = ++_searchGeneration;
     final semesterId = _ref.read(currentSemesterIdProvider);
     if (semesterId == null) {
-      if (generation != _searchGeneration) {
+      if (!mounted || generation != _searchGeneration) {
         return;
       }
       state = state.copyWith(
@@ -113,7 +117,7 @@ class SearchController extends StateNotifier<SearchState> {
         documents: documents,
         query: query,
       );
-      if (generation != _searchGeneration) {
+      if (!mounted || generation != _searchGeneration) {
         return;
       }
 
@@ -129,7 +133,7 @@ class SearchController extends StateNotifier<SearchState> {
         _documentsFuture = null;
       }
       debugPrint('Search failed for "$query": $error\n$stackTrace');
-      if (generation != _searchGeneration) {
+      if (!mounted || generation != _searchGeneration) {
         return;
       }
       state = state.copyWith(
@@ -144,7 +148,7 @@ class SearchController extends StateNotifier<SearchState> {
   Future<void> _persistRecentSearch(String query, int generation) async {
     try {
       final recentSearches = await _repository.addRecentSearch(query);
-      if (generation != _searchGeneration) {
+      if (!mounted || generation != _searchGeneration) {
         return;
       }
       state = state.copyWith(recentSearches: recentSearches);
@@ -157,17 +161,56 @@ class SearchController extends StateNotifier<SearchState> {
 
   Future<void> clearRecentSearches() async {
     await _repository.clearRecentSearches();
+    if (!mounted) return;
     state = state.copyWith(recentSearches: const <String>[]);
   }
 
   @override
   void dispose() {
+    _searchGeneration++;
     _debounce?.cancel();
     super.dispose();
+  }
+
+  void invalidateCorpus() {
+    _documentsFuture = null;
+    _documentsSemesterId = null;
+    _searchGeneration++;
+    _debounce?.cancel();
+    final query = state.query;
+    state = state.copyWith(
+      results: const [],
+      isSearching: false,
+      hasSearched: false,
+    );
+    if (query.isNotEmpty) unawaited(searchImmediately(query));
+  }
+
+  void clearSession() {
+    _debounce?.cancel();
+    _searchGeneration++;
+    _documentsFuture = null;
+    _documentsSemesterId = null;
+    state = const SearchState();
   }
 }
 
 final searchControllerProvider =
     StateNotifierProvider.autoDispose<SearchController, SearchState>((ref) {
-      return SearchController(ref, ref.watch(searchRepositoryProvider));
+      final controller = SearchController(
+        ref,
+        ref.watch(searchRepositoryProvider),
+      );
+      ref.listen(
+        currentSemesterIdProvider,
+        (_, _) => controller.invalidateCorpus(),
+      );
+      ref.listen(dataSessionEpochProvider, (_, _) => controller.clearSession());
+      ref.listen(syncStateProvider, (previous, next) {
+        if (previous?.status == SyncStatus.syncing &&
+            next.status != SyncStatus.syncing) {
+          controller.invalidateCorpus();
+        }
+      });
+      return controller;
     });

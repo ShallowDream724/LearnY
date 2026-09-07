@@ -19,23 +19,27 @@ class SyncActions {
   final Ref _ref;
 
   Future<SyncActionResult> refreshAll() async {
-    await _ref.read(syncStateProvider.notifier).syncAll();
-    return SyncActionResult(_ref.read(syncStateProvider));
+    return SyncActionResult(
+      await _ref.read(syncStateProvider.notifier).syncAll(),
+    );
   }
 
   Future<SyncActionResult> refreshHomeworksOnly() async {
-    await _ref.read(syncStateProvider.notifier).syncHomeworksOnly();
-    return SyncActionResult(_ref.read(syncStateProvider));
+    return SyncActionResult(
+      await _ref.read(syncStateProvider.notifier).syncHomeworksOnly(),
+    );
   }
 
   Future<SyncActionResult> refreshFilesOnly() async {
-    await _ref.read(syncStateProvider.notifier).syncFilesOnly();
-    return SyncActionResult(_ref.read(syncStateProvider));
+    return SyncActionResult(
+      await _ref.read(syncStateProvider.notifier).syncFilesOnly(),
+    );
   }
 
   Future<SyncActionResult> refreshCourse(String courseId) async {
-    await _ref.read(syncStateProvider.notifier).syncCourse(courseId);
-    return SyncActionResult(_ref.read(syncStateProvider));
+    return SyncActionResult(
+      await _ref.read(syncStateProvider.notifier).syncCourse(courseId),
+    );
   }
 }
 
