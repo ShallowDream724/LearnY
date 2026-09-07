@@ -66,6 +66,8 @@ abstract class IdentityAuthWebSurfaceController {
 
   Future<String?> getCurrentCookieHeader();
 
+  Future<String?> getCookieHeaderForUrl(String url);
+
   Widget buildView();
 
   Future<void> dispose();

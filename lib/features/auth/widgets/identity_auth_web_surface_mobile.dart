@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import 'identity_auth_web_surface.dart';
@@ -65,6 +67,19 @@ class MobileIdentityAuthWebSurfaceController
 
   @override
   Future<String?> getCurrentCookieHeader() async {
+    final url = await _controller.currentUrl();
+    if (url == null) return null;
+    return getCookieHeaderForUrl(url);
+  }
+
+  @override
+  Future<String?> getCookieHeaderForUrl(String url) async {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return const MethodChannel(
+        'learny/auth_cookies',
+      ).invokeMethod<String>('getCookieHeader', {'url': url});
+    }
+    if (await _controller.currentUrl() != url) return null;
     final raw = await _controller.runJavaScriptReturningResult(
       'document.cookie',
     );

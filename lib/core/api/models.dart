@@ -50,6 +50,7 @@ class CourseInfo {
   final String chineseName;
   final String englishName;
   final List<dynamic> timeAndLocation;
+  final bool timeAndLocationLoaded;
   final String url;
   final String teacherName;
   final String teacherNumber;
@@ -63,6 +64,7 @@ class CourseInfo {
     required this.chineseName,
     required this.englishName,
     required this.timeAndLocation,
+    this.timeAndLocationLoaded = true,
     required this.url,
     required this.teacherName,
     required this.teacherNumber,
@@ -605,5 +607,6 @@ class ApiError implements Exception {
   const ApiError({required this.reason, this.extra});
 
   @override
-  String toString() => 'ApiError(${reason.message}${extra != null ? ', $extra' : ''})';
+  String toString() =>
+      'ApiError(${reason.message}${extra != null ? ', $extra' : ''})';
 }

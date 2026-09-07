@@ -15,6 +15,7 @@ import '../../core/design/colors.dart';
 import '../../core/design/cooldown_toast.dart';
 import '../../core/design/shimmer.dart';
 import '../../core/design/typography.dart';
+import '../../core/design/responsive.dart';
 import '../../core/providers/providers.dart';
 import '../../core/providers/sync_models.dart';
 import '../../core/shell/shell_layout_metrics.dart';
@@ -137,12 +138,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             SliverAppBar(
               floating: true,
               snap: true,
-              title: Text(
-                '${_greeting()}，${authState.username ?? "LearnY"}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppTypography.titleMedium.copyWith(color: c.text),
-              ),
+              title: !usesDesktopControls(context)
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _greeting(),
+                          style: AppTypography.bodySmall.copyWith(
+                            color: c.subtitle,
+                          ),
+                        ),
+                        Text(
+                          authState.username ?? 'LearnY',
+                          style: AppTypography.headlineSmall.copyWith(
+                            color: c.text,
+                          ),
+                        ),
+                      ],
+                    )
+                  : Text(
+                      '${_greeting()}，${authState.username ?? "LearnY"}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.titleMedium.copyWith(color: c.text),
+                    ),
               actions: [
                 IconButton(
                   tooltip: '搜索',
@@ -238,7 +257,7 @@ class _HomeContentSliver extends StatelessWidget {
       sliver: SliverList(
         delegate: SliverChildListDelegate([
           HomeStatsSection(onUnreadTap: onUnreadStatTap),
-          const SizedBox(height: 12),
+          const SizedBox(height: 20),
           const HomeTodayScheduleSection(),
           const HomeUrgentAssignmentsSection(),
           HomeUnreadNotificationsSection(

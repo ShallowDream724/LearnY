@@ -14,4 +14,8 @@ extension CourseDao on AppDatabase {
 
   Stream<List<Course>> watchCoursesBySemester(String semesterId) =>
       (select(courses)..where((t) => t.semesterId.equals(semesterId))).watch();
+
+  Stream<List<Course>> watchScheduleCourses() => (select(courses).join([
+    leftOuterJoin(semesters, semesters.id.equalsExp(courses.semesterId)),
+  ])).watch().map((rows) => rows.map((row) => row.readTable(courses)).toList());
 }

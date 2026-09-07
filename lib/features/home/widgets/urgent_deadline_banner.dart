@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/providers.dart';
+import '../../../core/design/app_theme_colors.dart';
+import '../../../core/design/responsive.dart';
 import '../../../core/providers/sync_provider.dart';
 import '../../../core/utils/deadline_time.dart';
 
@@ -35,8 +37,13 @@ class UrgentDeadlineBanner extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final mobile = !usesDesktopControls(context);
+    final c = context.colors;
+    final titleColor = mobile
+        ? (c.isDark ? const Color(0xFFFFC56F) : const Color(0xFFB5710D))
+        : theme.colorScheme.onSurfaceVariant;
     final threshold = ref.watch(deadlineThresholdHoursProvider);
-    return Column(
+    final content = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -47,7 +54,7 @@ class UrgentDeadlineBanner extends ConsumerWidget {
                   ? Icons.assignment_turned_in_outlined
                   : Icons.assignment_late_outlined,
               size: 18,
-              color: theme.colorScheme.onSurfaceVariant,
+              color: titleColor,
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -57,9 +64,7 @@ class UrgentDeadlineBanner extends ConsumerWidget {
                     : pendingAssignments == 0
                     ? '暂无待交作业'
                     : '$pendingAssignments 项待交作业，近期无截止',
-                style: assignments.isEmpty
-                    ? theme.textTheme.bodySmall
-                    : theme.textTheme.titleSmall,
+                style: theme.textTheme.titleSmall?.copyWith(color: titleColor),
               ),
             ),
             IconButton(
@@ -69,7 +74,7 @@ class UrgentDeadlineBanner extends ConsumerWidget {
             ),
           ],
         ),
-        for (final homework in assignments)
+        for (final (index, homework) in assignments.indexed)
           GestureDetector(
             onLongPressStart: onLongPress == null
                 ? null
@@ -88,6 +93,17 @@ class UrgentDeadlineBanner extends ConsumerWidget {
                   ),
                   child: Row(
                     children: [
+                      if (mobile) ...[
+                        SizedBox(
+                          width: 18,
+                          child: Text(
+                            '${index + 1}',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 12, color: titleColor),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                      ],
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -112,7 +128,6 @@ class UrgentDeadlineBanner extends ConsumerWidget {
                       ),
                       const SizedBox(width: 12),
                       Flexible(
-                        fit: FlexFit.tight,
                         child: Text(
                           _deadlineLabel(homework),
                           textAlign: TextAlign.right,
@@ -132,6 +147,27 @@ class UrgentDeadlineBanner extends ConsumerWidget {
             ),
           ),
       ],
+    );
+    if (!mobile) return content;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 4, 8, 8),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: c.isDark
+              ? const [Color(0xFF1E2430), Color(0xFF1A1F28)]
+              : const [Color(0xFFFFF7EE), Color(0xFFFFF3E4)],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: c.isDark
+              ? const Color(0xFF3A4250)
+              : const Color(0xFFC8A064).withAlpha(30),
+          width: .5,
+        ),
+      ),
+      child: content,
     );
   }
 

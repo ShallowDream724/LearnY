@@ -1,16 +1,13 @@
-import 'dart:convert';
-
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 
 import '../api/enums.dart';
 import '../api/learning_read_api.dart';
 import '../api/models.dart' as api;
-import '../database/app_state_keys.dart';
 import '../database/database.dart';
 import '../files/file_models.dart';
 import '../files/file_repository.dart';
-import '../schedule/semester_schedule_cache.dart';
+import '../courses/course_catalog_repository.dart';
 import '../semester/semester_repository.dart';
 import 'sync_operation.dart';
 
@@ -32,12 +29,16 @@ class SyncEngine {
     required this.database,
     required this.fileRepository,
     required this.semesterRepository,
-  });
+    CourseCatalogRepository? courseCatalog,
+  }) : _courseCatalog =
+           courseCatalog ??
+           CourseCatalogRepository(database: database, apiClient: apiClient);
 
   final LearningReadApi apiClient;
   final AppDatabase database;
   final FileRepository fileRepository;
   final SemesterRepository semesterRepository;
+  final CourseCatalogRepository _courseCatalog;
 
   Future<SyncExecutionResult> syncAll(
     String semesterId, {
@@ -155,71 +156,7 @@ class SyncEngine {
       semesterId,
       ensureActive: operation.ensureActive,
     );
-    final courses = await apiClient.getCourseList(semester.id);
-    operation.ensureActive();
-    final syncedAt = DateTime.now();
-    final cachedCourses = <Course>[];
-    await database.transaction(() async {
-      for (final course in courses) {
-        operation.ensureActive();
-        final cachedCourse = Course(
-          id: course.id,
-          name: course.name,
-          chineseName: course.chineseName,
-          englishName: course.englishName,
-          teacherName: course.teacherName,
-          teacherNumber: course.teacherNumber,
-          courseNumber: course.courseNumber,
-          courseIndex: course.courseIndex,
-          courseType: course.courseType.value,
-          semesterId: semester.id,
-          timeAndLocationJson: jsonEncode(course.timeAndLocation),
-          sortOrder: 0,
-          lastSynced: syncedAt,
-        );
-        cachedCourses.add(cachedCourse);
-        await database.upsertCourse(
-          CoursesCompanion.insert(
-            id: cachedCourse.id,
-            name: cachedCourse.name,
-            chineseName: cachedCourse.chineseName,
-            englishName: Value(cachedCourse.englishName),
-            teacherName: Value(cachedCourse.teacherName),
-            teacherNumber: Value(cachedCourse.teacherNumber),
-            courseNumber: Value(cachedCourse.courseNumber),
-            courseIndex: Value(cachedCourse.courseIndex),
-            courseType: cachedCourse.courseType,
-            semesterId: semester.id,
-            timeAndLocationJson: Value(cachedCourse.timeAndLocationJson),
-            lastSynced: Value(syncedAt),
-          ),
-        );
-      }
-      final retainedIds = courses.map((course) => course.id).toSet();
-      for (final stored in await database.getCoursesBySemester(semesterId)) {
-        if (!retainedIds.contains(stored.id)) {
-          await database.clearCourseDependentData(stored.id);
-          await (database.delete(
-            database.courses,
-          )..where((row) => row.id.equals(stored.id))).go();
-        }
-      }
-      operation.ensureActive();
-    });
-
-    final semesterScheduleCache = buildSemesterScheduleCacheFromCourses(
-      semesterId: semester.id,
-      semesterStartDate: semester.startDate,
-      courses: cachedCourses,
-    );
-    await database.transaction(() async {
-      operation.ensureActive();
-      await database.setState(
-        AppStateKeys.homeScheduleSemesterCache(semester.id),
-        encodeSemesterScheduleCachePayload(semesterScheduleCache),
-      );
-      operation.ensureActive();
-    });
+    final courses = await _courseCatalog.refresh(semester.id, operation);
 
     return courses
         .map((course) => _SyncCourseRef(course.id, course.name))

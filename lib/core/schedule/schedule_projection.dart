@@ -5,13 +5,6 @@ import '../database/database.dart' as db;
 import 'semester_schedule_cache.dart' as schedule_cache;
 import 'schedule_models.dart';
 
-String buildHomeScheduleEmptyLabel(HomeScheduleDayOption day) {
-  if (day.isToday) {
-    return '今天没有课';
-  }
-  return '${DateFormat('M月d日').format(day.date)} 没有课';
-}
-
 List<HomeScheduleDayOption> buildHomeScheduleDays(
   DateTime startDay, {
   int length = 7,
@@ -120,6 +113,9 @@ HomeScheduleSnapshot mergeHomeScheduleSnapshots({
           location: preferred.location.isEmpty
               ? item.location
               : preferred.location,
+          source: preferred.source,
+          endTimeInferred: preferred.endTimeInferred,
+          periodLabel: preferred.periodLabel,
         );
         continue;
       }
@@ -153,6 +149,65 @@ HomeScheduleSnapshot mergeHomeScheduleSnapshots({
   return HomeScheduleSnapshot(
     days: primary.days,
     itemsByDateKey: mergedItemsByDateKey,
+    hasRoutineData: primary.hasRoutineData || fallback.hasRoutineData,
+    unscheduledCourses: {
+      for (final item in [
+        ...primary.unscheduledCourses,
+        ...fallback.unscheduledCourses,
+      ])
+        item.courseId: item,
+    }.values.toList(),
+  );
+}
+
+/// Calendar occurrences cover a course for this week, including days moved by
+/// holidays. Only courses not yet represented in that calendar use recurrence.
+HomeScheduleSnapshot reconcileScheduleSources({
+  required HomeScheduleSnapshot calendar,
+  required HomeScheduleSnapshot routine,
+  required Set<String> enrolledCourseIds,
+  required DateTime today,
+}) {
+  final activeCalendar = HomeScheduleSnapshot(
+    days: calendar.days,
+    itemsByDateKey: {
+      for (final day in calendar.days)
+        day.dateKey: [
+          for (final item in calendar.itemsFor(day))
+            if (day.date.isBefore(today) ||
+                item.courseId == null ||
+                (enrolledCourseIds.contains(item.courseId) &&
+                    item.source == ScheduleItemSource.registrar))
+              item,
+        ],
+    },
+  );
+  final actual = activeCalendar.itemsByDateKey.values
+      .expand((items) => items)
+      .where((item) => item.source == ScheduleItemSource.registrar)
+      .toList();
+  final coveredIds = actual
+      .map((item) => item.courseId)
+      .whereType<String>()
+      .toSet();
+  final coveredNames = actual.map((item) => item.courseName.trim()).toSet();
+  final supplement = HomeScheduleSnapshot(
+    days: routine.days,
+    hasRoutineData: routine.hasRoutineData,
+    unscheduledCourses: routine.unscheduledCourses,
+    itemsByDateKey: {
+      for (final day in routine.days)
+        day.dateKey: [
+          for (final item in routine.itemsFor(day))
+            if (!coveredIds.contains(item.courseId) &&
+                !coveredNames.contains(item.courseName.trim()))
+              item,
+        ],
+    },
+  );
+  return mergeHomeScheduleSnapshots(
+    primary: activeCalendar,
+    fallback: supplement,
   );
 }
 
@@ -171,6 +226,7 @@ HomeScheduleSnapshot buildHomeScheduleSnapshotFromSemesterScheduleCache({
   );
   return HomeScheduleSnapshot(
     days: days,
+    hasRoutineData: true,
     itemsByDateKey: {
       for (final day in days)
         day.dateKey: [
@@ -181,6 +237,9 @@ HomeScheduleSnapshot buildHomeScheduleSnapshotFromSemesterScheduleCache({
               startTime: item.startTime,
               endTime: item.endTime,
               location: item.location,
+              source: ScheduleItemSource.routine,
+              endTimeInferred: item.endTimeInferred,
+              periodLabel: item.periodLabel,
             ),
         ],
     },
@@ -202,14 +261,12 @@ bool shouldFetchHomeScheduleRemoteSnapshot({
   required String semesterId,
   required HomeScheduleSnapshot? cachedSnapshot,
   required HomeScheduleSnapshot localSnapshot,
-  HomeScheduleSnapshot? semesterSnapshot,
   required HomeScheduleRemoteRefreshState? refreshState,
   required DateTime now,
 }) {
   final hasAnyData =
       (cachedSnapshot != null && hasScheduleItems(cachedSnapshot)) ||
-      hasScheduleItems(localSnapshot) ||
-      (semesterSnapshot != null && hasScheduleItems(semesterSnapshot));
+      hasScheduleItems(localSnapshot);
 
   if (refreshState == null || refreshState.semesterId != semesterId) {
     return true;
@@ -224,29 +281,6 @@ bool shouldFetchHomeScheduleRemoteSnapshot({
   }
   return now.difference(refreshState.lastAttemptAt) >=
       _homeScheduleRemoteRetryBackoff;
-}
-
-HomeScheduleSnapshot mergeLocalScheduleSnapshot({
-  required HomeScheduleSnapshot currentSnapshot,
-  required HomeScheduleSnapshot? semesterSnapshot,
-}) {
-  final hasCurrent = hasScheduleItems(currentSnapshot);
-  final hasSemester =
-      semesterSnapshot != null && hasScheduleItems(semesterSnapshot);
-
-  if (hasCurrent && hasSemester) {
-    return mergeHomeScheduleSnapshots(
-      primary: currentSnapshot,
-      fallback: semesterSnapshot,
-    );
-  }
-  if (hasCurrent) {
-    return currentSnapshot;
-  }
-  if (hasSemester) {
-    return semesterSnapshot;
-  }
-  return currentSnapshot;
 }
 
 bool hasScheduleItems(HomeScheduleSnapshot snapshot) {
@@ -302,6 +336,11 @@ List<TodayScheduleItem> _mergeAdjacentScheduleItems(
         location: current.location.isNotEmpty
             ? current.location
             : next.location,
+        source: current.source == next.source
+            ? current.source
+            : ScheduleItemSource.routine,
+        endTimeInferred: current.endTimeInferred || next.endTimeInferred,
+        periodLabel: current.periodLabel,
       );
       continue;
     }
@@ -480,6 +519,7 @@ TodayScheduleItem? _mapCalendarEvent(
     startTime: startTime,
     endTime: endTime,
     location: location,
+    endTimeInferred: endTime.isEmpty && startTime.isNotEmpty,
   );
 }
 

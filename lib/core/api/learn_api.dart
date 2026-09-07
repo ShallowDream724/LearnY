@@ -27,6 +27,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'enums.dart';
 import 'learning_read_api.dart';
 import 'models.dart';
+import 'registrar_calendar_api.dart';
 import 'urls.dart' as urls;
 import 'utils.dart';
 
@@ -269,7 +270,7 @@ class Learn2018Helper implements LearningReadApi {
   // -------------------------------------------------------------------
 
   bool _isLoginTimeout(Response resp) {
-    if (resp.statusCode == 403) {
+    if (resp.statusCode == 401 || resp.statusCode == 403) {
       return true;
     }
 
@@ -322,10 +323,16 @@ class Learn2018Helper implements LearningReadApi {
       method: method,
       headers: headers,
       responseType: responseType,
+      validateStatus: (status) =>
+          status != null && (status < 400 || status == 401 || status == 403),
     );
 
     Future<Response> doFetch() async {
-      return _dio.request(url, data: data, options: opts);
+      return _dio.request(
+        url,
+        data: data is FormData ? data.clone() : data,
+        options: opts,
+      );
     }
 
     final resp = await doFetch();
@@ -337,7 +344,7 @@ class Learn2018Helper implements LearningReadApi {
             : url;
         final retryResp = await _dio.request(
           retryUrl,
-          data: data,
+          data: data is FormData ? data.clone() : data,
           options: opts,
         );
         if (!_isLoginTimeout(retryResp)) {
@@ -712,8 +719,8 @@ class Learn2018Helper implements LearningReadApi {
   Future<void> _ensureCSRFToken() async {
     try {
       await _extractCSRFToken();
-    } catch (e) {
-      debugPrint('[LearnX] _ensureCSRFToken failed: $e');
+    } on ApiError catch (e) {
+      if (e.reason != FailReason.notLoggedIn) rethrow;
       final recovered = await _attemptConfiguredSessionRecovery();
       if (recovered) {
         await _extractCSRFToken();
@@ -731,7 +738,16 @@ class Learn2018Helper implements LearningReadApi {
   /// Also detects the current language setting.
   Future<void> _extractCSRFToken() async {
     debugPrint('[LearnX] _extractCSRFToken: fetching course list...');
-    final courseListResp = await _dio.get(urls.learnStudentCourseListPage());
+    final courseListResp = await _dio.get(
+      urls.learnStudentCourseListPage(),
+      options: Options(
+        validateStatus: (status) =>
+            status != null && (status < 400 || status == 401 || status == 403),
+      ),
+    );
+    if (_isLoginTimeout(courseListResp)) {
+      throw const ApiError(reason: FailReason.notLoggedIn);
+    }
     final pageSource = courseListResp.data.toString();
     debugPrint(
       '[LearnX] _extractCSRFToken: page length=${pageSource.length}, '
@@ -745,7 +761,7 @@ class Learn2018Helper implements LearningReadApi {
       pageUri: courseListResp.realUri,
       pageSource: pageSource,
     )) {
-      throw const ApiError(reason: FailReason.notLoggedIn);
+      throw const ApiError(reason: FailReason.invalidResponse);
     }
   }
 
@@ -962,55 +978,17 @@ class Learn2018Helper implements LearningReadApi {
     final resolvedStartDate = _normalizeRegistrarDateParam(startDate);
     final resolvedEndDate = _normalizeRegistrarDateParam(endDate);
 
-    // Get registrar ticket
-    final ticketResp = await _myFetchWithToken(
-      urls.registrarTicket(),
-      method: 'POST',
-      data: FormData.fromMap(urls.registrarTicketFormData()),
-    );
-    var ticket = ticketResp.data.toString();
-    // Remove surrounding quotes
-    if (ticket.startsWith('"') || ticket.startsWith("'")) {
-      ticket = ticket.substring(1, ticket.length - 1);
-    }
-
-    // Auth with registrar.
-    // `zhjw.cic.tsinghua.edu.cn` issues its JSESSIONID during the redirect
-    // chain, so we must capture cookies from every hop instead of relying on
-    // Dio's automatic redirect handling.
-    final registrarAuthResp = await _followRedirectsManually(
-      urls.registrarAuth(ticket),
-    );
-    if (registrarAuthResp.statusCode != 200) {
-      throw const ApiError(reason: FailReason.invalidResponse);
-    }
-
-    // Fetch calendar data
-    final resp = await _myFetchWithToken(
-      urls.registrarCalendar(
-        resolvedStartDate,
-        resolvedEndDate,
-        graduate: graduate,
-        callbackName: jsonpExtractorName,
-      ),
-    );
-    if (resp.statusCode != 200) {
-      throw const ApiError(reason: FailReason.invalidResponse);
-    }
-
-    final result = extractJSONPResult(resp.data.toString()) as List;
-    return result
-        .map(
-          (i) => CalendarEvent(
-            location: i['dd']?.toString() ?? '',
-            status: i['fl']?.toString() ?? '',
-            startTime: i['kssj']?.toString() ?? '',
-            endTime: i['jssj']?.toString() ?? '',
-            date: i['nq']?.toString() ?? '',
-            courseName: i['nr']?.toString() ?? '',
-          ),
-        )
-        .toList();
+    return RegistrarCalendarApi(
+      dio: _dio,
+      fetchTicket: () async {
+        final response = await _myFetchWithToken(
+          urls.registrarTicket(),
+          method: 'POST',
+          data: FormData.fromMap(urls.registrarTicketFormData()),
+        );
+        return response.data.toString();
+      },
+    ).getCalendar(resolvedStartDate, resolvedEndDate, graduate: graduate);
   }
 
   String _normalizeRegistrarDateParam(String raw) {
@@ -1098,13 +1076,17 @@ class Learn2018Helper implements LearningReadApi {
 
     for (final c in result) {
       List<dynamic> timeAndLocation = [];
+      var timeAndLocationLoaded = false;
       try {
         final tlJson = await _fetchJson(
           urls.learnCourseTimeLocation(c['wlkcid'].toString()),
         );
-        if (tlJson is List) timeAndLocation = tlJson;
+        if (tlJson is List) {
+          timeAndLocation = tlJson;
+          timeAndLocationLoaded = true;
+        }
       } catch (_) {
-        // Non-blocking: some courses don't have time/location
+        // Keep the roster usable; consumers preserve previously cached metadata.
       }
 
       courses.add(
@@ -1114,6 +1096,7 @@ class Learn2018Helper implements LearningReadApi {
           chineseName: decodeHTML(c['kcm']?.toString()),
           englishName: decodeHTML(c['ywkcm']?.toString()),
           timeAndLocation: timeAndLocation,
+          timeAndLocationLoaded: timeAndLocationLoaded,
           url: urls.learnCoursePage(c['wlkcid'].toString(), courseType),
           teacherName: c['jsm']?.toString() ?? '',
           teacherNumber: c['jsh']?.toString() ?? '',

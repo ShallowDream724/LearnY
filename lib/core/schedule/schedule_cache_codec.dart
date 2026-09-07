@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart' show listEquals;
 
 import 'schedule_models.dart';
 
-const int _homeScheduleCacheVersion = 1;
+const int _homeScheduleCacheVersion = 2;
 const int _homeScheduleRemoteRefreshStateVersion = 1;
 String encodeHomeScheduleRemoteRefreshPayload(
   HomeScheduleRemoteRefreshState state,
@@ -14,6 +14,7 @@ String encodeHomeScheduleRemoteRefreshPayload(
     'semesterId': state.semesterId,
     'lastAttemptAt': state.lastAttemptAt.millisecondsSinceEpoch,
     'hasSuccessfulRefresh': state.hasSuccessfulRefresh,
+    'failure': state.failure?.name,
   });
 }
 
@@ -38,6 +39,9 @@ HomeScheduleRemoteRefreshState? decodeHomeScheduleRemoteRefreshPayload(
       semesterId: semesterId,
       lastAttemptAt: DateTime.fromMillisecondsSinceEpoch(lastAttemptAtMs),
       hasSuccessfulRefresh: hasSuccessfulRefresh,
+      failure: ScheduleFailure.values
+          .where((value) => value.name == decoded['failure'])
+          .firstOrNull,
     );
   } catch (_) {
     return null;
@@ -62,6 +66,9 @@ String encodeHomeScheduleSnapshotCachePayload({
                 'startTime': item.startTime,
                 'endTime': item.endTime,
                 'location': item.location,
+                'source': item.source.name,
+                'endTimeInferred': item.endTimeInferred,
+                'periodLabel': item.periodLabel,
               },
             )
             .toList(growable: false),
@@ -70,7 +77,7 @@ String encodeHomeScheduleSnapshotCachePayload({
 }
 
 HomeScheduleSnapshot? decodeHomeScheduleSnapshotCachePayload({
-  required String semesterId,
+  String? semesterId,
   required List<HomeScheduleDayOption> days,
   required String raw,
 }) {
@@ -79,8 +86,9 @@ HomeScheduleSnapshot? decodeHomeScheduleSnapshotCachePayload({
     if (decoded is! Map) {
       return null;
     }
-    if (decoded['version'] != _homeScheduleCacheVersion ||
-        decoded['semesterId'] != semesterId) {
+    if ((decoded['version'] != 1 &&
+            decoded['version'] != _homeScheduleCacheVersion) ||
+        (semesterId != null && decoded['semesterId'] != semesterId)) {
       return null;
     }
 
@@ -114,6 +122,13 @@ HomeScheduleSnapshot? decodeHomeScheduleSnapshotCachePayload({
               startTime: item['startTime']?.toString() ?? '',
               endTime: item['endTime']?.toString() ?? '',
               location: item['location']?.toString() ?? '',
+              source:
+                  ScheduleItemSource.values
+                      .where((source) => source.name == item['source'])
+                      .firstOrNull ??
+                  ScheduleItemSource.legacy,
+              endTimeInferred: item['endTimeInferred'] == true,
+              periodLabel: item['periodLabel']?.toString() ?? '',
             ),
           )
           .toList(growable: false);

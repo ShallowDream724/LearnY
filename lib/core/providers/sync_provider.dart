@@ -13,6 +13,8 @@ import '../sync/sync_timing_tracker.dart';
 import 'providers.dart';
 import 'sync_models.dart';
 
+import 'course_catalog_provider.dart';
+
 export 'sync_models.dart';
 export 'home_data_provider.dart';
 
@@ -26,6 +28,7 @@ final _syncEngineProvider = Provider<SyncEngine>((ref) {
     database: ref.watch(databaseProvider),
     fileRepository: ref.watch(fileRepositoryProvider),
     semesterRepository: ref.watch(semesterRepositoryProvider),
+    courseCatalog: ref.watch(courseCatalogRepositoryProvider),
   );
 });
 

@@ -260,7 +260,9 @@ void main() {
       await fixture.container.read(serverCurrentSemesterIdProvider.future);
       fixture.container.listen(homeScheduleProvider, (_, _) {});
       final schedule = await fixture.container.read(
-        homeScheduleProvider.future,
+        scheduleWeekProvider(
+          fixture.container.read(homeScheduleWeekStartProvider),
+        ).future,
       );
       expect(
         schedule.snapshot.itemsByDateKey.values.expand((items) => items),

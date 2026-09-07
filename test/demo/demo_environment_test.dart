@@ -34,7 +34,7 @@ void main() {
       expect(await db.getHomeworksBySemester(official), hasLength(12));
       expect(
         await db.getState(AppStateKeys.homeScheduleSemesterCache(official)),
-        isNotNull,
+        isNull,
       );
 
       final sync = await container

@@ -3,6 +3,32 @@
 Local diagnostics for the login, ticket bootstrap, fallback bootstrap, and
 auto-relogin recovery chain.
 
+## Registrar Calendar Probe
+
+`capture_calendar_gateway.mjs` opens an isolated Edge profile for manual campus
+authorization. It saves campus cookies to ignored `.out/calendar-gateway/`.
+`calendar_probe_runner_test.dart` reads a snapshot of app cookies into memory,
+optionally imports that capture, and calls the production calendar client.
+It never changes the installed app's cookie files or prints cookie values.
+
+```powershell
+conda activate aider
+node tool/auth_diag/capture_calendar_gateway.mjs
+$env:LEARNY_PROBE_COOKIES = "$env:APPDATA/LearnY/LearnY/cookies"
+$env:LEARNY_PROBE_GATEWAY_COOKIES = "$PWD/tool/auth_diag/.out/calendar-gateway/cookies.json"
+$env:LEARNY_PROBE_EXTENDED = '1'
+flutter test --no-pub tool/auth_diag/calendar_probe_runner_test.dart
+Remove-Item Env:LEARNY_PROBE_COOKIES, Env:LEARNY_PROBE_GATEWAY_COOKIES, Env:LEARNY_PROBE_EXTENDED
+```
+
+The extended probe independently checks a historical week, the graduate
+calendar variant, the autumn Learn roster, and the actual schedule repository
+using a fresh in-memory database. It reports counts and classified failures;
+an empty response is not proof that a term is unpublished or fully authorized.
+Inspect reported statuses: the diagnostic runner can finish successfully even
+when a school service reports an error. Browser profiles and captures contain
+credentials and must remain untracked.
+
 ## Why this exists
 
 - Keep auth debugging out of production UI flows.

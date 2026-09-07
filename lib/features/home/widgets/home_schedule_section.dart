@@ -3,12 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/auth_controller.dart';
-import '../../../core/providers/app_providers.dart';
 import '../../../core/router/router.dart';
 import '../../../core/schedule/schedule_models.dart';
 import '../../../core/schedule/schedule_projection.dart';
 import '../providers/home_schedule_provider.dart';
+import '../../auth/widgets/campus_authorization_screen.dart';
 import 'schedule_browser.dart';
+import 'schedule_dialog.dart';
 
 bool shouldShowHomeTodayScheduleSection(AuthState auth) =>
     auth.canAccessCachedData;
@@ -21,15 +22,12 @@ class HomeTodayScheduleSection extends ConsumerWidget {
     if (!shouldShowHomeTodayScheduleSection(ref.watch(authProvider))) {
       return const SizedBox.shrink();
     }
-    final semesterId = ref.watch(currentSemesterIdProvider);
     final today = ref.watch(homeScheduleTodayProvider);
     final selected = ref.watch(homeScheduleSelectedDateProvider) ?? today;
     final days = ref.watch(homeScheduleVisibleDaysProvider);
     final asyncState = ref.watch(homeScheduleProvider).unwrapPrevious();
     final state = asyncState.valueOrNull;
-    final current =
-        state?.semesterId == semesterId &&
-            state?.snapshot.days.first.dateKey == days.first.dateKey
+    final current = state?.snapshot.days.first.dateKey == days.first.dateKey
         ? state
         : null;
 
@@ -60,6 +58,17 @@ class HomeTodayScheduleSection extends ConsumerWidget {
           }
         },
         onOpenCourse: (id) => context.push(Routes.courseDetail(id)),
+        onAuthorize: () async {
+          if (await showCampusAuthorization(context, selected) &&
+              context.mounted) {
+            await ref.read(homeScheduleActionsProvider).refresh();
+          }
+        },
+        onOpenWeek: () => showScheduleDialog(
+          context,
+          initialDate: selected,
+          onOpenCourse: (id) => context.push(Routes.courseDetail(id)),
+        ),
       ),
     );
   }

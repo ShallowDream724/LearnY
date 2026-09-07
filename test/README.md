@@ -20,6 +20,12 @@ failure, timeout, cancellation, and account cleanup. Projection and cache codec
 checks run without widgets. The optional `tool/ui_preview/` runner renders real
 widgets with local fonts and demo data for visual inspection.
 
+Schedule regressions also cover authoritative enrollment updates, withdrawn
+courses in stale registrar responses, historical retention, holiday moves,
+bounded and enumerated weeks, unassigned courses, and inferred duration.
+Campus-cookie tests check host isolation; actual Android CookieManager and
+Windows WebView2 integration require device validation.
+
 ## Manual diagnostics
 
 Files under `tool/auth_diag/` are explicit diagnostic entry points and have never

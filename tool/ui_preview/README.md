@@ -18,3 +18,8 @@ Use a locally installed CJK font. Fonts are read only and are not copied into
 the repository. PNGs are written under `build/ui_preview/`, including phone,
 tablet, desktop, empty, sparse, and dense schedules, plus the actual home shell.
 Screenshots complement behavioral assertions under `test/features/home/`.
+
+The `estimated` sample includes jagged inferred-duration blocks, provenance,
+and an unassigned lab reminder. Dense samples retain 30 and 35 occurrences;
+the timetable scrolls vertically when needed. Every width also captures the
+compact daily entry before opening the independent weekly overlay.

@@ -2,15 +2,14 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
 
+import '../../../core/design/app_theme_colors.dart';
+import '../../../core/design/typography.dart';
 import '../../../core/schedule/schedule_models.dart';
 import '../../../core/schedule/schedule_projection.dart';
-import 'schedule_course_entry.dart';
+import 'schedule_status.dart';
 
-enum ScheduleView { day, week }
-
-/// Navigation is local UI state; the selected date and data belong to the caller.
+/// The home keeps a daily pager. Weekly browsing is a separate full-screen task.
 class ScheduleBrowser extends StatefulWidget {
   const ScheduleBrowser({
     super.key,
@@ -21,9 +20,11 @@ class ScheduleBrowser extends StatefulWidget {
     required this.snapshot,
     required this.onOpenCourse,
     required this.onRetry,
+    required this.onOpenWeek,
     this.isLoading = false,
     this.hasCalendarData = true,
     this.failure,
+    this.onAuthorize,
   });
 
   final List<HomeScheduleDayOption> days;
@@ -33,507 +34,382 @@ class ScheduleBrowser extends StatefulWidget {
   final HomeScheduleSnapshot snapshot;
   final ValueChanged<String> onOpenCourse;
   final VoidCallback onRetry;
+  final VoidCallback onOpenWeek;
   final bool isLoading;
   final bool hasCalendarData;
   final ScheduleFailure? failure;
+  final VoidCallback? onAuthorize;
 
   @override
   State<ScheduleBrowser> createState() => _ScheduleBrowserState();
 }
 
 class _ScheduleBrowserState extends State<ScheduleBrowser> {
-  final _focus = FocusNode(debugLabel: 'schedule-navigation');
-  ScheduleView? _view;
-  bool _showWeekend = false;
-  bool _expandedDay = false;
+  static final _firstDay = DateTime(1970, 1, 5);
+  static final _lastDay = DateTime(2100, 12, 31);
+  int _pageFor(DateTime date) =>
+      DateTime(date.year, date.month, date.day).difference(_firstDay).inDays;
+  late final PageController _pages = PageController(
+    initialPage: _pageFor(widget.selectedDate),
+  );
+  final _focus = FocusNode(debugLabel: 'daily-schedule');
+  int get _index => widget.days
+      .indexWhere((day) => DateUtils.isSameDay(day.date, widget.selectedDate))
+      .clamp(0, widget.days.length - 1);
 
   @override
   void didUpdateWidget(covariant ScheduleBrowser oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!DateUtils.isSameDay(oldWidget.selectedDate, widget.selectedDate)) {
-      _expandedDay = false;
+    if (_pages.hasClients &&
+        _pages.page?.round() != _pageFor(widget.selectedDate)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _pages.hasClients) {
+          _pages.jumpToPage(_pageFor(widget.selectedDate));
+        }
+      });
     }
   }
 
   @override
   void dispose() {
+    _pages.dispose();
     _focus.dispose();
     super.dispose();
   }
 
-  void _select(DateTime date) {
+  void _move(int delta) {
     _focus.requestFocus();
-    widget.onDateSelected(DateUtils.dateOnly(date));
+    final date = widget.selectedDate.add(Duration(days: delta));
+    if (!date.isBefore(_firstDay) && !date.isAfter(_lastDay)) {
+      widget.onDateSelected(date);
+    }
   }
-
-  void _moveWeek(int direction) =>
-      _select(widget.selectedDate.add(Duration(days: 7 * direction)));
 
   Future<void> _pickDate() async {
     final date = await showDatePicker(
       context: context,
       initialDate: widget.selectedDate,
       currentDate: widget.today,
-      firstDate: DateTime(1970),
-      lastDate: DateTime(2100, 12, 31),
-      helpText: '选择课表日期',
+      firstDate: _firstDay,
+      lastDate: _lastDay,
     );
-    if (date != null && mounted) _select(date);
+    if (date != null && mounted) widget.onDateSelected(date);
   }
-
-  KeyEventResult _onKey(KeyEvent event, ScheduleView view) {
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-      return KeyEventResult.ignored;
-    }
-    final key = event.logicalKey;
-    if (key == LogicalKeyboardKey.arrowLeft ||
-        key == LogicalKeyboardKey.arrowRight) {
-      final step = view == ScheduleView.week ? 7 : 1;
-      _select(
-        widget.selectedDate.add(
-          Duration(days: key == LogicalKeyboardKey.arrowLeft ? -step : step),
-        ),
-      );
-    } else if (key == LogicalKeyboardKey.home) {
-      _select(widget.today);
-    } else if (key == LogicalKeyboardKey.end) {
-      _select(widget.days.last.date);
-    } else {
-      return KeyEventResult.ignored;
-    }
-    return KeyEventResult.handled;
-  }
-
-  String get _failureMessage => switch (widget.failure) {
-    ScheduleFailure.timeout => '课表更新超时',
-    ScheduleFailure.sessionExpired => '会话已过期，请重新登录',
-    ScheduleFailure.network => '课表暂时无法更新',
-    ScheduleFailure.storage => '课表缓存读取失败',
-    null => '',
-  };
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
-      final wide = constraints.maxWidth >= 820 * math.min(scale, 1.5);
-      final view = _view ?? (wide ? ScheduleView.week : ScheduleView.day);
-      final allEmpty = !hasScheduleItems(widget.snapshot);
-      final activeDays = widget.snapshot.itemsByDateKey.values.where(
-        (items) => items.isNotEmpty,
-      );
-      final sparse =
-          activeDays.length <= 2 &&
-          activeDays.fold<int>(0, (sum, items) => sum + items.length) <= 3;
-      final controls = _modeControls(view, showWeekOptions: wide);
-      final navigation = _weekNavigation();
-      return Focus(
-        focusNode: _focus,
-        onKeyEvent: (_, event) => _onKey(event, view),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (wide)
-              Row(
-                children: [
-                  Text('课表', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(width: 20),
-                  navigation,
-                  const Spacer(),
-                  controls,
-                ],
-              )
-            else ...[
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '课表',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
-                  controls,
-                ],
-              ),
-              Align(alignment: Alignment.centerLeft, child: navigation),
-            ],
-            if (widget.failure != null && !allEmpty)
-              _status('$_failureMessage，显示已保存课程', error: true),
-            if (view == ScheduleView.day) ...[
-              _dayStrip(),
-              _dayAgenda(wide: constraints.maxWidth >= 640),
-            ] else if (allEmpty)
-              _emptyMessage(week: true)
-            else if (wide)
-              !_showWeekend && sparse ? _sparseWeekAgenda() : _weekColumns()
-            else
-              _weekList(),
-          ],
-        ),
-      );
-    },
-  );
-
-  Widget _modeControls(ScheduleView view, {required bool showWeekOptions}) =>
-      Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SegmentedButton<ScheduleView>(
-            segments: const [
-              ButtonSegment(value: ScheduleView.day, label: Text('日')),
-              ButtonSegment(value: ScheduleView.week, label: Text('周')),
-            ],
-            selected: {view},
-            showSelectedIcon: false,
-            style: ButtonStyle(
-              visualDensity: VisualDensity.compact,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              backgroundColor: WidgetStateProperty.resolveWith(
-                (states) => states.contains(WidgetState.selected)
-                    ? Theme.of(context).colorScheme.onSurface.withAlpha(24)
-                    : null,
-              ),
-              foregroundColor: WidgetStatePropertyAll(
-                Theme.of(context).colorScheme.onSurface,
-              ),
-              shape: WidgetStatePropertyAll(
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-              ),
-              side: WidgetStatePropertyAll(
-                BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
-              ),
-              minimumSize: const WidgetStatePropertyAll(Size(36, 32)),
-              padding: const WidgetStatePropertyAll(
-                EdgeInsets.symmetric(horizontal: 10),
-              ),
-            ),
-            onSelectionChanged: (value) => setState(() => _view = value.single),
-          ),
-          const SizedBox(width: 6),
-          IconButton(
-            tooltip: widget.isLoading ? '正在更新课表' : '刷新课表',
-            onPressed: widget.isLoading ? null : widget.onRetry,
-            icon: widget.isLoading
-                ? const SizedBox.square(
-                    dimension: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.refresh, size: 19),
-          ),
-          if (view == ScheduleView.week && showWeekOptions)
-            PopupMenuButton<bool>(
-              tooltip: '课表显示选项',
-              icon: const Icon(Icons.more_horiz, size: 19),
-              onSelected: (value) => setState(() => _showWeekend = value),
-              itemBuilder: (_) => [
-                CheckedPopupMenuItem(
-                  value: !_showWeekend,
-                  checked: _showWeekend,
-                  child: const Text('始终显示周末'),
-                ),
-              ],
-            ),
-        ],
-      );
-
-  Widget _weekNavigation() => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      IconButton(
-        tooltip: '上一周',
-        onPressed: () => _moveWeek(-1),
-        icon: const Icon(Icons.chevron_left, size: 20),
-      ),
-      Flexible(
-        child: TextButton(
-          onPressed: _pickDate,
-          child: Text(
-            '${DateFormat(widget.days.first.date.year == widget.today.year ? 'M/d' : 'yyyy/M/d').format(widget.days.first.date)} - ${DateFormat('M/d').format(widget.days.last.date)}',
-            style: const TextStyle(fontSize: 13),
-          ),
-        ),
-      ),
-      IconButton(
-        tooltip: '下一周',
-        onPressed: () => _moveWeek(1),
-        icon: const Icon(Icons.chevron_right, size: 20),
-      ),
-      IconButton(
-        tooltip: '回到今天',
-        onPressed: () => _select(widget.today),
-        icon: const Icon(Icons.today_outlined, size: 18),
-      ),
-    ],
-  );
-
-  Widget _dayStrip() => Row(
-    children: [
-      for (final day in widget.days)
-        Expanded(
-          child: Semantics(
-            selected: DateUtils.isSameDay(day.date, widget.selectedDate),
-            child: TextButton(
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                minimumSize: const Size(32, 40),
-                backgroundColor:
-                    DateUtils.isSameDay(day.date, widget.selectedDate)
-                    ? Theme.of(context).colorScheme.primaryContainer
-                    : null,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-              onPressed: () => _select(day.date),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    day.isToday ? '今天' : day.weekdayLabel,
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  Text('${day.date.day}', style: const TextStyle(fontSize: 13)),
-                ],
-              ),
-            ),
-          ),
-        ),
-    ],
-  );
-
-  Widget _dayAgenda({required bool wide}) {
-    final day = widget.days.firstWhere(
-      (day) => DateUtils.isSameDay(day.date, widget.selectedDate),
-      orElse: () => widget.days.first,
-    );
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final day = widget.days[_index];
     final items = widget.snapshot.itemsFor(day);
-    final visible = wide || _expandedDay ? items : items.take(3).toList();
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onHorizontalDragEnd: (details) {
-        final velocity = details.primaryVelocity ?? 0;
-        if (velocity.abs() > 80) {
-          _select(
-            widget.selectedDate.add(Duration(days: velocity < 0 ? 1 : -1)),
-          );
+    final scale = math.max(
+      1.0,
+      MediaQuery.textScalerOf(context).scale(12) / 12,
+    );
+    return Focus(
+      focusNode: _focus,
+      onKeyEvent: (_, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+          _move(-1);
+          return KeyEventResult.handled;
         }
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          _move(1);
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
       },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (items.isEmpty)
-            _emptyMessage(week: false)
-          else
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final width = wide
-                    ? (constraints.maxWidth - 16) / 2
-                    : constraints.maxWidth;
-                return Wrap(
-                  spacing: 16,
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  day.isToday ? '今日课程' : '课程安排',
+                  style: AppTypography.headlineSmall.copyWith(color: c.text),
+                ),
+              ),
+              if (!day.isToday)
+                IconButton(
+                  tooltip: '回到今天',
+                  onPressed: () => widget.onDateSelected(widget.today),
+                  icon: const Icon(Icons.today_outlined, size: 19),
+                ),
+              if (widget.onAuthorize != null &&
+                  (widget.failure == ScheduleFailure.campusAccess ||
+                      widget.failure == ScheduleFailure.registrarAuthorization))
+                IconButton(
+                  tooltip: '授权访问教务课表',
+                  onPressed: widget.onAuthorize,
+                  icon: const Icon(Icons.vpn_key_outlined, size: 19),
+                ),
+              IconButton(
+                tooltip: '刷新课表',
+                onPressed: widget.isLoading ? null : widget.onRetry,
+                icon: widget.isLoading
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh, size: 19),
+              ),
+              IconButton(
+                tooltip: '查看整周课表',
+                onPressed: widget.onOpenWeek,
+                icon: const Icon(Icons.calendar_view_week_outlined, size: 20),
+              ),
+            ],
+          ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final columns =
+                  items.length == 1 || constraints.maxWidth < 280 || scale > 1.4
+                  ? 1
+                  : 2;
+              final tileHeight = 70.0 * scale;
+              final rows = (items.length / columns).ceil();
+              final contentHeight = items.isEmpty
+                  ? (widget.failure != null ? 58.0 : 38.0) * scale
+                  : rows * tileHeight + math.max(0, rows - 1) * 6 + 8;
+              return Container(
+                decoration: BoxDecoration(
+                  color: c.surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: c.border, width: .5),
+                ),
+                child: Column(
                   children: [
-                    for (final item in visible)
-                      SizedBox(
-                        width: width,
-                        child: ScheduleCourseEntry(
-                          item: item,
-                          onOpen: widget.onOpenCourse,
+                    Row(
+                      children: [
+                        const SizedBox(width: 4),
+                        IconButton(
+                          tooltip: '前一天',
+                          onPressed: () => _move(-1),
+                          icon: const Icon(Icons.chevron_left, size: 18),
+                        ),
+                        Expanded(
+                          child: TextButton(
+                            onPressed: _pickDate,
+                            child: Text(
+                              '${day.isToday ? '今天 · ' : ''}${day.weekdayLabel} · ${day.shortDateLabel}',
+                              style: AppTypography.labelMedium.copyWith(
+                                color: c.text,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: '后一天',
+                          onPressed: () => _move(1),
+                          icon: const Icon(Icons.chevron_right, size: 18),
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                    ),
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 180),
+                      alignment: Alignment.topCenter,
+                      child: SizedBox(
+                        height: contentHeight,
+                        child: PageView.builder(
+                          controller: _pages,
+                          itemCount: _pageFor(_lastDay) + 1,
+                          onPageChanged: (index) {
+                            if (index != _pageFor(widget.selectedDate)) {
+                              widget.onDateSelected(
+                                _firstDay.add(Duration(days: index)),
+                              );
+                            }
+                          },
+                          itemBuilder: (context, index) {
+                            final date = buildHomeScheduleDays(
+                              _firstDay.add(Duration(days: index)),
+                              length: 1,
+                              today: widget.today,
+                            ).single;
+                            final entries = widget.snapshot.itemsFor(date);
+                            if (entries.isEmpty) {
+                              final text =
+                                  widget.failure != null &&
+                                      !widget.snapshot.hasRoutineData
+                                  ? scheduleFailureLabel(widget.failure!)
+                                  : widget.isLoading && !widget.hasCalendarData
+                                  ? '正在加载课表'
+                                  : !widget.hasCalendarData
+                                  ? '暂无课表缓存'
+                                  : date.isToday
+                                  ? '今天没有课'
+                                  : '${date.shortDateLabel} 没有课';
+                              return Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  12,
+                                  0,
+                                  12,
+                                  8,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      widget.failure == null
+                                          ? Icons.event_available_outlined
+                                          : Icons.cloud_off_outlined,
+                                      size: 17,
+                                      color: c.tertiary,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        text,
+                                        style: AppTypography.bodySmall.copyWith(
+                                          color: c.subtitle,
+                                        ),
+                                      ),
+                                    ),
+                                    if (widget.failure != null)
+                                      IconButton(
+                                        tooltip: '重试课表',
+                                        onPressed: widget.onRetry,
+                                        icon: const Icon(
+                                          Icons.refresh,
+                                          size: 18,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              );
+                            }
+                            return GridView.builder(
+                              primary: false,
+                              physics: const NeverScrollableScrollPhysics(),
+                              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                              itemCount: entries.length,
+                              gridDelegate:
+                                  SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: entries.length == 1
+                                        ? 1
+                                        : columns,
+                                    crossAxisSpacing: 8,
+                                    mainAxisSpacing: 6,
+                                    mainAxisExtent: tileHeight,
+                                  ),
+                              itemBuilder: (_, i) => _DailyCourseTile(
+                                item: entries[i],
+                                onOpen: widget.onOpenCourse,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    ScheduleNotes(
+                      snapshot: widget.snapshot,
+                      onOpenCourse: widget.onOpenCourse,
+                    ),
+                    if (widget.failure != null &&
+                        items.isNotEmpty &&
+                        !widget.snapshot.hasRoutineData)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                scheduleFailureLabel(widget.failure!),
+                                style: AppTypography.bodySmall.copyWith(
+                                  color: c.subtitle,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: '重试课表',
+                              onPressed: widget.onRetry,
+                              icon: const Icon(Icons.refresh, size: 18),
+                            ),
+                          ],
                         ),
                       ),
                   ],
-                );
-              },
-            ),
-          if (visible.length < items.length)
-            TextButton.icon(
-              onPressed: () => setState(() => _expandedDay = true),
-              icon: const Icon(Icons.expand_more, size: 18),
-              label: Text('还有 ${items.length - visible.length} 节课'),
-            ),
+                ),
+              );
+            },
+          ),
         ],
       ),
     );
   }
+}
 
-  List<HomeScheduleDayOption> get _visibleWeekDays => widget.days
-      .where(
-        (day) =>
-            _showWeekend ||
-            widget.isLoading ||
-            widget.failure != null ||
-            !widget.hasCalendarData ||
-            day.date.weekday <= 5 ||
-            widget.snapshot.itemsFor(day).isNotEmpty,
-      )
-      .toList();
-
-  void _openDay(HomeScheduleDayOption day) {
-    setState(() => _view = ScheduleView.day);
-    _select(day.date);
-  }
-
-  Widget _weekColumns() => Padding(
-    padding: const EdgeInsets.only(top: 4),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final day in _visibleWeekDays)
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  TextButton(
-                    style: TextButton.styleFrom(
-                      minimumSize: const Size(0, 32),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    onPressed: () => _openDay(day),
-                    child: Text(
-                      '${day.isToday ? '今天' : day.weekdayLabel} ${day.shortDateLabel}',
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  ),
-                  for (final item in widget.snapshot.itemsFor(day).take(3))
-                    ScheduleCourseEntry(
-                      item: item,
-                      onOpen: widget.onOpenCourse,
-                      stacked: true,
-                    ),
-                  if (widget.snapshot.itemsFor(day).isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: Text(
-                        '无课',
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
-                      ),
-                    ),
-                  if (widget.snapshot.itemsFor(day).length > 3)
-                    TextButton(
-                      style: TextButton.styleFrom(
-                        minimumSize: const Size(0, 32),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      onPressed: () => _openDay(day),
-                      child: Text(
-                        '+${widget.snapshot.itemsFor(day).length - 3} 节',
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-      ],
-    ),
-  );
-
-  Widget _sparseWeekAgenda() => Column(
-    children: [
-      for (final day in widget.days)
-        if (widget.snapshot.itemsFor(day).isNotEmpty)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: 112,
-                child: TextButton(
-                  onPressed: () => _openDay(day),
-                  child: Text(
-                    '${day.isToday ? '今天' : day.weekdayLabel} ${day.shortDateLabel}',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: Column(
+class _DailyCourseTile extends StatelessWidget {
+  const _DailyCourseTile({required this.item, required this.onOpen});
+  final TodayScheduleItem item;
+  final ValueChanged<String> onOpen;
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final canOpen = item.courseId?.isNotEmpty ?? false;
+    return Tooltip(
+      message: '${item.courseName}\n${item.timeLabel}\n${item.location}',
+      child: Material(
+        color: c.bg,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: canOpen
+              ? () => onOpen(item.courseId!)
+              : () => showScheduleItemDetails(context, item),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Row(
                   children: [
-                    for (final item in widget.snapshot.itemsFor(day))
-                      ScheduleCourseEntry(
-                        item: item,
-                        onOpen: widget.onOpenCourse,
+                    Expanded(
+                      child: Text(
+                        item.startTime.isEmpty ? '待定' : item.startTime,
+                        style: TextStyle(
+                          fontSize: 11,
+                          height: 1.1,
+                          fontWeight: FontWeight.w700,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
                       ),
+                    ),
+                    if (canOpen)
+                      Icon(Icons.chevron_right, size: 14, color: c.tertiary),
                   ],
                 ),
-              ),
-            ],
-          ),
-    ],
-  );
-
-  Widget _weekList() => Column(
-    children: [
-      for (final day in _visibleWeekDays)
-        if (widget.snapshot.itemsFor(day).isNotEmpty)
-          InkWell(
-            onTap: () => _openDay(day),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 62,
-                    child: Text(
-                      '${day.weekdayLabel}\n${day.shortDateLabel}',
-                      style: const TextStyle(fontSize: 12),
-                    ),
+                const SizedBox(height: 4),
+                Text(
+                  item.courseName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.15,
+                    fontWeight: FontWeight.w700,
+                    color: c.text,
                   ),
-                  Expanded(
-                    child: Text(
-                      widget.snapshot
-                          .itemsFor(day)
-                          .map((item) => item.courseName)
-                          .join('、'),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 13),
-                    ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  item.location.isEmpty ? '地点待定' : item.location,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    height: 1.1,
+                    color: c.tertiary,
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${widget.snapshot.itemsFor(day).length} 节',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  const Icon(Icons.chevron_right, size: 16),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-    ],
-  );
-
-  Widget _emptyMessage({required bool week}) {
-    final message = widget.isLoading && !widget.hasCalendarData
-        ? '正在更新课表'
-        : widget.failure != null
-        ? _failureMessage
-        : !widget.hasCalendarData
-        ? '暂无这周的课表缓存'
-        : week
-        ? '本周没有课'
-        : DateUtils.isSameDay(widget.selectedDate, widget.today)
-        ? '今天没有课'
-        : '${DateFormat('M月d日').format(widget.selectedDate)} 没有课';
-    return _status(message, error: widget.failure != null);
+        ),
+      ),
+    );
   }
-
-  Widget _status(String message, {bool error = false}) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 12),
-    child: Row(
-      children: [
-        Icon(
-          error ? Icons.cloud_off_outlined : Icons.event_available_outlined,
-          size: 17,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(message, style: Theme.of(context).textTheme.bodySmall),
-        ),
-        if (error && !widget.isLoading)
-          TextButton(onPressed: widget.onRetry, child: const Text('重试')),
-      ],
-    ),
-  );
 }

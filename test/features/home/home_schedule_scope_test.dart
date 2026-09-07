@@ -65,6 +65,13 @@ void main() {
           DateTime(2026, 9, 15);
       await container.pump();
       expect(client.calls, hasLength(1));
+      container.read(currentSemesterIdProvider.notifier).state = '2025-2026-3';
+      await container.pump();
+      expect(
+        client.calls,
+        hasLength(1),
+        reason: 'Learn semester selection does not invalidate calendar data',
+      );
     },
   );
 
@@ -134,7 +141,11 @@ void main() {
       await container.read(minuteTickProvider.future);
       await container.read(serverCurrentSemesterIdProvider.future);
       container.listen(homeScheduleProvider, (_, _) {});
-      final state = await container.read(homeScheduleProvider.future);
+      final state = await container.read(
+        scheduleWeekProvider(
+          container.read(homeScheduleWeekStartProvider),
+        ).future,
+      );
       expect(
         state.snapshot.itemsFor(days.first).single.courseName,
         'Cached course',

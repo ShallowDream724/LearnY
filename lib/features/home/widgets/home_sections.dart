@@ -38,15 +38,6 @@ class HomeSectionTitle extends StatelessWidget {
 
     return Row(
       children: [
-        Container(
-          width: 4,
-          height: 18,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-        const SizedBox(width: 8),
         Text(title, style: AppTypography.headlineSmall.copyWith(color: c.text)),
         const Spacer(),
         if (count > 0)

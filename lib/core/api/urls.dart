@@ -337,8 +337,9 @@ Map<String, String> registrarTicketFormData() {
 
 String registrarTicket() => '$learnPrefix/b/wlxt/common/auth/gnt';
 
-String registrarAuth(String ticket) =>
-    '$registrarPrefix/j_acegi_login.do?url=/&ticket=$ticket';
+String registrarAuth(String ticket) => Uri.parse(
+  '$registrarPrefix/j_acegi_login.do',
+).replace(queryParameters: {'url': '/', 'ticket': ticket}).toString();
 
 String registrarCalendar(
   String startDate,

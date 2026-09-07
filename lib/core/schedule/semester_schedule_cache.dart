@@ -17,8 +17,6 @@ class SemesterScheduleCache {
   final String semesterId;
   final String semesterStartDate;
   final List<SemesterScheduleCourse> courses;
-
-  bool get hasAnyMeetings => courses.isNotEmpty;
 }
 
 class SemesterScheduleCourse {
@@ -61,6 +59,8 @@ class ResolvedSemesterScheduleItem {
     required this.startTime,
     required this.endTime,
     required this.location,
+    this.endTimeInferred = false,
+    this.periodLabel = '',
   });
 
   final String courseId;
@@ -68,6 +68,8 @@ class ResolvedSemesterScheduleItem {
   final String startTime;
   final String endTime;
   final String location;
+  final bool endTimeInferred;
+  final String periodLabel;
 }
 
 class _ScheduledOccurrence {
@@ -88,7 +90,6 @@ class _ScheduledOccurrence {
   final bool usesTeachingBlockClock;
 }
 
-const int _semesterScheduleCacheVersion = 1;
 const int _fullWeekCount = 30;
 
 SemesterScheduleCache buildSemesterScheduleCacheFromCourses({
@@ -116,127 +117,6 @@ SemesterScheduleCache buildSemesterScheduleCacheFromCourses({
     semesterStartDate: semesterStartDate,
     courses: cachedCourses,
   );
-}
-
-@visibleForTesting
-List<SemesterScheduleMeeting> decodeSemesterScheduleMeetingsForTesting(
-  String rawJson,
-) {
-  return _decodeCourseMeetings(rawJson);
-}
-
-String encodeSemesterScheduleCachePayload(SemesterScheduleCache cache) {
-  return jsonEncode({
-    'version': _semesterScheduleCacheVersion,
-    'semesterId': cache.semesterId,
-    'semesterStartDate': cache.semesterStartDate,
-    'courses': [
-      for (final course in cache.courses)
-        {
-          'courseId': course.courseId,
-          'courseName': course.courseName,
-          'meetings': [
-            for (final meeting in course.meetings)
-              {
-                'dayOfWeek': meeting.dayOfWeek,
-                'periods': meeting.periods,
-                'location': meeting.location,
-                'activeWeeks': meeting.activeWeeks == null
-                    ? null
-                    : (meeting.activeWeeks!.toList()..sort()),
-                'usesTeachingBlockClock': meeting.usesTeachingBlockClock,
-              },
-          ],
-        },
-    ],
-  });
-}
-
-SemesterScheduleCache? decodeSemesterScheduleCachePayload({
-  required String semesterId,
-  required String raw,
-}) {
-  try {
-    final decoded = jsonDecode(raw);
-    if (decoded is! Map) {
-      return null;
-    }
-    if (decoded['version'] != _semesterScheduleCacheVersion ||
-        decoded['semesterId'] != semesterId) {
-      return null;
-    }
-
-    final semesterStartDate = decoded['semesterStartDate']?.toString() ?? '';
-    if (semesterStartDate.isEmpty) {
-      return null;
-    }
-
-    final rawCourses = decoded['courses'];
-    if (rawCourses is! List) {
-      return null;
-    }
-
-    final courses = <SemesterScheduleCourse>[];
-    for (final rawCourse in rawCourses.whereType<Map>()) {
-      final courseId = rawCourse['courseId']?.toString() ?? '';
-      final courseName = rawCourse['courseName']?.toString() ?? '';
-      final rawMeetings = rawCourse['meetings'];
-      if (courseId.isEmpty || courseName.isEmpty || rawMeetings is! List) {
-        continue;
-      }
-
-      final meetings = <SemesterScheduleMeeting>[];
-      for (final rawMeeting in rawMeetings.whereType<Map>()) {
-        final dayOfWeek = rawMeeting['dayOfWeek'] as int?;
-        final periods = (rawMeeting['periods'] as List?)
-            ?.whereType<num>()
-            .map((value) => value.toInt())
-            .toList(growable: false);
-        final rawActiveWeeks = rawMeeting['activeWeeks'] as List?;
-        final activeWeeks = rawActiveWeeks
-            ?.whereType<num>()
-            .map((value) => value.toInt())
-            .toSet();
-        final location = rawMeeting['location']?.toString() ?? '';
-        final usesTeachingBlockClock =
-            rawMeeting['usesTeachingBlockClock'] == true;
-
-        if (dayOfWeek == null || periods == null || periods.isEmpty) {
-          continue;
-        }
-
-        meetings.add(
-          SemesterScheduleMeeting(
-            dayOfWeek: dayOfWeek,
-            periods: periods,
-            location: location,
-            activeWeeks: activeWeeks,
-            usesTeachingBlockClock: usesTeachingBlockClock,
-          ),
-        );
-      }
-
-      if (meetings.isEmpty) {
-        continue;
-      }
-
-      courses.add(
-        SemesterScheduleCourse(
-          courseId: courseId,
-          courseName: courseName,
-          meetings: meetings,
-        ),
-      );
-    }
-
-    return SemesterScheduleCache(
-      semesterId: semesterId,
-      semesterStartDate: semesterStartDate,
-      courses: courses,
-    );
-  } catch (_) {
-    return null;
-  }
 }
 
 Map<String, List<ResolvedSemesterScheduleItem>>
@@ -336,46 +216,91 @@ DateTime? parseDateOnly(String raw) {
   );
 }
 
-List<SemesterScheduleMeeting> _decodeCourseMeetings(String rawJson) {
+class CourseScheduleParseResult {
+  const CourseScheduleParseResult({
+    required this.meetings,
+    required this.unresolved,
+  });
+  final List<SemesterScheduleMeeting> meetings;
+  final List<String> unresolved;
+}
+
+List<SemesterScheduleMeeting> _decodeCourseMeetings(String rawJson) =>
+    parseCourseSchedule(rawJson).meetings;
+
+CourseScheduleParseResult parseCourseSchedule(String rawJson) {
   try {
     final decoded = jsonDecode(rawJson);
     if (decoded is! List) {
-      return const <SemesterScheduleMeeting>[];
+      return const CourseScheduleParseResult(
+        meetings: [],
+        unresolved: ['排课信息暂不可用'],
+      );
     }
 
     final meetings = <SemesterScheduleMeeting>[];
+    final unresolved = <String>[];
+    if (decoded.isEmpty) unresolved.add('尚未提供上课时间');
     for (final entry in decoded) {
+      final text = entry?.toString() ?? '';
       try {
-        final parsed = _parseCourseMeeting(entry?.toString() ?? '');
+        final parsed = _parseCourseMeeting(text);
         if (parsed != null) {
           meetings.add(parsed);
+        } else {
+          unresolved.add(text.isEmpty ? '尚未提供上课时间' : text);
         }
       } catch (_) {
-        // Ignore malformed entries and keep the remaining meetings.
+        unresolved.add(text);
       }
     }
-    return meetings;
+    return CourseScheduleParseResult(
+      meetings: meetings,
+      unresolved: unresolved,
+    );
   } catch (_) {
-    return const <SemesterScheduleMeeting>[];
+    return const CourseScheduleParseResult(
+      meetings: [],
+      unresolved: ['排课信息暂不可用'],
+    );
   }
 }
 
 SemesterScheduleMeeting? _parseCourseMeeting(String raw) {
-  final value = raw.replaceAll(RegExp(r'\s+'), '').trim();
+  final value = raw
+      .replaceAll(RegExp(r'\s+'), '')
+      .trim()
+      .replaceFirst(RegExp(r'^上课时间地点[:：]'), '')
+      .replaceAll('（', '(')
+      .replaceAll('）', ')')
+      .replaceAll(RegExp(r'[~～－–—]|至'), '-');
   if (value.isEmpty) {
     return null;
   }
 
   final chineseMatch = RegExp(
-    r'^星期([一二三四五六日天])第([^节]+)节\(([^)]*)\)(?:[，,](.*))?$',
+    r'^(?:第(.+?)周(?:\(([^)]*)\))?)?星期([一二三四五六日天])第([^节]+?)(小?)节(?:\(([^)]*)\))?(?:[，,](.*))?$',
   ).firstMatch(value);
   if (chineseMatch != null) {
-    final dayOfWeek = _parseChineseWeekday(chineseMatch.group(1)!);
-    final periods = _parsePeriods(chineseMatch.group(2)!);
-    final weeks = _parseWeeks(chineseMatch.group(3)!);
-    final location = (chineseMatch.group(4) ?? '').trim();
+    final dayOfWeek = _parseChineseWeekday(chineseMatch.group(3)!);
+    final periods = _parsePeriods(chineseMatch.group(4)!);
+    final prefixWeeks = chineseMatch.group(1);
+    final suffixWeeks = chineseMatch.group(6);
+    final weeks = _parseWeeks(prefixWeeks ?? suffixWeeks ?? '全周');
+    if (prefixWeeks != null && suffixWeeks != null) {
+      weeks.removeWhere((week) => !_parseWeeks(suffixWeeks).contains(week));
+    }
+    final prefixModifier = chineseMatch.group(2);
+    if (prefixModifier != null) {
+      weeks.removeWhere((week) => !_parseWeeks(prefixModifier).contains(week));
+    }
+    final location = (chineseMatch.group(7) ?? '').trim();
+    final blockClock = chineseMatch.group(5) != '小';
 
-    if (dayOfWeek == null || periods.isEmpty || weeks.isEmpty) {
+    if (dayOfWeek == null ||
+        periods.isEmpty ||
+        weeks.isEmpty ||
+        (blockClock && periods.any((period) => period > 6))) {
       return null;
     }
 
@@ -384,7 +309,7 @@ SemesterScheduleMeeting? _parseCourseMeeting(String raw) {
       periods: periods,
       location: location,
       activeWeeks: weeks.length >= _fullWeekCount ? null : weeks,
-      usesTeachingBlockClock: true,
+      usesTeachingBlockClock: blockClock,
     );
   }
 
@@ -401,7 +326,10 @@ SemesterScheduleMeeting? _parseCourseMeeting(String raw) {
   final weeks = _parseWeeks(englishMatch.group(3)!);
   final location = (englishMatch.group(4) ?? '').trim();
 
-  if (dayOfWeek == null || periods.isEmpty || weeks.isEmpty) {
+  if (dayOfWeek == null ||
+      periods.isEmpty ||
+      weeks.isEmpty ||
+      periods.any((period) => period > 6)) {
     return null;
   }
 
@@ -452,6 +380,7 @@ List<int> _parsePeriods(String raw) {
     if (rangeMatch != null) {
       final start = int.parse(rangeMatch.group(1)!);
       final end = int.parse(rangeMatch.group(2)!);
+      if (start < 1 || end > 14 || start > end) return [];
       for (var period = start; period <= end; period += 1) {
         if (period >= 1 && period <= 14) {
           periods.add(period);
@@ -463,6 +392,8 @@ List<int> _parsePeriods(String raw) {
     final single = int.tryParse(value);
     if (single != null && single >= 1 && single <= 14) {
       periods.add(single);
+    } else {
+      return [];
     }
   }
 
@@ -471,7 +402,7 @@ List<int> _parsePeriods(String raw) {
 }
 
 Set<int> _parseWeeks(String raw) {
-  final value = raw.replaceAll(' ', '');
+  final value = raw.replaceAll(RegExp(r'[\s()]'), '');
   final normalized = value.toLowerCase();
   final oddOnly = value.contains('单') || normalized.contains('odd');
   final evenOnly = value.contains('双') || normalized.contains('even');
@@ -508,6 +439,8 @@ Set<int> _parseWeeks(String raw) {
           .replaceAll('全周', '')
           .replaceAll('单周', '')
           .replaceAll('双周', '')
+          .replaceAll('单', '')
+          .replaceAll('双', '')
           .replaceAll(RegExp(r'前[一二三四五六七八九十两\d]+周'), '')
           .replaceAll(RegExp(r'后[一二三四五六七八九十两\d]+周'), '')
           .replaceAll(RegExp('all', caseSensitive: false), '')
@@ -523,6 +456,7 @@ Set<int> _parseWeeks(String raw) {
     if (rangeMatch != null) {
       final start = int.parse(rangeMatch.group(1)!);
       final end = int.parse(rangeMatch.group(2)!);
+      if (start < 1 || end > _fullWeekCount || start > end) return {};
       for (var week = start; week <= end; week += 1) {
         weeks.add(week);
       }
@@ -531,7 +465,11 @@ Set<int> _parseWeeks(String raw) {
 
     final singleMatch = RegExp(r'^(\d+)(?:周)?$').firstMatch(cleaned);
     if (singleMatch != null) {
-      weeks.add(int.parse(singleMatch.group(1)!));
+      final week = int.parse(singleMatch.group(1)!);
+      if (week < 1 || week > _fullWeekCount) return {};
+      weeks.add(week);
+    } else {
+      return {};
     }
   }
 
@@ -712,6 +650,9 @@ ResolvedSemesterScheduleItem _mapOccurrenceToResolvedItem(
       usesTeachingBlockClock: occurrence.usesTeachingBlockClock,
     ),
     location: occurrence.location,
+    endTimeInferred: occurrence.usesTeachingBlockClock,
+    periodLabel:
+        '第${occurrence.startPeriod == occurrence.endPeriod ? occurrence.startPeriod : '${occurrence.startPeriod}-${occurrence.endPeriod}'}${occurrence.usesTeachingBlockClock ? '大' : '小'}节',
   );
 }
 
@@ -735,14 +676,14 @@ String _startTimeForPeriod(int period, {required bool usesTeachingBlockClock}) {
     4: '10:40',
     5: '11:30',
     6: '13:30',
-    7: '14:25',
+    7: '14:20',
     8: '15:20',
     9: '16:10',
     10: '17:05',
     11: '17:55',
-    12: '18:45',
-    13: '19:20',
-    14: '20:10',
+    12: '19:20',
+    13: '20:10',
+    14: '21:00',
   };
   return startTimes[period] ?? '';
 }
@@ -751,7 +692,7 @@ String _endTimeForPeriod(int period, {required bool usesTeachingBlockClock}) {
   if (usesTeachingBlockClock) {
     const teachingBlockEndTimes = <int, String>{
       1: '09:35',
-      2: '12:15',
+      2: '11:25',
       3: '15:05',
       4: '16:55',
       5: '18:40',

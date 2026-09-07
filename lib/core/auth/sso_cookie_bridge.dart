@@ -26,11 +26,9 @@ class SsoCookieBridge {
     }).whereType<Cookie>();
 
     final learnUri = Uri.parse(urls.learnPrefix);
-    final idUri = Uri.parse(urls.idPrefix);
 
     for (final cookie in cookies) {
       await _api.cookieJar.saveFromResponse(learnUri, [cookie]);
-      await _api.cookieJar.saveFromResponse(idUri, [cookie]);
     }
   }
 }

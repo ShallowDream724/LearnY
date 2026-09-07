@@ -103,8 +103,13 @@ class WindowsIdentityAuthWebSurfaceController
 
   @override
   Future<String?> getCurrentCookieHeader() async {
+    return getCookieHeaderForUrl(_currentUrl);
+  }
+
+  @override
+  Future<String?> getCookieHeaderForUrl(String url) async {
     final controller = _controller;
-    final currentUrl = _currentUrl.trim();
+    final currentUrl = url.trim();
     if (controller == null || currentUrl.isEmpty) {
       return null;
     }

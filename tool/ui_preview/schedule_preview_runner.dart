@@ -12,8 +12,7 @@ import 'package:learn_y/core/providers/providers.dart';
 import 'package:learn_y/core/providers/connectivity_provider.dart';
 import 'package:learn_y/demo/demo_environment.dart';
 
-import '../../test/features/home/schedule_navigation_test.dart'
-    show ScheduleFixture, scheduleToday;
+import '../../test/support/schedule_fixture.dart';
 
 // Explicit, account-free visual review. Not part of default test discovery.
 void main() {
@@ -62,9 +61,12 @@ void main() {
     for (final width in [360.0, 600.0, 1280.0]) {
       tester.view.physicalSize = Size(width, 720);
       for (final sample in {
-        'dense': [6, 2, 4, 1, 3, 0, 0],
+        'dense30': [6, 6, 6, 6, 6, 0, 0],
+        'dense35': [7, 7, 7, 7, 7, 0, 0],
+        'weekends': [6, 6, 6, 6, 6, 1, 1],
         'sparse': [1, 0, 1, 0, 0, 0, 0],
         'empty': [0, 0, 0, 0, 0, 0, 0],
+        'estimated': [2, 2, 1, 0, 0, 0, 0],
       }.entries) {
         final key = GlobalKey();
         await tester.pumpWidget(
@@ -81,7 +83,10 @@ void main() {
                 body: SingleChildScrollView(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
-                    child: ScheduleFixture(counts: sample.value),
+                    child: ScheduleFixture(
+                      counts: sample.value,
+                      estimated: sample.key == 'estimated',
+                    ),
                   ),
                 ),
               ),
@@ -90,6 +95,9 @@ void main() {
         );
         await tester.pumpAndSettle();
         await capture(tester, key, 'schedule_${width.toInt()}_${sample.key}');
+        await tester.tap(find.byTooltip('查看整周课表'));
+        await tester.pumpAndSettle();
+        await capture(tester, key, 'week_${width.toInt()}_${sample.key}');
       }
     }
   });

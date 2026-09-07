@@ -73,9 +73,8 @@ void main() {
             (ref) => Stream.value(const HomeData()),
           ),
           homeScheduleProvider.overrideWith(
-            (ref) => Stream.value(
+            (ref) => AsyncValue.data(
               ScheduleState(
-                semesterId: null,
                 snapshot: HomeScheduleSnapshot(
                   days: buildHomeScheduleDays(DateTime(2026, 1, 1)),
                   itemsByDateKey: const {},

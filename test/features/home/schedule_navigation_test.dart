@@ -4,74 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:learn_y/core/schedule/schedule_models.dart';
-import 'package:learn_y/core/schedule/schedule_projection.dart';
 import 'package:learn_y/features/home/widgets/schedule_browser.dart';
+import 'package:learn_y/features/home/widgets/schedule_dialog.dart';
+import 'package:learn_y/features/home/widgets/weekly_timetable.dart';
 
-final scheduleToday = DateTime(2026, 9, 7);
-
-class ScheduleFixture extends StatefulWidget {
-  const ScheduleFixture({
-    super.key,
-    this.counts = const [1, 1, 1, 1, 1, 0, 0],
-    this.onOpen,
-    this.onDate,
-    this.failure,
-    this.scale = 1,
-  });
-  final List<int> counts;
-  final ValueChanged<String>? onOpen;
-  final ValueChanged<DateTime>? onDate;
-  final ScheduleFailure? failure;
-  final double scale;
-  @override
-  State<ScheduleFixture> createState() => _ScheduleFixtureState();
-}
-
-class _ScheduleFixtureState extends State<ScheduleFixture> {
-  DateTime selected = scheduleToday;
-  @override
-  Widget build(BuildContext context) {
-    final days = buildHomeScheduleDays(
-      scheduleWeekStart(selected),
-      today: scheduleToday,
-    );
-    final snapshot = HomeScheduleSnapshot(
-      days: days,
-      itemsByDateKey: {
-        for (final day in days)
-          day.dateKey: [
-            for (var i = 0; i < widget.counts[day.date.weekday - 1]; i++)
-              TodayScheduleItem(
-                courseId: '${day.date.weekday}-$i',
-                courseName:
-                    '${['计算机系统结构', '概率论与数理统计', '操作系统实验', '算法设计与分析', '线性代数', '体育专项', '课程研讨'][day.date.weekday - 1]} ${i + 1}',
-                startTime: '${(8 + i * 2).toString().padLeft(2, '0')}:00',
-                endTime: '${(9 + i * 2).toString().padLeft(2, '0')}:35',
-                location: '第六教学楼 6A301',
-              ),
-          ],
-      },
-    );
-    return MediaQuery(
-      data: MediaQuery.of(
-        context,
-      ).copyWith(textScaler: TextScaler.linear(widget.scale)),
-      child: ScheduleBrowser(
-        days: days,
-        today: scheduleToday,
-        selectedDate: selected,
-        onDateSelected: (date) {
-          setState(() => selected = date);
-          widget.onDate?.call(date);
-        },
-        snapshot: snapshot,
-        onOpenCourse: widget.onOpen ?? (_) {},
-        onRetry: () {},
-        failure: widget.failure,
-      ),
-    );
-  }
-}
+import '../../support/schedule_fixture.dart';
 
 Future<void> pumpScheduleFixture(
   WidgetTester tester, {
@@ -89,6 +26,12 @@ Future<void> pumpScheduleFixture(
     MaterialApp(
       theme: ThemeData(
         platform: width < 600 ? TargetPlatform.android : TargetPlatform.windows,
+      ),
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(
+          context,
+        ).copyWith(textScaler: TextScaler.linear(scale)),
+        child: child!,
       ),
       home: Scaffold(
         body: SingleChildScrollView(
@@ -125,167 +68,189 @@ void main() {
   }
 
   testWidgets(
-    'sparse desktop week uses a short agenda with direct course access',
+    'home remains daily on phone and desktop and opens a course directly',
     (tester) async {
       resetView(tester);
-      final opened = <String>[];
-      await pumpScheduleFixture(
-        tester,
-        counts: const [1, 0, 1, 0, 0, 0, 0],
-        onOpen: opened.add,
-      );
-      expect(find.text('周二 9/8'), findsNothing);
-      expect(
-        tester.getSize(find.byType(ScheduleBrowser)).height,
-        lessThan(200),
-      );
-      await clickScheduleMouse(tester, find.text('操作系统实验 1'));
-      expect(opened, ['3-0']);
-    },
-  );
-
-  testWidgets(
-    'desktop week overview opens courses and navigates beyond the original six days',
-    (tester) async {
-      resetView(tester);
-      final opened = <String>[];
-      final selected = <DateTime>[];
-      await pumpScheduleFixture(
-        tester,
-        onOpen: opened.add,
-        onDate: selected.add,
-      );
-      await clickScheduleMouse(tester, find.text('概率论与数理统计 1'));
-      expect(opened, ['2-0']);
-      await clickScheduleMouse(tester, find.byTooltip('下一周'));
-      expect(selected.last, DateTime(2026, 9, 14));
-      expect(find.text('9/14 - 9/20'), findsOneWidget);
-      await clickScheduleMouse(tester, find.byTooltip('上一周'));
-      expect(selected.last, scheduleToday);
-      await clickScheduleMouse(tester, find.byTooltip('上一周'));
-      expect(selected.last, DateTime(2026, 8, 31));
-      await clickScheduleMouse(tester, find.byTooltip('回到今天'));
-      expect(selected.last, scheduleToday);
-    },
-  );
-
-  testWidgets('date picker jumps directly to an arbitrary day', (tester) async {
-    resetView(tester);
-    final selected = <DateTime>[];
-    await pumpScheduleFixture(tester, onDate: selected.add);
-    await tester.tap(find.text('9/7 - 9/13'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('21'));
-    await tester.tap(find.text('OK'));
-    await tester.pumpAndSettle();
-    expect(selected.last, DateTime(2026, 9, 21));
-  });
-
-  testWidgets('keyboard and touch can cross week boundaries in the day view', (
-    tester,
-  ) async {
-    resetView(tester);
-    final selected = <DateTime>[];
-    await pumpScheduleFixture(tester, width: 360, onDate: selected.add);
-    await tester.fling(find.text('计算机系统结构 1'), const Offset(-200, 0), 600);
-    await tester.pumpAndSettle();
-    expect(find.text('概率论与数理统计 1'), findsOneWidget);
-    await tester.sendKeyEvent(LogicalKeyboardKey.end);
-    await tester.pumpAndSettle();
-    expect(selected.last, DateTime(2026, 9, 13));
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-    await tester.pumpAndSettle();
-    expect(selected.last, DateTime(2026, 9, 14));
-    await tester.sendKeyEvent(LogicalKeyboardKey.home);
-    await tester.pumpAndSettle();
-    expect(selected.last, scheduleToday);
-  });
-
-  testWidgets('dense week stays compact and exposes all six courses in a day', (
-    tester,
-  ) async {
-    resetView(tester);
-    await pumpScheduleFixture(tester, counts: const [6, 1, 2, 0, 1, 0, 0]);
-    expect(find.text('计算机系统结构 6'), findsNothing);
-    expect(tester.getSize(find.byType(ScheduleBrowser)).height, lessThan(350));
-    await clickScheduleMouse(tester, find.text('+3 节'));
-    expect(find.text('计算机系统结构 6'), findsOneWidget);
-    expect(tester.getSize(find.byType(ScheduleBrowser)).height, lessThan(350));
-  });
-
-  testWidgets('empty weekends are hidden but can be explicitly restored', (
-    tester,
-  ) async {
-    resetView(tester);
-    await pumpScheduleFixture(tester);
-    expect(find.text('周六 9/12'), findsNothing);
-    await clickScheduleMouse(tester, find.byTooltip('课表显示选项'));
-    await tester.tap(find.byType(CheckedPopupMenuItem<bool>));
-    await tester.pumpAndSettle();
-    expect(find.text('周六 9/12'), findsOneWidget);
-    await pumpScheduleFixture(tester, counts: const [1, 0, 0, 0, 0, 1, 0]);
-    expect(find.text('周六 9/12'), findsOneWidget);
-    expect(find.text('体育专项 1'), findsOneWidget);
-  });
-
-  testWidgets(
-    'phone shows three classes first and expands the remaining day on demand',
-    (tester) async {
-      resetView(tester);
-      await pumpScheduleFixture(
-        tester,
-        width: 360,
-        counts: const [6, 0, 0, 0, 0, 0, 0],
-      );
-      expect(find.text('计算机系统结构 6'), findsNothing);
-      await tester.tap(find.text('还有 3 节课'));
-      await tester.pumpAndSettle();
-      expect(find.text('计算机系统结构 6'), findsOneWidget);
-      await tester.tap(find.text('周'));
-      await tester.pumpAndSettle();
-      expect(find.text('6 节'), findsOneWidget);
-    },
-  );
-
-  testWidgets(
-    'empty state uses little space and a settled failure never claims no classes',
-    (tester) async {
-      resetView(tester);
-      await pumpScheduleFixture(tester, counts: const [0, 0, 0, 0, 0, 0, 0]);
-      expect(find.text('本周没有课'), findsOneWidget);
-      expect(
-        tester.getSize(find.byType(ScheduleBrowser)).height,
-        lessThan(120),
-      );
-      await pumpScheduleFixture(
-        tester,
-        width: 360,
-        counts: const [0, 0, 0, 0, 0, 0, 0],
-        failure: ScheduleFailure.timeout,
-      );
-      expect(find.text('今天没有课'), findsNothing);
-      expect(find.text('课表更新超时'), findsOneWidget);
-      expect(find.byType(CircularProgressIndicator), findsNothing);
-    },
-  );
-
-  testWidgets('phone tablet and desktop layouts accommodate large text', (
-    tester,
-  ) async {
-    resetView(tester);
-    for (final width in [320.0, 600.0, 1440.0]) {
-      for (final scale in [1.0, 2.0]) {
+      for (final width in [360.0, 1280.0]) {
+        final opened = <String>[];
         await pumpScheduleFixture(
           tester,
           width: width,
-          scale: scale,
-          counts: const [6, 1, 0, 2, 1, 1, 0],
+          counts: const [6, 6, 6, 6, 6, 0, 0],
+          onOpen: opened.add,
         );
-        expect(tester.takeException(), isNull, reason: '$width / $scale');
-        await tester.tap(find.text('周'));
-        await tester.pumpAndSettle();
-        expect(tester.takeException(), isNull, reason: 'week $width / $scale');
+        expect(find.byType(WeeklyTimetable), findsNothing);
+        expect(find.text('大学物理'), findsOneWidget);
+        expect(
+          tester.getSize(find.byType(ScheduleBrowser)).height,
+          lessThan(350),
+        );
+        await clickScheduleMouse(tester, find.text('计算机系统结构'));
+        expect(opened, ['1-0']);
       }
-    }
+    },
+  );
+
+  testWidgets(
+    'daily touch paging and mouse buttons cross the Sunday boundary',
+    (tester) async {
+      resetView(tester);
+      final dates = <DateTime>[];
+      await pumpScheduleFixture(tester, width: 360, onDate: dates.add);
+      for (var i = 0; i < 6; i++) {
+        await clickScheduleMouse(tester, find.byTooltip('后一天'));
+      }
+      expect(dates.last, DateTime(2026, 9, 13));
+      await tester.fling(find.byType(PageView), const Offset(-240, 0), 900);
+      await tester.pumpAndSettle();
+      expect(dates.last, DateTime(2026, 9, 14));
+      await tester.tap(find.byTooltip('回到今天'));
+      await tester.pumpAndSettle();
+      expect(dates.last, scheduleToday);
+    },
+  );
+
+  testWidgets(
+    'weekly overlay swipes independently and dismisses with backdrop or Escape',
+    (tester) async {
+      resetView(tester);
+      final dates = <DateTime>[];
+      await pumpScheduleFixture(tester, width: 390, onDate: dates.add);
+      await tester.tap(find.byTooltip('查看整周课表'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ScheduleDialog), findsOneWidget);
+      await tester.fling(
+        find.descendant(
+          of: find.byType(ScheduleDialog),
+          matching: find.byType(PageView),
+        ),
+        const Offset(-280, 0),
+        900,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('2026年 9/14 - 9/20'), findsOneWidget);
+      expect(dates, isEmpty);
+      await tester.tapAt(const Offset(2, 450));
+      await tester.pumpAndSettle();
+      expect(find.byType(ScheduleDialog), findsNothing);
+      await tester.tap(find.byTooltip('查看整周课表'));
+      await tester.pumpAndSettle();
+      expect(find.text('2026年 9/7 - 9/13'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.byType(ScheduleDialog), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'full week retains 35 classes and reveals complete course details',
+    (tester) async {
+      resetView(tester);
+      final opened = <String>[];
+      await pumpScheduleFixture(
+        tester,
+        counts: const [7, 7, 7, 7, 7, 0, 0],
+        onOpen: opened.add,
+      );
+      await tester.tap(find.byTooltip('查看整周课表'));
+      await tester.pumpAndSettle();
+      final table = find.byType(WeeklyTimetable);
+      final events = find.descendant(of: table, matching: find.byType(Tooltip));
+      expect(events, findsNWidgets(35));
+      expect(find.text('周六'), findsNothing);
+      await clickScheduleMouse(tester, events.first);
+      expect(find.text('08:00-09:35\n六教 6A301'), findsOneWidget);
+      await tester.tap(find.text('进入课程'));
+      await tester.pumpAndSettle();
+      expect(opened, ['1-0']);
+      expect(find.byType(ScheduleDialog), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'weekends with classes remain visible and empty weekends can be restored',
+    (tester) async {
+      resetView(tester);
+      await pumpScheduleFixture(tester, counts: const [1, 0, 0, 0, 0, 1, 0]);
+      await tester.tap(find.byTooltip('查看整周课表'));
+      await tester.pumpAndSettle();
+      expect(find.text('周六'), findsOneWidget);
+      expect(find.text('周日'), findsNothing);
+      await tester.tap(find.byTooltip('课表显示选项'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(CheckedPopupMenuItem<String>));
+      await tester.pumpAndSettle();
+      expect(find.text('周日'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'date picker and keyboard move weeks and today restores the current week',
+    (tester) async {
+      resetView(tester);
+      await pumpScheduleFixture(tester);
+      await tester.tap(find.byTooltip('查看整周课表'));
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      expect(find.text('2026年 9/14 - 9/20'), findsOneWidget);
+      await tester.tap(find.text('2026年 9/14 - 9/20'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('21'));
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      expect(find.text('2026年 9/21 - 9/27'), findsOneWidget);
+      await tester.tap(find.byTooltip('回到今天'));
+      await tester.pumpAndSettle();
+      expect(find.text('2026年 9/7 - 9/13'), findsOneWidget);
+    },
+  );
+
+  testWidgets('settled errors never claim no classes or keep spinning', (
+    tester,
+  ) async {
+    resetView(tester);
+    await pumpScheduleFixture(
+      tester,
+      width: 360,
+      counts: const [0, 0, 0, 0, 0, 0, 0],
+      failure: ScheduleFailure.campusAccess,
+    );
+    expect(find.text('今天没有课'), findsNothing);
+    expect(find.text('课表需要校园网或 WebVPN 授权'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    await tester.tap(find.byTooltip('查看整周课表'));
+    await tester.pumpAndSettle();
+    expect(find.text('本周没有课'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
   });
+
+  testWidgets(
+    'dense weekly layouts fit phone tablet and desktop with large text',
+    (tester) async {
+      resetView(tester);
+      for (final width in [320.0, 600.0, 1440.0]) {
+        for (final scale in [1.0, 2.0]) {
+          await pumpScheduleFixture(
+            tester,
+            width: width,
+            scale: scale,
+            counts: const [6, 6, 6, 6, 6, 1, 1],
+          );
+          expect(
+            tester.takeException(),
+            isNull,
+            reason: 'daily $width / $scale',
+          );
+          await tester.tap(find.byTooltip('查看整周课表'));
+          await tester.pumpAndSettle();
+          expect(
+            tester.takeException(),
+            isNull,
+            reason: 'week $width / $scale',
+          );
+        }
+      }
+    },
+  );
 }
