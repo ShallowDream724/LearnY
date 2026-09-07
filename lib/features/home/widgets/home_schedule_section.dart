@@ -11,7 +11,6 @@ import '../../../core/semester/semester_models.dart';
 import '../../../core/schedule/schedule_models.dart';
 import '../../../core/schedule/schedule_projection.dart';
 import '../providers/home_schedule_provider.dart';
-import '../../auth/widgets/campus_authorization_screen.dart';
 import 'schedule_browser.dart';
 import 'schedule_dialog.dart';
 import 'schedule_semester_confirmation.dart';
@@ -151,12 +150,6 @@ class _HomeTodayScheduleSectionState
           }
         },
         onOpenCourse: (id) => context.push(Routes.courseDetail(id)),
-        onAuthorize: () async {
-          if (await showCampusAuthorization(context, selected) &&
-              context.mounted) {
-            await ref.read(homeScheduleActionsProvider).refresh();
-          }
-        },
         onOpenWeek: () => showScheduleDialog(
           context,
           initialDate: today,

@@ -15,7 +15,7 @@
 - `lib/core/design` 和 `lib/core/shell` 提供共用视觉基础、尺寸适配和输入方式适配。
 - `lib/demo` 通过依赖替换驱动相同的应用流程，不访问正式账户或学校服务。
 
-Android 和 Windows 共用 Dart 业务逻辑、数据库协议与主要界面。`android/` 与 `windows/` 负责系统启动、插件与打包。Windows 主界面由 Flutter 绘制；WebView2 用于学校 SSO 和校园访问授权，不承载应用主界面。Android 的窄原生接口补齐认证 HttpOnly Cookie 读取。尚未引入 `fluent_ui`。
+Android 和 Windows 共用 Dart 业务逻辑、数据库协议与主要界面。`android/` 与 `windows/` 负责系统启动、插件与打包。Windows 主界面由 Flutter 绘制；WebView2 用于学校统一登录，不承载应用主界面。Android 的窄原生接口补齐认证 HttpOnly Cookie 读取。尚未引入 `fluent_ui`。
 
 ## 学期状态
 
@@ -42,7 +42,11 @@ Android 和 Windows 共用 Dart 业务逻辑、数据库协议与主要界面。
 
 宽布局把学期选择、刷新和同步错误入口放到侧栏，窄布局保留紧凑顶部入口。手机恢复原有问候、统计卡片和作业提醒布局。分钟时钟订阅取消或暂停时立即释放计时器；合并流同时启动各来源的取消，避免慢数据源阻塞其他来源清理。
 
-`RegistrarCalendarApi` 独立处理教务票据、HTTPS OAuth/WebVPN 重定向、GBK 页面及 JSONP；教务授权错误不会使网络学堂登录失效。`CampusAuthorizationScreen` 复用平台认证 WebView，`CampusCookieBridge` 将浏览器 Cookie 限定到其所属教务或校园服务主机；Windows 与 Android 可导出 HttpOnly Cookie。日历接口返回空数组只表示本次未返回事件，不构成发布状态或完整认证状态的证明。
+`RegistrarCalendarApi` 处理教务票据、HTTPS OAuth/WebVPN 重定向、GBK 页面及 JSONP；教务连接失败不会使网络学堂登录失效。正常登录的 ticket 和 fallback 路径均通过 `CampusCookieBridge` 将统一身份 Cookie 交给 API，并清除上次身份的教务、OAuth 和 WebVPN 会话。Windows 与 Android 可导出 HttpOnly Cookie，课表没有独立授权页或授权按钮。
+
+`IdentityAuthApi` 共用身份表单、可信设备登录与 SM2 加密协议，串行加载和提交身份表单，避免不同服务覆盖身份服务器保存的目标服务。教务优先沿当前校园 Cookie 完成重定向；确实遇到身份登录表单时，才使用已启用的自动登录凭据为该服务续期，继续受限的回调链。此路径不依赖网络学堂会话过期，也不通过再次登录网络学堂冒充教务恢复。每条教务链最多提交一次身份表单，跨请求设一分钟冷却，正常重新登录后重置。
+
+`AuthEntryCoordinator` 在发布登录成功前调用 `CampusLoginContinuation` 建立校园访问会话。Cookie 读取失败不能清除已有会话或假装传递完成；教务暂时不可用不阻塞学堂登录。学校确实要求人工验证时，在同一认证 WebView 中继续，浏览器完成后自动传递 Cookie 并返回，无需“验证并返回”。已登录后的人工验证需求使用应用现有的重新登录入口；`campusIdentityVerificationRequiredProvider` 独立于学堂会话健康状态，避免把正常学堂会话标成过期。取消登录不发布成功，更换身份时清除旧身份的自动恢复凭据。日历接口返回空数组只表示本次未返回事件，不构成发布状态或完整认证状态的证明。
 
 ## 同步约定
 

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:learn_y/core/api/learn_api.dart';
@@ -8,6 +9,113 @@ import 'package:learn_y/core/api/registrar_calendar_api.dart';
 import 'package:learn_y/core/api/utils.dart';
 
 void main() {
+  test(
+    'campus service login reuses identity without expiring a healthy Learn session',
+    () async {
+      var credentialReads = 0;
+      var learnRecoveries = 0;
+      var gatewayReady = false;
+      final helper = Learn2018Helper(
+        config: HelperConfig(
+          campusCredentialProvider: () async {
+            credentialReads++;
+            return const Credential(
+              username: 'student',
+              password: 'password',
+              fingerPrint: 'browser',
+              fingerGenPrint: 'trusted',
+            );
+          },
+          sessionRecoveryHandler: () async {
+            learnRecoveries++;
+            return false;
+          },
+        ),
+      )..setCSRFToken('learn-token');
+      addTearDown(() => helper.dio.close());
+      helper.dio.httpClientAdapter = _Adapter((options, body) {
+        final uri = options.uri;
+        if (uri.host == 'learn.tsinghua.edu.cn') return _response('ticket');
+        if (uri.host == 'zhjw.cic.tsinghua.edu.cn') {
+          return _redirect(
+            'https://webvpn.tsinghua.edu.cn/https/gateway-id/j_acegi_login.do',
+          );
+        }
+        if (uri.path.endsWith('/j_acegi_login.do')) {
+          return gatewayReady
+              ? _response('authorized')
+              : _redirect(
+                  'https://id.tsinghua.edu.cn/do/off/ui/auth/login/form/campus/0',
+                );
+        }
+        if (uri.path.contains('/login/form/')) {
+          return _response(
+            '<form action="/do/off/ui/auth/login/checkSingle"></form>',
+          );
+        }
+        if (uri.path.endsWith('/checkSingle')) {
+          expect(body, contains('fingerGenPrint=trusted'));
+          expect(options.headers['Referer'], endsWith('/form/campus/0'));
+          return _response(
+            '<a href="/thu-oauth/callback?ticket=campus">Continue</a>',
+          );
+        }
+        if (uri.path == '/thu-oauth/callback') {
+          gatewayReady = true;
+          return _response('', 302, {
+            'location': [
+              'https://webvpn.tsinghua.edu.cn/https/gateway-id/j_acegi_login.do',
+            ],
+          });
+        }
+        return _response(
+          '$jsonpExtractorName([{ "nq":"20260914", "nr":"Course" }])',
+        );
+      });
+
+      expect(
+        (await helper.getCalendar(
+          '2026-09-14',
+          '2026-09-20',
+        )).single.courseName,
+        'Course',
+      );
+      expect(credentialReads, 1);
+      expect(learnRecoveries, 0);
+    },
+  );
+
+  test(
+    'identity cookies alone complete the campus redirect without credentials',
+    () async {
+      final helper = Learn2018Helper()..setCSRFToken('learn-token');
+      addTearDown(() => helper.dio.close());
+      await helper.cookieJar.saveFromResponse(Uri.https('id.tsinghua.edu.cn'), [
+        Cookie('identity', 'current'),
+      ]);
+      helper.dio.httpClientAdapter = _Adapter((options, _) {
+        final uri = options.uri;
+        if (uri.host == 'learn.tsinghua.edu.cn') return _response('ticket');
+        if (uri.host == 'zhjw.cic.tsinghua.edu.cn') {
+          return _redirect(
+            'https://id.tsinghua.edu.cn/do/off/ui/auth/login/form/campus/0',
+          );
+        }
+        if (uri.host == 'id.tsinghua.edu.cn') {
+          expect(options.headers['cookie'], contains('identity=current'));
+          return _redirect(
+            'https://webvpn.tsinghua.edu.cn/https/gateway-id/j_acegi_login.do',
+          );
+        }
+        if (uri.path.endsWith('/j_acegi_login.do')) {
+          return _response('authorized');
+        }
+        return _response('$jsonpExtractorName([])');
+      });
+      expect(await helper.getCalendar('2026-09-14', '2026-09-20'), isEmpty);
+    },
+  );
+
   test(
     'course metadata network failure remains distinct from an empty schedule',
     () async {

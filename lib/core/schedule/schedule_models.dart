@@ -115,6 +115,7 @@ enum ScheduleFailure {
   storage,
   registrarAuthorization,
   campusAccess,
+  identityVerification,
   registrarUnavailable,
   invalidCalendar,
 }

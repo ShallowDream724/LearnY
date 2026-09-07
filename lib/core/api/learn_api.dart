@@ -1,7 +1,7 @@
 /// Core API client — 1:1 port of thu-learn-lib Learn2018Helper.
 ///
 /// Uses [Dio] for HTTP + [cookie_jar] for cookies + [html] for HTML parsing.
-/// SM2 encryption for login is handled via [pointycastle].
+/// Campus identity exchange and SM2 encryption live in IdentityAuthApi.
 ///
 /// Usage:
 /// ```dart
@@ -18,44 +18,32 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import 'package:cookie_jar/cookie_jar.dart';
-import 'package:dart_sm/dart_sm.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 
 import 'enums.dart';
+import 'identity_auth_api.dart';
 import 'learning_read_api.dart';
 import 'models.dart';
 import 'registrar_calendar_api.dart';
 import 'urls.dart' as urls;
 import 'utils.dart';
 
+export 'identity_auth_api.dart'
+    show
+        Credential,
+        CredentialProvider,
+        supportsSingleLoginShortcut,
+        buildIdentityCheckFormData,
+        buildIdentityCheckHeaders,
+        encryptIdentityPassword;
+
 // ---------------------------------------------------------------------------
 // Credential
 // ---------------------------------------------------------------------------
 
-class Credential {
-  final String? username;
-  final String? password;
-  final String? fingerPrint;
-  final String? fingerGenPrint;
-  final String? fingerGenPrint3;
-  final String? deviceName;
-  final bool singleLoginEnabled;
-
-  const Credential({
-    this.username,
-    this.password,
-    this.fingerPrint,
-    this.fingerGenPrint,
-    this.fingerGenPrint3,
-    this.deviceName,
-    this.singleLoginEnabled = false,
-  });
-}
-
-typedef CredentialProvider = Future<Credential> Function();
 typedef SessionRecoveryHandler = Future<bool> Function();
 
 // ---------------------------------------------------------------------------
@@ -66,12 +54,16 @@ class HelperConfig {
   final CredentialProvider? provider;
   final CookieJar? cookieJar;
   final SessionRecoveryHandler? sessionRecoveryHandler;
+  final CredentialProvider? campusCredentialProvider;
+  final void Function(bool required)? onCampusVerificationChanged;
   final bool generatePreviewUrlForFirstPage;
 
   const HelperConfig({
     this.provider,
     this.cookieJar,
     this.sessionRecoveryHandler,
+    this.campusCredentialProvider,
+    this.onCampusVerificationChanged,
     this.generatePreviewUrlForFirstPage = true,
   });
 }
@@ -162,49 +154,6 @@ String? extractCsrfTokenFromPage(String pageSource) {
   return csrfToken;
 }
 
-@visibleForTesting
-bool supportsSingleLoginShortcut(String loginPageSource) {
-  return loginPageSource.contains('checkSingle');
-}
-
-@visibleForTesting
-Map<String, String> buildIdentityCheckFormData({
-  required String username,
-  required String encryptedPassword,
-  required String fingerPrint,
-  String fingerGenPrint = '',
-  String fingerGenPrint3 = '',
-  String deviceName = '',
-  bool includeSingleLogin = false,
-}) {
-  final normalizedDeviceName = deviceName.trim();
-
-  return {
-    'i_user': username,
-    'i_pass': encryptedPassword,
-    if (includeSingleLogin) 'singleLogin': 'on',
-    'fingerPrint': fingerPrint,
-    'fingerGenPrint': fingerGenPrint,
-    'fingerGenPrint3': fingerGenPrint3,
-    'i_captcha': '',
-    if (normalizedDeviceName.isNotEmpty) 'deviceName': normalizedDeviceName,
-  };
-}
-
-@visibleForTesting
-Map<String, String> buildIdentityCheckHeaders({required String referer}) {
-  return {'Origin': urls.idPrefix, 'Referer': referer};
-}
-
-@visibleForTesting
-String encryptIdentityPassword(String password, String publicKey) {
-  final encrypted = SM2.encrypt(password, publicKey);
-  if (encrypted.startsWith('04')) {
-    return encrypted;
-  }
-  return '04$encrypted';
-}
-
 String _authResponsePreview(String responseBody, {int maxLength = 240}) {
   final normalized = responseBody.replaceAll(RegExp(r'\s+'), ' ').trim();
   if (normalized.length <= maxLength) {
@@ -222,7 +171,11 @@ class Learn2018Helper implements LearningReadApi {
   final CredentialProvider? _provider;
   final CookieJar _cookieJar;
   final SessionRecoveryHandler? _sessionRecoveryHandler;
+  final CredentialProvider? _campusCredentialProvider;
+  final void Function(bool required)? _onCampusVerificationChanged;
   final Dio _dio;
+  late final IdentityAuthApi _identityAuth = IdentityAuthApi(_dio, _cookieJar);
+  DateTime? _lastCampusIdentityAttempt;
   final bool previewFirstPage;
 
   String _csrfToken = '';
@@ -244,6 +197,8 @@ class Learn2018Helper implements LearningReadApi {
     : _provider = config?.provider,
       _cookieJar = config?.cookieJar ?? CookieJar(),
       _sessionRecoveryHandler = config?.sessionRecoveryHandler,
+      _campusCredentialProvider = config?.campusCredentialProvider,
+      _onCampusVerificationChanged = config?.onCampusVerificationChanged,
       previewFirstPage = config?.generatePreviewUrlForFirstPage ?? true,
       _dio = Dio(
         BaseOptions(
@@ -421,93 +376,33 @@ class Learn2018Helper implements LearningReadApi {
     String deviceName = '',
     bool includeSingleLogin = false,
   }) async {
-    // Clear JSESSIONID to ensure fresh login
     try {
-      final uri = Uri.parse(urls.idPrefix);
-      await _cookieJar.delete(uri);
-    } catch (err) {
-      throw ApiError(reason: FailReason.errorSettingCookies, extra: err);
-    }
-
-    Response<dynamic>? loginResp;
-    Uri? checkUri;
-    Map<String, String>? checkPayload;
-
-    try {
-      // 1. Get the login form page to extract sm2 public key
-      loginResp = await _dio.get(urls.idLogin());
-      final loginPageSource = loginResp.data.toString();
-      late final Response checkResp;
-      final checkHeaders = buildIdentityCheckHeaders(
-        referer: loginResp.realUri.toString(),
-      );
-      if (supportsSingleLoginShortcut(loginPageSource)) {
-        checkUri = Uri.parse(urls.idLoginCheckSingle());
-        checkPayload = {
-          'i_rememberme': 'on',
-          'fingerPrint': fingerPrint,
-          'fingerGenPrint': fingerGenPrint,
-        };
-        checkResp = await _dio.post(
-          checkUri.toString(),
-          data: checkPayload,
-          options: Options(
-            contentType: Headers.formUrlEncodedContentType,
-            headers: checkHeaders,
-            followRedirects: false,
-            validateStatus: (s) => s != null && s < 500,
-          ),
-        );
-      } else {
-        final doc = html_parser.parse(loginPageSource);
-        final sm2PublicKeyEl = doc.getElementById('sm2publicKey');
-        final sm2PublicKey = sm2PublicKeyEl?.text.trim() ?? '';
-        final encryptedPassword = _sm2Encrypt(password, sm2PublicKey);
-        checkUri = Uri.parse(urls.idLoginCheck());
-        checkPayload = buildIdentityCheckFormData(
+      final checkResp = await _identityAuth.authenticate(
+        Uri.parse(urls.idLogin()),
+        Credential(
           username: username,
-          encryptedPassword: encryptedPassword,
+          password: password,
           fingerPrint: fingerPrint,
           fingerGenPrint: fingerGenPrint,
           fingerGenPrint3: fingerGenPrint3,
           deviceName: deviceName,
-          includeSingleLogin: includeSingleLogin,
-        );
-
-        checkResp = await _dio.post(
-          checkUri.toString(),
-          data: checkPayload,
-          options: Options(
-            contentType: Headers.formUrlEncodedContentType,
-            headers: checkHeaders,
-            followRedirects: false,
-            validateStatus: (s) => s != null && s < 500,
-          ),
-        );
-      }
-
-      // 4. Extract ticket from the redirect anchor
+          singleLoginEnabled: includeSingleLogin,
+        ),
+        resetSession: true,
+      );
       final respBody = checkResp.data.toString();
-      final ticket = _extractRoamingTicket(respBody);
+      final ticket = checkResp.headers.value('location') == null
+          ? _extractRoamingTicket(respBody)
+          : Uri.tryParse(
+              checkResp.headers.value('location')!,
+            )?.queryParameters['ticket'];
       if (ticket == null || ticket.isEmpty) {
         if (_looksLikeBadCredentialResponse(respBody)) {
-          throw ApiError(
-            reason: FailReason.badCredential,
-            extra:
-                'checkStatus=${checkResp.statusCode}, '
-                'responsePreview=${_authResponsePreview(respBody)}',
-          );
+          throw const ApiError(reason: FailReason.badCredential);
         }
         throw ApiError(
           reason: FailReason.invalidResponse,
-          extra:
-              'loginGetStatus=${loginResp.statusCode}, '
-              'loginGetUri=${loginResp.realUri}, '
-              'checkUri=$checkUri, '
-              'checkStatus=${checkResp.statusCode}, '
-              'checkRealUri=${checkResp.realUri}, '
-              'postedKeys=${checkPayload.keys.join(',')}, '
-              'responsePreview=${_authResponsePreview(respBody)}',
+          extra: 'identityStatus=${checkResp.statusCode}',
         );
       }
 
@@ -515,28 +410,10 @@ class Learn2018Helper implements LearningReadApi {
     } catch (err) {
       if (err is ApiError) rethrow;
       if (err is DioException) {
-        final responseBody = err.response?.data?.toString() ?? '';
-        final requestHeaderKeys =
-            err.requestOptions.headers.keys
-                .map((key) => key.toString())
-                .toList()
-              ..sort();
-        final requestContentType =
-            err.requestOptions.contentType?.toString() ?? '(none)';
         throw ApiError(
           reason: FailReason.errorFetchFromId,
           extra:
-              'requestMethod=${err.requestOptions.method}, '
-              'requestUri=${err.requestOptions.uri}, '
-              'requestContentType=$requestContentType, '
-              'requestHeaderKeys=${requestHeaderKeys.join(',')}, '
-              'responseStatus=${err.response?.statusCode}, '
-              'responseRealUri=${err.response?.realUri}, '
-              'loginGetStatus=${loginResp?.statusCode}, '
-              'loginGetUri=${loginResp?.realUri}, '
-              'checkUri=$checkUri, '
-              'postedKeys=${checkPayload?.keys.join(',') ?? '(none)'}, '
-              'responsePreview=${_authResponsePreview(responseBody)}',
+              'identityStatus=${err.response?.statusCode}, type=${err.type.name}',
         );
       }
       throw ApiError(reason: FailReason.errorFetchFromId, extra: err);
@@ -560,6 +437,7 @@ class Learn2018Helper implements LearningReadApi {
     String? deviceName,
     bool singleLoginEnabled = false,
   ]) async {
+    _lastCampusIdentityAttempt = null;
     if (username == null ||
         password == null ||
         fingerPrint == null ||
@@ -612,17 +490,18 @@ class Learn2018Helper implements LearningReadApi {
   /// authentication, we intercept the roaming ticket, then use Dio to
   /// establish the API session.
   Future<void> loginWithTicket(String ticket) async {
+    _lastCampusIdentityAttempt = null;
     debugPrint('[LearnX] loginWithTicket: starting roam...');
     final roamResp = await _followRedirectsManually(urls.learnAuthRoam(ticket));
     debugPrint(
       '[LearnX] loginWithTicket: roam done, '
-      'status=${roamResp.statusCode}, url=${roamResp.realUri}',
+      'status=${roamResp.statusCode}',
     );
     if (roamResp.statusCode != 200) {
       throw const ApiError(reason: FailReason.errorRoaming);
     }
     await _extractCSRFToken();
-    debugPrint('[LearnX] loginWithTicket: complete, csrf=$_csrfToken');
+    debugPrint('[LearnX] loginWithTicket: complete');
   }
 
   /// Attempt to restore a learn session from currently persisted cookies.
@@ -674,7 +553,6 @@ class Learn2018Helper implements LearningReadApi {
   /// - `followRedirects: false` + redirect interceptor → calling
   ///   `_dio.get()` inside an interceptor deadlocks the queue.
   Future<Response> _followRedirectsManually(String url) async {
-    debugPrint('[LearnX] _followRedirects: start $url');
     final bareDio = Dio(
       BaseOptions(
         followRedirects: false,
@@ -692,7 +570,7 @@ class Learn2018Helper implements LearningReadApi {
       resp = await bareDio.get(currentUrl);
       debugPrint(
         '[LearnX] _followRedirects: hop $i '
-        'status=${resp.statusCode} url=$currentUrl',
+        'status=${resp.statusCode} host=${Uri.parse(currentUrl).host}',
       );
       if (resp.statusCode != null &&
           resp.statusCode! >= 300 &&
@@ -978,17 +856,63 @@ class Learn2018Helper implements LearningReadApi {
     final resolvedStartDate = _normalizeRegistrarDateParam(startDate);
     final resolvedEndDate = _normalizeRegistrarDateParam(endDate);
 
-    return RegistrarCalendarApi(
-      dio: _dio,
-      fetchTicket: () async {
-        final response = await _myFetchWithToken(
-          urls.registrarTicket(),
-          method: 'POST',
-          data: FormData.fromMap(urls.registrarTicketFormData()),
-        );
-        return response.data.toString();
-      },
-    ).getCalendar(resolvedStartDate, resolvedEndDate, graduate: graduate);
+    try {
+      final result = await _registrar().getCalendar(
+        resolvedStartDate,
+        resolvedEndDate,
+        graduate: graduate,
+      );
+      _onCampusVerificationChanged?.call(false);
+      return result;
+    } on RegistrarException catch (error) {
+      if (error.failure == RegistrarFailure.identityVerification) {
+        _onCampusVerificationChanged?.call(true);
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> establishCampusSession({bool allowCredentialRecovery = true}) =>
+      _registrar(
+        allowCredentialRecovery: allowCredentialRecovery,
+      ).establishSession();
+
+  RegistrarCalendarApi _registrar({bool allowCredentialRecovery = true}) =>
+      RegistrarCalendarApi(
+        dio: _dio,
+        authenticateIdentity: allowCredentialRecovery
+            ? _authenticateCampusIdentity
+            : null,
+        fetchTicket: () async {
+          final response = await _myFetchWithToken(
+            urls.registrarTicket(),
+            method: 'POST',
+            data: FormData.fromMap(urls.registrarTicketFormData()),
+          );
+          return response.data.toString();
+        },
+      );
+
+  Future<Response<String>?> _authenticateCampusIdentity(Uri loginUri) async {
+    final provider = _campusCredentialProvider ?? _provider;
+    if (provider == null) return null;
+    final previous = _lastCampusIdentityAttempt;
+    if (previous != null &&
+        DateTime.now().difference(previous) < const Duration(minutes: 1)) {
+      return null;
+    }
+    _lastCampusIdentityAttempt = DateTime.now();
+    try {
+      final credential = await provider();
+      if (credential.username?.isNotEmpty != true ||
+          credential.password?.isNotEmpty != true) {
+        return null;
+      }
+      return await _identityAuth.authenticate(loginUri, credential);
+    } on ApiError catch (error) {
+      if (error.reason == FailReason.noCredential) return null;
+      rethrow;
+    }
   }
 
   String _normalizeRegistrarDateParam(String raw) {
@@ -2279,24 +2203,6 @@ class Learn2018Helper implements LearningReadApi {
       'isFavorite': (d['sfsc'] == yes).toString(),
       'comment': d['bznr']?.toString(),
     };
-  }
-
-  // -------------------------------------------------------------------
-  // SM2 Encryption stub
-  // -------------------------------------------------------------------
-
-  /// SM2 encryption for login password.
-  ///
-  /// The original library uses the `sm-crypto` npm package.
-  /// In Dart, you need a SM2 implementation. This is a placeholder
-  /// that should be replaced with a real SM2 implementation
-  /// (e.g. using pointycastle or a dedicated SM2 package).
-  ///
-  /// For now, the app can:
-  /// 1. Use WebView-based SSO login (bypasses this)
-  /// 2. Provide a native SM2 implementation via FFI/plugin
-  String _sm2Encrypt(String data, String publicKey) {
-    return encryptIdentityPassword(data, publicKey);
   }
 
   // -------------------------------------------------------------------

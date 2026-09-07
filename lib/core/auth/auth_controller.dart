@@ -13,6 +13,10 @@ enum AuthRestoreState { restoring, ready }
 
 enum SessionHealth { unknown, authenticated, expired }
 
+final campusIdentityVerificationRequiredProvider = StateProvider<bool>(
+  (ref) => false,
+);
+
 class AuthState {
   final AuthRestoreState restoreState;
   final String? username;
@@ -123,6 +127,8 @@ class AuthController extends StateNotifier<AuthState> {
           .getState(AppStateKeys.currentSemesterId);
       if (!mounted || generation != _mutationGeneration) return;
       _ref.read(currentSemesterIdProvider.notifier).state = cachedSemesterId;
+      _ref.read(campusIdentityVerificationRequiredProvider.notifier).state =
+          false;
       state = AuthState.authenticated(username: username);
     });
   }
@@ -158,6 +164,8 @@ class AuthController extends StateNotifier<AuthState> {
   Future<void> logout() {
     final generation = ++_mutationGeneration;
     _ref.read(dataSessionEpochProvider.notifier).state++;
+    _ref.read(campusIdentityVerificationRequiredProvider.notifier).state =
+        false;
     state = const AuthState.signedOut();
     return _enqueueMutation(generation, () async {
       try {

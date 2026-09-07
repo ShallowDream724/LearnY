@@ -23,8 +23,10 @@ widgets with local fonts and demo data for visual inspection.
 Schedule regressions also cover authoritative enrollment updates, withdrawn
 courses in stale registrar responses, historical retention, holiday moves,
 bounded and enumerated weeks, unassigned courses, and inferred duration.
-Campus-cookie tests check host isolation; actual Android CookieManager and
-Windows WebView2 integration require device validation.
+Campus-cookie tests check identity transfer and removal of previous service
+sessions. Registrar tests cover cookie-based SSO and service-specific automatic
+login while Learn remains authenticated. Actual Android CookieManager, Windows
+WebView2, and university verification requirements need device validation.
 
 Semester navigation checks exercise blocked day/week edges, cancellation,
 one confirmation per drag, independent modal selection, persisted home selection,

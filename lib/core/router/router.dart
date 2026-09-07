@@ -154,7 +154,8 @@ GoRouter buildRouter({required WidgetRef ref}) {
       }
       if (isOnLogin &&
           auth.canAccessCachedData &&
-          !auth.requiresReauthentication) {
+          !auth.requiresReauthentication &&
+          !ref.read(campusIdentityVerificationRequiredProvider)) {
         if (returnTo != null &&
             returnTo.isNotEmpty &&
             returnTo != Routes.login) {

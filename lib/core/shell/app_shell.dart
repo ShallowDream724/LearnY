@@ -67,6 +67,9 @@ class AppShell extends ConsumerWidget {
     final resolvedPageProgress = pageProgress ?? index.toDouble();
     final isOffline = connectivity.status == NetworkStatus.offline;
     final isSessionExpired = auth.requiresReauthentication;
+    final needsCampusVerification = ref.watch(
+      campusIdentityVerificationRequiredProvider,
+    );
     final currentLocation = GoRouterState.of(context).uri.toString();
 
     // Wrap child with app-level banners.
@@ -76,9 +79,11 @@ class AppShell extends ConsumerWidget {
         AnimatedSize(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
-          child: isSessionExpired
+          child: isSessionExpired || needsCampusVerification
               ? _SessionExpiredBanner(
-                  message: auth.errorMessage,
+                  message: isSessionExpired
+                      ? auth.errorMessage
+                      : '校园登录需要验证，可继续查看已有内容',
                   onLogin: () {
                     context.go(Routes.loginWithReturnTo(currentLocation));
                   },

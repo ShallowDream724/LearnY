@@ -14,20 +14,24 @@ class AuthEntryCoordinator {
     required AuthReloginService authReloginService,
     required AutoReloginCapabilityStore autoReloginCapabilityStore,
     required Future<void> Function(String username) onLoginSuccess,
+    String? Function()? currentUsername,
   }) : _sessionBootstrapper = sessionBootstrapper,
        _authReloginService = authReloginService,
        _autoReloginCapabilityStore = autoReloginCapabilityStore,
+       _currentUsername = currentUsername,
        _onLoginSuccess = onLoginSuccess;
 
   final SsoSessionBootstrapper _sessionBootstrapper;
   final AuthReloginService _authReloginService;
   final AutoReloginCapabilityStore _autoReloginCapabilityStore;
   final Future<void> Function(String username) _onLoginSuccess;
+  final String? Function()? _currentUsername;
 
   Future<AuthEntryResult> consumeTicket({
     required AuthEntryRequest request,
     required String ticket,
     AutoReloginEnrollmentPayload? enrollmentPayload,
+    Future<void> Function()? completeCampusSession,
   }) async {
     final username = await _sessionBootstrapper.establishSessionFromTicket(
       ticket,
@@ -36,6 +40,7 @@ class AuthEntryCoordinator {
       request: request,
       username: username,
       enrollmentPayload: enrollmentPayload,
+      completeCampusSession: completeCampusSession,
     );
   }
 
@@ -44,6 +49,7 @@ class AuthEntryCoordinator {
     required SsoFallbackPageSnapshot pageSnapshot,
     required String cookieString,
     AutoReloginEnrollmentPayload? enrollmentPayload,
+    Future<void> Function()? completeCampusSession,
   }) async {
     final username = await _sessionBootstrapper.establishFallbackSession(
       pageSnapshot: pageSnapshot,
@@ -53,6 +59,7 @@ class AuthEntryCoordinator {
       request: request,
       username: username,
       enrollmentPayload: enrollmentPayload,
+      completeCampusSession: completeCampusSession,
     );
   }
 
@@ -72,9 +79,14 @@ class AuthEntryCoordinator {
     required AuthEntryRequest request,
     required String username,
     AutoReloginEnrollmentPayload? enrollmentPayload,
+    Future<void> Function()? completeCampusSession,
   }) async {
     String? noticeMessage;
     var autoReloginConfigured = false;
+    final previousUsername = _currentUsername?.call();
+    if (previousUsername != null && previousUsername != username) {
+      await _autoReloginCapabilityStore.reset();
+    }
 
     if (request.requiresAutoRelogin) {
       final outcome = await _configureAutoRelogin(enrollmentPayload);
@@ -82,6 +94,7 @@ class AuthEntryCoordinator {
       noticeMessage = outcome.noticeMessage;
     }
 
+    await completeCampusSession?.call();
     await _onLoginSuccess(username);
 
     return AuthEntryResult(
@@ -157,5 +170,6 @@ final authEntryCoordinatorProvider = Provider<AuthEntryCoordinator>((ref) {
     authReloginService: ref.watch(authReloginServiceProvider),
     autoReloginCapabilityStore: ref.watch(autoReloginCapabilityStoreProvider),
     onLoginSuccess: ref.read(authProvider.notifier).onLoginSuccess,
+    currentUsername: () => ref.read(authProvider).username,
   );
 });

@@ -12,24 +12,41 @@ enum RegistrarFailure {
   ticket,
   authorization,
   campusAccess,
+  identityVerification,
   unavailable,
   invalidCalendar,
 }
 
 class RegistrarException implements Exception {
-  const RegistrarException(this.failure);
+  const RegistrarException(this.failure, {this.loginUri});
   final RegistrarFailure failure;
+  final Uri? loginUri;
   @override
   String toString() => 'RegistrarException(${failure.name})';
 }
 
-/// Registrar cookies and authorization are independent of the Learn session.
-/// The injected Dio retains CookieManager, but never invokes Learn recovery.
+/// Service sessions share campus identity, but a registrar failure must not
+/// invalidate an otherwise healthy Learn session.
 class RegistrarCalendarApi {
-  RegistrarCalendarApi({required this.dio, required this.fetchTicket});
+  RegistrarCalendarApi({
+    required this.dio,
+    required this.fetchTicket,
+    this.authenticateIdentity,
+  });
   final Dio dio;
   final Future<String> Function() fetchTicket;
+  final Future<Response<String>?> Function(Uri loginUri)? authenticateIdentity;
   String? _gatewayPrefix;
+  bool _didAuthenticateIdentity = false;
+  Uri? _identityLoginUri;
+
+  Future<void> establishSession() async {
+    final ticket = parseRegistrarTicket(await fetchTicket());
+    _verify(
+      await _follow(_throughGateway(urls.registrarAuth(ticket))),
+      landingPage: true,
+    );
+  }
 
   Future<List<CalendarEvent>> getCalendar(
     String start,
@@ -38,11 +55,7 @@ class RegistrarCalendarApi {
   }) async {
     for (var attempt = 0; attempt < 2; attempt++) {
       try {
-        final ticket = parseRegistrarTicket(await fetchTicket());
-        _verify(
-          await _follow(_throughGateway(urls.registrarAuth(ticket))),
-          landingPage: true,
-        );
+        await establishSession();
         final calendarUrl = urls.registrarCalendar(
           start,
           end,
@@ -87,7 +100,7 @@ class RegistrarCalendarApi {
       if (!allowedHosts.contains(uri.host) || uri.scheme != 'https') {
         throw const RegistrarException(RegistrarFailure.authorization);
       }
-      final response = await dio.get<String>(
+      var response = await dio.get<String>(
         uri.toString(),
         options: Options(
           followRedirects: false,
@@ -105,34 +118,60 @@ class RegistrarCalendarApi {
           },
         ),
       );
+      if (uri.host == Uri.parse(urls.idPrefix).host &&
+          uri.path.startsWith('/do/off/ui/auth/login/form/')) {
+        _identityLoginUri = uri;
+      }
+      if (_identityLoginUri == uri &&
+          response.statusCode == 200 &&
+          !_didAuthenticateIdentity &&
+          _isIdentityChallenge(response.data ?? '')) {
+        _didAuthenticateIdentity = true;
+        final authenticated = await authenticateIdentity?.call(uri);
+        if (authenticated != null) {
+          response = authenticated;
+          uri = response.requestOptions.uri;
+        }
+      }
       final status = response.statusCode ?? 0;
+      if (status >= 500 || status == 429) {
+        throw const RegistrarException(RegistrarFailure.unavailable);
+      }
       if (status >= 300 && status < 400) {
         final location = response.headers.value('location');
         if (location == null) {
           throw const RegistrarException(RegistrarFailure.invalidCalendar);
         }
         final next = uri.resolve(location);
-        if (next.host == 'webvpn.tsinghua.edu.cn') {
-          final match = RegExp(
-            r'^(/https/[^/]+)/j_acegi_login\.do$',
-          ).firstMatch(next.path);
-          if (match != null) _gatewayPrefix = match[1];
-          final gateway = RegExp(
-            r'^(/(?:http|https)/([^/]+))/',
-          ).firstMatch(next.path);
-          if (gateway != null &&
-              _gatewayPrefix?.split('/').last == gateway[2]) {
-            _gatewayPrefix = gateway[1];
-          }
-        }
+        _rememberGateway(next);
         uri = next;
         continue;
+      }
+      if (status == 200 &&
+          {
+            Uri.parse(urls.idPrefix).host,
+            'oauth.tsinghua.edu.cn',
+          }.contains(uri.host)) {
+        final continuation = _identityContinuation(uri, response.data ?? '');
+        if (continuation != null) {
+          _rememberGateway(continuation);
+          uri = continuation;
+          continue;
+        }
       }
       final gatewayContent =
           uri.host == 'webvpn.tsinghua.edu.cn' &&
           _gatewayPrefix != null &&
           uri.path.startsWith('$_gatewayPrefix/');
       if (uri.host != registrarHost && !gatewayContent) {
+        if (uri.host == Uri.parse(urls.idPrefix).host &&
+            _identityLoginUri != null &&
+            status == 200) {
+          throw RegistrarException(
+            RegistrarFailure.identityVerification,
+            loginUri: _identityLoginUri,
+          );
+        }
         throw RegistrarException(
           _gatewayPrefix != null
               ? RegistrarFailure.campusAccess
@@ -142,6 +181,47 @@ class RegistrarCalendarApi {
       return response;
     }
     throw const RegistrarException(RegistrarFailure.authorization);
+  }
+
+  void _rememberGateway(Uri uri) {
+    if (uri.host != 'webvpn.tsinghua.edu.cn') return;
+    final match = RegExp(
+      r'^(/(?:http|https)/[^/]+)/j_acegi_login\.do$',
+    ).firstMatch(uri.path);
+    if (match != null) _gatewayPrefix = match[1];
+    final gateway = RegExp(r'^(/(?:http|https)/([^/]+))/').firstMatch(uri.path);
+    if (gateway != null && _gatewayPrefix?.split('/').last == gateway[2]) {
+      _gatewayPrefix = gateway[1];
+    }
+  }
+
+  bool _isIdentityChallenge(String source) =>
+      html
+              .parse(source)
+              .querySelector(
+                r'input[type="password"], #sm2publicKey, form[action$="checkSingle"]',
+              ) !=
+          null ||
+      source.contains('checkSingle');
+
+  Uri? _identityContinuation(Uri uri, String source) {
+    final page = html.parse(source);
+    if (page.querySelector('input[type="password"]') != null) return null;
+    final destinations = <Uri>{};
+    for (final anchor in page.querySelectorAll('a[href]')) {
+      final target = uri.resolve(anchor.attributes['href']!);
+      if (target.scheme != 'https') continue;
+      final identityCallback =
+          target.host == Uri.parse(urls.idPrefix).host &&
+          target.path == '/thu-oauth/callback';
+      final oauthCallback =
+          target.host == 'oauth.tsinghua.edu.cn' &&
+          target.path.startsWith('/lb-auth/');
+      if (identityCallback || oauthCallback) destinations.add(target);
+    }
+    // The SSO success page uses a callback anchor instead of an HTTP redirect.
+    // Do not follow unrelated links or execute scripts from the login page.
+    return destinations.length == 1 ? destinations.single : null;
   }
 
   void _verify(Response<String> response, {bool landingPage = false}) {

@@ -9,10 +9,13 @@ import '../../../core/api/enums.dart';
 import '../../../core/api/models.dart';
 import '../../../core/api/urls.dart' as urls;
 import '../../../core/auth/auth.dart';
+import '../../../core/auth/campus_cookie_bridge.dart';
+import '../../../core/providers/api_client_provider.dart';
 import '../../../core/design/app_theme_colors.dart';
 import '../../../core/design/colors.dart';
 import '../../../core/design/typography.dart';
 import 'identity_auth_web_surface.dart';
+import 'campus_login_continuation.dart';
 
 class IdentityAuthFlowScreen extends ConsumerStatefulWidget {
   const IdentityAuthFlowScreen({super.key, required this.request});
@@ -27,6 +30,7 @@ class IdentityAuthFlowScreen extends ConsumerStatefulWidget {
 class _IdentityAuthFlowScreenState
     extends ConsumerState<IdentityAuthFlowScreen> {
   late final IdentityAuthWebSurfaceController _webSurfaceController;
+  late final CampusLoginContinuation _campusLogin;
 
   Map<String, String>? _capturedFormData;
   String? _capturedTrustedFingerGenPrint;
@@ -54,11 +58,24 @@ class _IdentityAuthFlowScreenState
         onJavaScriptMessage: _handleJavaScriptMessage,
       ),
     );
+    _campusLogin = CampusLoginContinuation(
+      api: ref.read(apiClientProvider),
+      surface: _webSurfaceController,
+      onInteractionRequired: () {
+        if (!mounted) return;
+        setState(() {
+          _isProcessing = false;
+          _isPageLoading = true;
+          _didAttemptAutoSubmit = false;
+        });
+      },
+    );
     unawaited(_initializeWebSurface());
   }
 
   @override
   void dispose() {
+    _campusLogin.dispose();
     unawaited(_webSurfaceController.dispose());
     super.dispose();
   }
@@ -122,6 +139,12 @@ class _IdentityAuthFlowScreenState
   }
 
   Future<void> _onPageFinished(String url) async {
+    if (mounted && _campusLogin.isActive) {
+      setState(() => _isPageLoading = false);
+      await _campusLogin.onPageFinished(url);
+      if (mounted && _campusLogin.isActive) await _injectCredential(url);
+      return;
+    }
     if (!mounted || _isProcessing) {
       return;
     }
@@ -135,6 +158,10 @@ class _IdentityAuthFlowScreenState
       return;
     }
 
+    await _injectCredential(url);
+  }
+
+  Future<void> _injectCredential(String url) async {
     if (!widget.request.shouldInjectCredential) {
       return;
     }
@@ -160,6 +187,7 @@ class _IdentityAuthFlowScreenState
   }
 
   bool _onNavigationRequest(String url) {
+    if (_campusLogin.isActive) return _campusLogin.shouldBlockNavigation(url);
     final instruction = ref
         .read(ssoTicketParserProvider)
         .inspectNavigation(url);
@@ -250,7 +278,7 @@ class _IdentityAuthFlowScreenState
   }
 
   Future<void> _handleTicket(String ticket) async {
-    if (_isProcessing) {
+    if (_isProcessing || _campusLogin.isActive) {
       return;
     }
 
@@ -261,6 +289,7 @@ class _IdentityAuthFlowScreenState
     });
 
     try {
+      await _transferCampusIdentity();
       final enrollmentPayload = await _resolveEnrollmentPayloadIfNeeded();
       if (_isTrustedBrowserRefreshPass) {
         final username = _bootstrappedUsername;
@@ -289,6 +318,7 @@ class _IdentityAuthFlowScreenState
                 ? const AuthEntryRequest.loginOnly()
                 : widget.request,
             ticket: ticket,
+            completeCampusSession: _campusLogin.prepare,
             enrollmentPayload: shouldRefreshTrustedBrowserState
                 ? null
                 : enrollmentPayload,
@@ -331,7 +361,7 @@ class _IdentityAuthFlowScreenState
   }
 
   Future<void> _fallbackCookieExtraction() async {
-    if (_isProcessing) {
+    if (_isProcessing || _campusLogin.isActive) {
       return;
     }
 
@@ -361,6 +391,7 @@ class _IdentityAuthFlowScreenState
             ),
           );
 
+      await _transferCampusIdentity();
       final enrollmentPayload = await _resolveEnrollmentPayloadIfNeeded();
       if (_isTrustedBrowserRefreshPass) {
         final username = _bootstrappedUsername;
@@ -390,6 +421,7 @@ class _IdentityAuthFlowScreenState
                 : widget.request,
             pageSnapshot: pageSnapshot,
             cookieString: cookieString,
+            completeCampusSession: _campusLogin.prepare,
             enrollmentPayload: shouldRefreshTrustedBrowserState
                 ? null
                 : enrollmentPayload,
@@ -440,6 +472,22 @@ class _IdentityAuthFlowScreenState
     final capturedFormData =
         _capturedFormData ?? await _readCurrentFormDataFromPage();
     return _resolveEnrollmentPayload(capturedFormData);
+  }
+
+  Future<void> _transferCampusIdentity() async {
+    final header = await _webSurfaceController.getCookieHeaderForUrl(
+      urls.idLogin(),
+    );
+    if (!mounted) return;
+    final bridge = CampusCookieBridge(ref.read(apiClientProvider).cookieJar);
+    if (_isTrustedBrowserRefreshPass && header?.isNotEmpty == true) {
+      await bridge.importHeaders({Uri.parse(urls.idLogin()): header!});
+      return;
+    }
+    final transferred = await bridge.importIdentitySession(header ?? '');
+    if (!transferred) {
+      throw const ApiError(reason: FailReason.errorSettingCookies);
+    }
   }
 
   Future<AutoReloginEnrollmentPayload> _resolveEnrollmentPayload(

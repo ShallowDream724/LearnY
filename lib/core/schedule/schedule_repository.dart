@@ -438,6 +438,8 @@ class ScheduleRepository {
     if (error is TimeoutException) return ScheduleFailure.timeout;
     if (error is RegistrarException) {
       return switch (error.failure) {
+        RegistrarFailure.identityVerification =>
+          ScheduleFailure.identityVerification,
         RegistrarFailure.authorization =>
           ScheduleFailure.registrarAuthorization,
         RegistrarFailure.campusAccess => ScheduleFailure.campusAccess,

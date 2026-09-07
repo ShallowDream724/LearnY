@@ -9,7 +9,6 @@ import '../../../core/semester/academic_calendar.dart';
 import '../../../core/semester/semester_models.dart';
 import '../../../core/semester/semester_switcher.dart';
 import '../providers/home_schedule_provider.dart';
-import '../../auth/widgets/campus_authorization_screen.dart';
 import 'schedule_status.dart';
 import 'weekly_timetable.dart';
 import 'schedule_pager.dart';
@@ -298,17 +297,9 @@ class _ScheduleDialogState extends ConsumerState<ScheduleDialog> {
                       ),
                       PopupMenuButton<String>(
                         tooltip: '课表显示选项',
-                        onSelected: (value) async {
+                        onSelected: (value) {
                           if (value == 'weekends') {
                             setState(() => _showWeekends = !_showWeekends);
-                          } else if (await showCampusAuthorization(
-                                context,
-                                _week,
-                              ) &&
-                              mounted) {
-                            await ref
-                                .read(scheduleWeekActionsProvider(_week))
-                                .refresh();
                           }
                         },
                         itemBuilder: (_) => [
@@ -316,10 +307,6 @@ class _ScheduleDialogState extends ConsumerState<ScheduleDialog> {
                             value: 'weekends',
                             checked: _showWeekends,
                             child: const Text('始终显示周末'),
-                          ),
-                          const PopupMenuItem(
-                            value: 'authorize',
-                            child: Text('校园访问授权'),
                           ),
                         ],
                         icon: const Icon(Icons.more_horiz, size: 20),

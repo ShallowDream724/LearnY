@@ -25,6 +25,10 @@ final authRouterRefreshNotifierProvider = Provider<AuthRouterRefreshNotifier>((
     notifier.markNeedsRefresh();
   });
 
+  ref.listen(campusIdentityVerificationRequiredProvider, (_, _) {
+    notifier.markNeedsRefresh();
+  });
+
   ref.onDispose(notifier.dispose);
   return notifier;
 });

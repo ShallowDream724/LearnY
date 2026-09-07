@@ -8,8 +8,9 @@ String scheduleFailureLabel(ScheduleFailure failure) => switch (failure) {
   ScheduleFailure.sessionExpired => '网络学堂登录已失效，请重新登录',
   ScheduleFailure.storage => '课表缓存读取失败',
   ScheduleFailure.network => '课表连接失败，请重试',
-  ScheduleFailure.registrarAuthorization => '教务授权未完成，请重试',
-  ScheduleFailure.campusAccess => '课表需要校园网或 WebVPN 授权',
+  ScheduleFailure.registrarAuthorization => '暂时无法连接教务课表，请稍后重试',
+  ScheduleFailure.campusAccess => '校园连接暂未恢复，请稍后重试',
+  ScheduleFailure.identityVerification => '校园登录需要验证，请重新登录',
   ScheduleFailure.registrarUnavailable => '教务系统暂不可用，请稍后重试',
   ScheduleFailure.invalidCalendar => '教务暂未返回有效课表',
 };

@@ -25,7 +25,6 @@ class ScheduleBrowser extends StatefulWidget {
     this.isLoading = false,
     this.hasCalendarData = true,
     this.failure,
-    this.onAuthorize,
     this.firstDate,
     this.lastDate,
     this.onBoundary,
@@ -42,7 +41,6 @@ class ScheduleBrowser extends StatefulWidget {
   final bool isLoading;
   final bool hasCalendarData;
   final ScheduleFailure? failure;
-  final VoidCallback? onAuthorize;
   final DateTime? firstDate;
   final DateTime? lastDate;
   final ValueChanged<int>? onBoundary;
@@ -128,14 +126,6 @@ class _ScheduleBrowserState extends State<ScheduleBrowser> {
                   tooltip: '回到今天',
                   onPressed: () => widget.onDateSelected(widget.today),
                   icon: const Icon(Icons.today_outlined, size: 19),
-                ),
-              if (widget.onAuthorize != null &&
-                  (widget.failure == ScheduleFailure.campusAccess ||
-                      widget.failure == ScheduleFailure.registrarAuthorization))
-                IconButton(
-                  tooltip: '授权访问教务课表',
-                  onPressed: widget.onAuthorize,
-                  icon: const Icon(Icons.vpn_key_outlined, size: 19),
                 ),
               IconButton(
                 tooltip: '刷新课表',
