@@ -85,12 +85,14 @@ class PendingAssignments extends ConsumerWidget {
                 : (details) => onLongPress!(homework, details.globalPosition),
             child: Material(
               color: Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
               child: InkWell(
+                borderRadius: BorderRadius.circular(8),
                 onTap: onTap == null ? null : () => onTap!(homework),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
                     vertical: 9,
-                    horizontal: 4,
+                    horizontal: 12,
                   ),
                   child: Row(
                     children: [

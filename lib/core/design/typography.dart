@@ -45,17 +45,25 @@ abstract final class Spacing {
 
 /// Shared type scale using the host platform's installed font.
 abstract final class AppTypography {
-  static String get _fontFamily => switch (defaultTargetPlatform) {
-    TargetPlatform.windows => 'Segoe UI',
-    TargetPlatform.macOS || TargetPlatform.iOS => '.SF Pro Text',
+  static String get fontFamily => switch (defaultTargetPlatform) {
+    TargetPlatform.windows => 'Microsoft YaHei UI',
+    TargetPlatform.macOS => '.AppleSystemUIFont',
+    TargetPlatform.iOS => 'CupertinoSystemText',
     _ => 'Roboto',
   };
+
+  static List<String>? get fontFamilyFallback =>
+      switch (defaultTargetPlatform) {
+        TargetPlatform.windows => const ['Microsoft YaHei', 'Segoe UI'],
+        _ => null,
+      };
 
   // ─────────── Headlines ───────────
 
   /// Page title — large and bold.
   static TextStyle get headlineLarge => TextStyle(
-    fontFamily: _fontFamily,
+    fontFamily: fontFamily,
+    fontFamilyFallback: fontFamilyFallback,
     fontSize: 28,
     fontWeight: FontWeight.w700,
     height: 1.3,
@@ -64,7 +72,8 @@ abstract final class AppTypography {
 
   /// Section title.
   static TextStyle get headlineMedium => TextStyle(
-    fontFamily: _fontFamily,
+    fontFamily: fontFamily,
+    fontFamilyFallback: fontFamilyFallback,
     fontSize: 22,
     fontWeight: FontWeight.w700,
     height: 1.3,
@@ -73,7 +82,8 @@ abstract final class AppTypography {
 
   /// Subsection title.
   static TextStyle get headlineSmall => TextStyle(
-    fontFamily: _fontFamily,
+    fontFamily: fontFamily,
+    fontFamilyFallback: fontFamilyFallback,
     fontSize: 18,
     fontWeight: FontWeight.w600,
     height: 1.4,
@@ -84,7 +94,8 @@ abstract final class AppTypography {
 
   /// Card title / list tile title.
   static TextStyle get titleLarge => TextStyle(
-    fontFamily: _fontFamily,
+    fontFamily: fontFamily,
+    fontFamilyFallback: fontFamilyFallback,
     fontSize: 16,
     fontWeight: FontWeight.w600,
     height: 1.4,
@@ -92,14 +103,16 @@ abstract final class AppTypography {
 
   /// Smaller title — tabs, chips.
   static TextStyle get titleMedium => TextStyle(
-    fontFamily: _fontFamily,
+    fontFamily: fontFamily,
+    fontFamilyFallback: fontFamilyFallback,
     fontSize: 14,
     fontWeight: FontWeight.w600,
     height: 1.4,
   );
 
   static TextStyle get titleSmall => TextStyle(
-    fontFamily: _fontFamily,
+    fontFamily: fontFamily,
+    fontFamilyFallback: fontFamilyFallback,
     fontSize: 13,
     fontWeight: FontWeight.w600,
     height: 1.4,
@@ -109,7 +122,8 @@ abstract final class AppTypography {
 
   /// Primary body text.
   static TextStyle get bodyLarge => TextStyle(
-    fontFamily: _fontFamily,
+    fontFamily: fontFamily,
+    fontFamilyFallback: fontFamilyFallback,
     fontSize: 15,
     fontWeight: FontWeight.w400,
     height: 1.5,
@@ -117,7 +131,8 @@ abstract final class AppTypography {
 
   /// Secondary body text.
   static TextStyle get bodyMedium => TextStyle(
-    fontFamily: _fontFamily,
+    fontFamily: fontFamily,
+    fontFamilyFallback: fontFamilyFallback,
     fontSize: 14,
     fontWeight: FontWeight.w400,
     height: 1.5,
@@ -125,7 +140,8 @@ abstract final class AppTypography {
 
   /// Caption / timestamp.
   static TextStyle get bodySmall => TextStyle(
-    fontFamily: _fontFamily,
+    fontFamily: fontFamily,
+    fontFamilyFallback: fontFamilyFallback,
     fontSize: 12,
     fontWeight: FontWeight.w400,
     height: 1.5,
@@ -135,7 +151,8 @@ abstract final class AppTypography {
 
   /// Button labels.
   static TextStyle get labelLarge => TextStyle(
-    fontFamily: _fontFamily,
+    fontFamily: fontFamily,
+    fontFamilyFallback: fontFamilyFallback,
     fontSize: 14,
     fontWeight: FontWeight.w600,
     height: 1.2,
@@ -144,7 +161,8 @@ abstract final class AppTypography {
 
   /// Tab labels / category headers.
   static TextStyle get labelMedium => TextStyle(
-    fontFamily: _fontFamily,
+    fontFamily: fontFamily,
+    fontFamilyFallback: fontFamilyFallback,
     fontSize: 12,
     fontWeight: FontWeight.w500,
     height: 1.2,
@@ -153,7 +171,8 @@ abstract final class AppTypography {
 
   /// Badge / chip labels.
   static TextStyle get labelSmall => TextStyle(
-    fontFamily: _fontFamily,
+    fontFamily: fontFamily,
+    fontFamilyFallback: fontFamilyFallback,
     fontSize: 12,
     fontWeight: FontWeight.w600,
     height: 1.2,
@@ -164,7 +183,8 @@ abstract final class AppTypography {
 
   /// Large statistic number (dashboard cards).
   static TextStyle get statLarge => TextStyle(
-    fontFamily: _fontFamily,
+    fontFamily: fontFamily,
+    fontFamilyFallback: fontFamilyFallback,
     fontSize: 36,
     fontWeight: FontWeight.w800,
     height: 1.1,
@@ -174,7 +194,8 @@ abstract final class AppTypography {
 
   /// Medium stat number.
   static TextStyle get statMedium => TextStyle(
-    fontFamily: _fontFamily,
+    fontFamily: fontFamily,
+    fontFamilyFallback: fontFamilyFallback,
     fontSize: 24,
     fontWeight: FontWeight.w700,
     height: 1.2,

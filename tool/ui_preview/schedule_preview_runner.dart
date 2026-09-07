@@ -2,6 +2,8 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart'
+    show debugDefaultTargetPlatformOverride;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -32,7 +34,13 @@ void main() {
   late DemoEnvironment demo;
   setUpAll(() async {
     final bytes = await File(fontPath).readAsBytes();
-    for (final name in ['Roboto', 'Segoe UI', 'Preview']) {
+    for (final name in [
+      'Roboto',
+      'Segoe UI',
+      'Microsoft YaHei UI',
+      'Microsoft YaHei',
+      'Preview',
+    ]) {
       await (FontLoader(
         name,
       )..addFont(Future.value(ByteData.sublistView(bytes)))).load();
@@ -46,11 +54,19 @@ void main() {
 
   Future<void> withShadows(Future<void> Function() render) async {
     final original = debugDisableShadows;
+    final originalPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride =
+        switch (Platform.environment['LEARNY_PREVIEW_PLATFORM']) {
+          'windows' => TargetPlatform.windows,
+          'android' => TargetPlatform.android,
+          _ => originalPlatform,
+        };
     debugDisableShadows = false;
     try {
       await render();
     } finally {
       debugDisableShadows = original;
+      debugDefaultTargetPlatformOverride = originalPlatform;
     }
   }
 
@@ -217,7 +233,8 @@ void main() {
           if (captureRoutes != null && !captureRoutes.contains(entry.key)) {
             continue;
           }
-          if (size.width == 800 && !['home', 'courses'].contains(entry.key)) {
+          if (size.width == 800 &&
+              !['home', 'courses', 'profile'].contains(entry.key)) {
             continue;
           }
           final mainRoute = [
@@ -230,6 +247,13 @@ void main() {
           if (!mainRoute) router.push(entry.value);
           await settleData();
           await capture(tester, key, '${entry.key}_${size.width.toInt()}');
+          if (entry.key == 'profile' && size.width == 1440) {
+            await tester.tap(find.byTooltip('选择外观'));
+            await tester.pumpAndSettle();
+            await capture(tester, key, 'profile_menu_1440');
+            await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+            await tester.pumpAndSettle();
+          }
           if (entry.key == 'courses') {
             await tester.tap(find.byTooltip('编辑课程'));
             await settleData();
@@ -275,9 +299,11 @@ void main() {
         'home': Routes.home,
         'assignments': Routes.assignments,
         'courses': Routes.courses,
+        'profile': Routes.profile,
       }.entries) {
-        if (captureRoutes != null && !captureRoutes.contains(entry.key))
+        if (captureRoutes != null && !captureRoutes.contains(entry.key)) {
           continue;
+        }
         router.go(entry.value);
         await settleData();
         await capture(tester, key, '${entry.key}_390_large_text');
@@ -290,6 +316,17 @@ void main() {
         router.go(Routes.home);
         await settleData();
         await capture(tester, key, 'home_390_dark');
+      }
+      if (captureRoutes == null || captureRoutes.contains('profile')) {
+        await tester.runAsync(
+          () => container.read(themeModeProvider.notifier).setTheme('dark'),
+        );
+        router.go(Routes.profile);
+        for (final size in [const Size(390, 844), const Size(1440, 900)]) {
+          tester.view.physicalSize = size;
+          await settleData();
+          await capture(tester, key, 'profile_${size.width.toInt()}_dark');
+        }
       }
       await tester.pumpWidget(const SizedBox());
       await tester.pumpAndSettle();

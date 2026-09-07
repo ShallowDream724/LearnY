@@ -19,6 +19,8 @@ import '../files/providers/file_bookmark_providers.dart';
 import 'providers/profile_identity_provider.dart';
 import 'widgets/auto_relogin_enrollment_screen.dart';
 import 'widgets/auto_relogin_setup_dialog.dart';
+import 'widgets/appearance_menu.dart';
+import 'widgets/settings_rows.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -51,6 +53,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         slivers: [
           SliverAppBar(
             pinned: true,
+            titleSpacing: pageGutter(context, maxWidth: 760),
             title: Text(
               '设置',
               style: AppTypography.headlineMedium.copyWith(color: c.text),
@@ -116,49 +119,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 const SizedBox(height: 24),
 
                 // ── Settings Section ──
-                _SectionLabel(label: '偏好设置', textColor: c.subtitle),
+                SettingsSectionLabel(label: '偏好设置'),
                 const SizedBox(height: 8),
 
                 // Theme setting
-                _SettingsGroup(
+                SettingsGroup(
                   children: [
-                    _SettingsTile(
+                    SettingsRow(
                       icon: Icons.palette_outlined,
                       title: '外观',
-                      subtitle: switch (themeMode) {
-                        'light' => '浅色',
-                        'dark' => '深色',
-                        _ => '跟随系统',
-                      },
-                      textColor: c.text,
-                      subColor: c.subtitle,
-                      trailing: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value:
-                              const [
-                                'system',
-                                'light',
-                                'dark',
-                              ].contains(themeMode)
-                              ? themeMode
-                              : 'system',
-                          borderRadius: BorderRadius.circular(8),
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'system',
-                              child: Text('跟随系统'),
-                            ),
-                            DropdownMenuItem(value: 'light', child: Text('浅色')),
-                            DropdownMenuItem(value: 'dark', child: Text('深色')),
-                          ],
-                          onChanged: (value) {
-                            if (value != null) {
-                              ref
-                                  .read(themeModeProvider.notifier)
-                                  .setTheme(value);
-                            }
-                          },
-                        ),
+                      trailing: AppearanceMenu(
+                        value: themeMode,
+                        onChanged: _changeTheme,
                       ),
                     ),
                   ],
@@ -166,12 +138,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
                 const SizedBox(height: 24),
 
-                _SectionLabel(label: '登录与安全', textColor: c.subtitle),
+                SettingsSectionLabel(label: '登录与安全'),
                 const SizedBox(height: 8),
 
-                _SettingsGroup(
+                SettingsGroup(
                   children: [
-                    _SettingsSwitchTile(
+                    SettingsSwitchRow(
                       icon: Icons.lock_clock_outlined,
                       title: '自动重新登录',
                       subtitle: _buildAutoReloginSubtitle(
@@ -180,8 +152,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         status: autoReloginStatus,
                       ),
                       value: autoReloginEnabled,
-                      textColor: c.text,
-                      subColor: c.subtitle,
                       onChanged: _updatingAutoRelogin
                           ? null
                           : _changeAutoRelogin,
@@ -192,37 +162,29 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 const SizedBox(height: 24),
 
                 // ── Data Management Section ──
-                _SectionLabel(label: '数据管理', textColor: c.subtitle),
+                SettingsSectionLabel(label: '数据管理'),
                 const SizedBox(height: 8),
 
-                _SettingsGroup(
+                SettingsGroup(
                   children: [
-                    _SettingsTile(
+                    SettingsRow(
                       icon: Icons.folder_copy_outlined,
                       title: '课程文件',
                       subtitle: '当前学习学期的文件与附件',
-                      textColor: c.text,
-                      subColor: c.subtitle,
                       onTap: () => context.push(Routes.files),
                     ),
-                    Divider(color: c.border, height: 0),
-                    _SettingsTile(
+                    SettingsRow(
                       icon: Icons.bookmark_outline_rounded,
                       title: '收藏文件',
                       subtitle: favoriteCount == 0
                           ? '查看你收藏的文件'
                           : '$favoriteCount 个收藏文件',
-                      textColor: c.text,
-                      subColor: c.subtitle,
                       onTap: () => context.push(Routes.favoriteFiles),
                     ),
-                    Divider(color: c.border, height: 0),
-                    _SettingsTile(
+                    SettingsRow(
                       icon: Icons.folder_rounded,
                       title: '文件管理',
                       subtitle: '管理已下载的文件',
-                      textColor: c.text,
-                      subColor: c.subtitle,
                       onTap: () => context.push(Routes.fileManager),
                     ),
                   ],
@@ -231,39 +193,31 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 const SizedBox(height: 24),
 
                 // ── About Section ──
-                _SectionLabel(label: '关于', textColor: c.subtitle),
+                SettingsSectionLabel(label: '关于'),
                 const SizedBox(height: 8),
 
-                _SettingsGroup(
+                SettingsGroup(
                   children: [
-                    _SettingsTile(
+                    SettingsRow(
                       icon: Icons.info_outlined,
                       title: '版本',
                       subtitle: buildInfo?.shortLabel ?? '读取中...',
-                      textColor: c.text,
-                      subColor: c.subtitle,
                     ),
-                    Divider(color: c.border, height: 0),
-                    _SettingsTile(
+                    SettingsRow(
                       icon: updateInfo?.hasUpdate == true
                           ? Icons.system_update_rounded
                           : Icons.update_rounded,
                       title: _checkingUpdates ? '正在检查更新' : '检查更新',
                       subtitle: _buildUpdateSubtitle(updateInfo),
-                      textColor: c.text,
-                      subColor: c.subtitle,
                       trailingColor: updateInfo?.hasUpdate == true
                           ? AppColors.warning
                           : null,
                       onTap: _checkingUpdates ? null : _checkForUpdate,
                     ),
-                    Divider(color: c.border, height: 0),
-                    _SettingsTile(
+                    SettingsRow(
                       icon: Icons.code_rounded,
                       title: '源代码',
                       subtitle: 'GitHub',
-                      textColor: c.text,
-                      subColor: c.subtitle,
                       onTap: () {
                         // Open GitHub repo
                         launchUrl(
@@ -323,6 +277,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       if (mounted) AppToast.showError(context, message: '自动重新登录设置失败，请重试');
     } finally {
       if (mounted) setState(() => _updatingAutoRelogin = false);
+    }
+  }
+
+  Future<void> _changeTheme(String value) async {
+    try {
+      await ref.read(themeModeProvider.notifier).setTheme(value);
+    } catch (_) {
+      if (mounted) AppToast.showError(context, message: '外观设置未能保存');
     }
   }
 
@@ -509,161 +471,5 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
 
     AppToast.showSuccess(context, message: '已是最新版本');
-  }
-}
-
-// ─────────────────────────────────────────────
-//  Helper widgets
-// ─────────────────────────────────────────────
-
-class _SectionLabel extends StatelessWidget {
-  final String label;
-  final Color textColor;
-
-  const _SectionLabel({required this.label, required this.textColor});
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      label,
-      style: AppTypography.labelSmall.copyWith(
-        color: textColor,
-        fontWeight: FontWeight.w600,
-      ),
-    );
-  }
-}
-
-class _SettingsGroup extends StatelessWidget {
-  final List<Widget> children;
-
-  const _SettingsGroup({required this.children});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: Column(children: children),
-    );
-  }
-}
-
-class _SettingsTile extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color textColor;
-  final Color subColor;
-  final Color? trailingColor;
-  final VoidCallback? onTap;
-  final Widget? trailing;
-
-  const _SettingsTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.textColor,
-    required this.subColor,
-    this.trailingColor,
-    this.onTap,
-    this.trailing,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        child: Row(
-          children: [
-            Icon(icon, size: 22, color: subColor),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: AppTypography.titleMedium.copyWith(color: textColor),
-                  ),
-                  if (trailing != null)
-                    trailing!
-                  else ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      subtitle,
-                      style: AppTypography.bodySmall.copyWith(
-                        color: trailingColor ?? subColor,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            if (onTap != null) ...[
-              const SizedBox(width: 6),
-              Icon(
-                Icons.chevron_right_rounded,
-                size: 18,
-                color: trailingColor ?? subColor,
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SettingsSwitchTile extends StatelessWidget {
-  const _SettingsSwitchTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.value,
-    required this.textColor,
-    required this.subColor,
-    required this.onChanged,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final bool value;
-  final Color textColor;
-  final Color subColor;
-  final ValueChanged<bool>? onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        children: [
-          Icon(icon, size: 22, color: subColor),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: AppTypography.titleMedium.copyWith(color: textColor),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  subtitle,
-                  style: AppTypography.bodySmall.copyWith(color: subColor),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Switch.adaptive(value: value, onChanged: onChanged),
-        ],
-      ),
-    );
   }
 }

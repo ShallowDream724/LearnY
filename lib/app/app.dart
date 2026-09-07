@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import '../core/design/theme.dart';
 import '../core/providers/providers.dart';
@@ -47,6 +48,9 @@ class _LearnYAppState extends ConsumerState<LearnYApp>
 
     return MaterialApp.router(
       title: 'LearnY',
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: const [Locale('zh', 'CN')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,

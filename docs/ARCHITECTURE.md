@@ -65,6 +65,8 @@ Android 和 Windows 共用 Dart 业务逻辑、数据库协议与主要界面。
 
 ## 界面与交互边界
 
+- `AppTypography` 集中定义平台字体及回退链，供主题和独立文字样式共用。`LearnYApp` 声明 `zh_CN` 并使用 Flutter 官方本地化委托，避免英文默认区域影响中文异体字选择和系统控件文案。
+- 设置行的底色、内边距和控制项布局由 `settings_rows.dart` 统一管理；`AppearanceMenu` 使用 `MenuAnchor`，独立持有菜单触发器焦点，区分鼠标关闭与键盘返回。页面继续负责偏好持久化与失败反馈。
 - `ContentLayout` 用实际分配给页面的宽度计算边距，不改写窗口级 `MediaQuery`。`ReadingWidth` 只约束阅读宽度；根详情页按窗口宽度布局。页面中的分栏由局部 `LayoutBuilder` 决定。
 - `AppShell` 保留同一 `PageView` 和分支导航器，缩放窗口不重建浏览状态。窄屏使用 `NavigationBar`，顶层页面支持触控翻页；点击导航直接切换并可打断正在进行的滑动。宽屏使用侧栏，详情浏览不参与主页面滑动。
 - `AppToast` 委托 `ScaffoldMessenger` 管理提示生命周期；`AppActionSheet` 在窄屏使用底部弹层、宽屏使用对话框；作业提醒使用锚定菜单。`SwipeToRead` 将按钮与触控滑动交给同一个异步操作，等待持久化，列表数据决定项目是否移除。失败保留项目并提供反馈。

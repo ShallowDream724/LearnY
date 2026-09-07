@@ -103,13 +103,15 @@ abstract final class AppTheme {
 
     return ThemeData(
       useMaterial3: true,
+      fontFamily: AppTypography.fontFamily,
+      fontFamilyFallback: AppTypography.fontFamilyFallback,
       brightness: brightness,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: background,
       splashFactory: NoSplash.splashFactory,
-      hoverColor: colorScheme.primary.withAlpha(12),
-      focusColor: colorScheme.primary.withAlpha(30),
-      highlightColor: colorScheme.primary.withAlpha(18),
+      hoverColor: textPrimary.withAlpha(isDark ? 14 : 8),
+      focusColor: textPrimary.withAlpha(isDark ? 22 : 14),
+      highlightColor: textPrimary.withAlpha(isDark ? 24 : 16),
       iconTheme: IconThemeData(color: textSecondary, size: 20),
       iconButtonTheme: IconButtonThemeData(
         style: IconButton.styleFrom(
@@ -158,6 +160,43 @@ abstract final class AppTheme {
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         textStyle: AppTypography.bodyMedium.copyWith(color: textPrimary),
+        menuPadding: const EdgeInsets.symmetric(vertical: 6),
+      ),
+      menuTheme: MenuThemeData(
+        style: MenuStyle(
+          backgroundColor: WidgetStatePropertyAll(surface),
+          surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(vertical: 6),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
+      ),
+      menuButtonTheme: MenuButtonThemeData(
+        style: MenuItemButton.styleFrom(
+          foregroundColor: textPrimary,
+          overlayColor: textPrimary,
+          minimumSize: const Size(160, 44),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          textStyle: AppTypography.bodyMedium,
+        ),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.disabled)
+              ? textTertiary
+              : Colors.white,
+        ),
+        trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
+        trackColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? colorScheme.primary.withAlpha(
+                  states.contains(WidgetState.disabled) ? 100 : 255,
+                )
+              : textTertiary.withAlpha(isDark ? 100 : 80),
+        ),
       ),
 
       // ── App Bar ──
