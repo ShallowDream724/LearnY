@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 
 import 'app_theme_colors.dart';
 import 'colors.dart';
+import 'responsive.dart';
 
 class SwipeToRead extends StatefulWidget {
   final Widget child;
@@ -147,6 +148,19 @@ class _SwipeToReadState extends State<SwipeToRead>
               ? Icons.check_circle_rounded
               : Icons.check_circle_outline_rounded);
     final actionLabel = widget.isRead ? '标为未读' : '标为已读';
+
+    if (usesDesktopControls(context)) {
+      return Row(
+        children: [
+          Expanded(child: widget.child),
+          IconButton(
+            tooltip: actionLabel,
+            icon: Icon(actionIcon, size: 20),
+            onPressed: widget.onSwipe,
+          ),
+        ],
+      );
+    }
 
     Widget content = Stack(
       children: [

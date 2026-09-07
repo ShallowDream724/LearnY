@@ -14,6 +14,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../core/design/responsive.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -643,6 +644,9 @@ class _HomeworkItem extends StatelessWidget {
         onLongPressStart: onLongPress == null
             ? null
             : (details) => onLongPress!(details.globalPosition),
+        onSecondaryTapDown: onLongPress == null
+            ? null
+            : (details) => onLongPress!(details.globalPosition),
         child: Material(
           color: cardBg,
           borderRadius: BorderRadius.circular(12),
@@ -742,13 +746,33 @@ class _HomeworkItem extends StatelessWidget {
                           ),
                         ),
                       const SizedBox(width: 4),
-                      Icon(
-                        Icons.chevron_right_rounded,
-                        size: 16,
-                        color: context.isDark
-                            ? const Color(0xFF48484A)
-                            : const Color(0xFFC7C7CC),
-                      ),
+                      if (usesDesktopControls(context) && onLongPress != null)
+                        Builder(
+                          builder: (buttonContext) => IconButton(
+                            tooltip: '作业操作',
+                            visualDensity: VisualDensity.compact,
+                            constraints: const BoxConstraints.tightFor(
+                              width: 32,
+                              height: 32,
+                            ),
+                            icon: const Icon(Icons.more_horiz, size: 20),
+                            onPressed: () {
+                              final box =
+                                  buttonContext.findRenderObject() as RenderBox;
+                              onLongPress!(
+                                box.localToGlobal(box.size.center(Offset.zero)),
+                              );
+                            },
+                          ),
+                        )
+                      else
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          size: 16,
+                          color: context.isDark
+                              ? const Color(0xFF48484A)
+                              : const Color(0xFFC7C7CC),
+                        ),
                     ],
                   ),
                 ],

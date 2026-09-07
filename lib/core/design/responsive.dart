@@ -5,9 +5,17 @@
 /// - expanded: > 840dp (large tablet / desktop)
 library;
 
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 
 enum LayoutType { compact, medium, expanded }
+
+bool usesDesktopControls(BuildContext context) =>
+    switch (Theme.of(context).platform) {
+      TargetPlatform.windows ||
+      TargetPlatform.macOS ||
+      TargetPlatform.linux => true,
+      _ => false,
+    };
 
 /// Get the current layout type based on screen width.
 LayoutType layoutTypeOf(BuildContext context) {
