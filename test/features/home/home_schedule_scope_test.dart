@@ -45,7 +45,7 @@ void main() {
       container.read(homeScheduleSelectedDateProvider.notifier).state =
           DateTime(2026, 9, 14);
       final completed = Completer<ScheduleState>();
-      container.listen(homeScheduleProvider, (_, next) {
+      container.listen(scheduleWeekProvider(DateTime(2026, 9, 14)), (_, next) {
         final state = next.valueOrNull;
         if (state != null &&
             state.hasCalendarData &&
@@ -78,7 +78,10 @@ void main() {
   test('the visible date window advances at Shanghai midnight', () async {
     final ticks = StreamController<DateTime>();
     final container = ProviderContainer(
-      overrides: [minuteTickProvider.overrideWith((ref) => ticks.stream)],
+      overrides: [
+        minuteTickProvider.overrideWith((ref) => ticks.stream),
+        semesterCatalogProvider.overrideWith((ref) => Stream.value([])),
+      ],
     );
     addTearDown(container.dispose);
     addTearDown(ticks.close);

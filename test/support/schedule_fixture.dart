@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:learn_y/core/schedule/schedule_models.dart';
 import 'package:learn_y/core/schedule/schedule_projection.dart';
+import 'package:learn_y/core/semester/semester_repository.dart';
+import 'package:learn_y/core/database/database.dart' show Semester;
 import 'package:learn_y/features/home/providers/home_schedule_provider.dart';
 import 'package:learn_y/features/home/widgets/schedule_browser.dart';
 import 'package:learn_y/features/home/widgets/schedule_dialog.dart';
@@ -86,6 +88,7 @@ class ScheduleFixture extends StatefulWidget {
     this.failure,
     this.scale = 1,
     this.estimated = false,
+    this.semesters = const [],
   });
   final List<int> counts;
   final ValueChanged<String>? onOpen;
@@ -93,6 +96,7 @@ class ScheduleFixture extends StatefulWidget {
   final ScheduleFailure? failure;
   final double scale;
   final bool estimated;
+  final List<Semester> semesters;
   @override
   State<ScheduleFixture> createState() => _ScheduleFixtureState();
 }
@@ -108,6 +112,9 @@ class _ScheduleFixtureState extends State<ScheduleFixture> {
     );
     return ProviderScope(
       overrides: [
+        semesterCatalogProvider.overrideWith(
+          (ref) => Stream.value(widget.semesters),
+        ),
         homeScheduleTodayProvider.overrideWithValue(scheduleToday),
         scheduleWeekProvider.overrideWith(
           (ref, week) => Stream.value(

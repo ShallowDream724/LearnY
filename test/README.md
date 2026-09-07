@@ -26,6 +26,10 @@ bounded and enumerated weeks, unassigned courses, and inferred duration.
 Campus-cookie tests check host isolation; actual Android CookieManager and
 Windows WebView2 integration require device validation.
 
+Semester navigation checks exercise blocked day/week edges, cancellation,
+one confirmation per drag, independent modal selection, persisted home selection,
+navigation during pending content refresh, unknown dates, and midnight boundaries.
+
 ## Manual diagnostics
 
 Files under `tool/auth_diag/` are explicit diagnostic entry points and have never

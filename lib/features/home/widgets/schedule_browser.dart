@@ -8,6 +8,7 @@ import '../../../core/design/typography.dart';
 import '../../../core/schedule/schedule_models.dart';
 import '../../../core/schedule/schedule_projection.dart';
 import 'schedule_status.dart';
+import 'schedule_pager.dart';
 
 /// The home keeps a daily pager. Weekly browsing is a separate full-screen task.
 class ScheduleBrowser extends StatefulWidget {
@@ -25,6 +26,9 @@ class ScheduleBrowser extends StatefulWidget {
     this.hasCalendarData = true,
     this.failure,
     this.onAuthorize,
+    this.firstDate,
+    this.lastDate,
+    this.onBoundary,
   });
 
   final List<HomeScheduleDayOption> days;
@@ -39,6 +43,9 @@ class ScheduleBrowser extends StatefulWidget {
   final bool hasCalendarData;
   final ScheduleFailure? failure;
   final VoidCallback? onAuthorize;
+  final DateTime? firstDate;
+  final DateTime? lastDate;
+  final ValueChanged<int>? onBoundary;
 
   @override
   State<ScheduleBrowser> createState() => _ScheduleBrowserState();
@@ -47,32 +54,13 @@ class ScheduleBrowser extends StatefulWidget {
 class _ScheduleBrowserState extends State<ScheduleBrowser> {
   static final _firstDay = DateTime(1970, 1, 5);
   static final _lastDay = DateTime(2100, 12, 31);
-  int _pageFor(DateTime date) =>
-      DateTime(date.year, date.month, date.day).difference(_firstDay).inDays;
-  late final PageController _pages = PageController(
-    initialPage: _pageFor(widget.selectedDate),
-  );
   final _focus = FocusNode(debugLabel: 'daily-schedule');
   int get _index => widget.days
       .indexWhere((day) => DateUtils.isSameDay(day.date, widget.selectedDate))
       .clamp(0, widget.days.length - 1);
 
   @override
-  void didUpdateWidget(covariant ScheduleBrowser oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (_pages.hasClients &&
-        _pages.page?.round() != _pageFor(widget.selectedDate)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _pages.hasClients) {
-          _pages.jumpToPage(_pageFor(widget.selectedDate));
-        }
-      });
-    }
-  }
-
-  @override
   void dispose() {
-    _pages.dispose();
     _focus.dispose();
     super.dispose();
   }
@@ -80,6 +68,11 @@ class _ScheduleBrowserState extends State<ScheduleBrowser> {
   void _move(int delta) {
     _focus.requestFocus();
     final date = widget.selectedDate.add(Duration(days: delta));
+    if (date.isBefore(widget.firstDate ?? _firstDay) ||
+        date.isAfter(widget.lastDate ?? _lastDay)) {
+      widget.onBoundary?.call(delta);
+      return;
+    }
     if (!date.isBefore(_firstDay) && !date.isAfter(_lastDay)) {
       widget.onDateSelected(date);
     }
@@ -90,8 +83,8 @@ class _ScheduleBrowserState extends State<ScheduleBrowser> {
       context: context,
       initialDate: widget.selectedDate,
       currentDate: widget.today,
-      firstDate: _firstDay,
-      lastDate: _lastDay,
+      firstDate: widget.firstDate ?? _firstDay,
+      lastDate: widget.lastDate ?? _lastDay,
     );
     if (date != null && mounted) widget.onDateSelected(date);
   }
@@ -213,19 +206,16 @@ class _ScheduleBrowserState extends State<ScheduleBrowser> {
                       alignment: Alignment.topCenter,
                       child: SizedBox(
                         height: contentHeight,
-                        child: PageView.builder(
-                          controller: _pages,
-                          itemCount: _pageFor(_lastDay) + 1,
-                          onPageChanged: (index) {
-                            if (index != _pageFor(widget.selectedDate)) {
-                              widget.onDateSelected(
-                                _firstDay.add(Duration(days: index)),
-                              );
-                            }
-                          },
-                          itemBuilder: (context, index) {
+                        child: SchedulePager(
+                          date: widget.selectedDate,
+                          firstDate: widget.firstDate ?? _firstDay,
+                          lastDate: widget.lastDate ?? _lastDay,
+                          stepDays: 1,
+                          onDateChanged: widget.onDateSelected,
+                          onBoundary: widget.onBoundary,
+                          itemBuilder: (context, pageDate) {
                             final date = buildHomeScheduleDays(
-                              _firstDay.add(Duration(days: index)),
+                              pageDate,
                               length: 1,
                               today: widget.today,
                             ).single;

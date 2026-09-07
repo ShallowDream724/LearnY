@@ -11,6 +11,24 @@ import '../sync/sync_operation.dart';
 import 'semester_models.dart';
 import 'semester_repository.dart';
 
+Future<String?> showSemesterPicker(
+  BuildContext context, {
+  required String? selectedId,
+  bool requireCalendarDates = false,
+}) {
+  final container = ProviderScope.containerOf(context);
+  return showDialog<String>(
+    context: context,
+    builder: (_) => UncontrolledProviderScope(
+      container: container,
+      child: _SemesterDialog(
+        selectedId: selectedId,
+        requireCalendarDates: requireCalendarDates,
+      ),
+    ),
+  );
+}
+
 class SemesterToolbar extends ConsumerWidget {
   const SemesterToolbar({
     super.key,
@@ -33,10 +51,7 @@ class SemesterToolbar extends ConsumerWidget {
         sync.errorMessage ?? (sync.syncWarnings.isNotEmpty ? '部分内容未能更新' : null);
 
     Future<void> selectSemester() async {
-      final id = await showDialog<String>(
-        context: context,
-        builder: (_) => const _SemesterDialog(),
-      );
+      final id = await showSemesterPicker(context, selectedId: selected);
       if (id == null || id == selected || !context.mounted) return;
       if (GoRouterState.of(context).uri.path.startsWith('/courses/')) {
         context.go(Routes.courses);
@@ -146,7 +161,12 @@ class SemesterToolbar extends ConsumerWidget {
 }
 
 class _SemesterDialog extends ConsumerStatefulWidget {
-  const _SemesterDialog();
+  const _SemesterDialog({
+    required this.selectedId,
+    this.requireCalendarDates = false,
+  });
+  final String? selectedId;
+  final bool requireCalendarDates;
 
   @override
   ConsumerState<_SemesterDialog> createState() => _SemesterDialogState();
@@ -201,7 +221,8 @@ class _SemesterDialogState extends ConsumerState<_SemesterDialog> {
   @override
   Widget build(BuildContext context) {
     final semesters = ref.watch(semesterCatalogProvider);
-    final selected = ref.watch(currentSemesterIdProvider);
+    final selected = widget.selectedId;
+    final calendar = ref.watch(academicCalendarProvider);
     final official = ref.watch(serverCurrentSemesterIdProvider).valueOrNull;
     return AlertDialog(
       title: Row(
@@ -241,16 +262,24 @@ class _SemesterDialogState extends ConsumerState<_SemesterDialog> {
                         itemCount: items.length,
                         itemBuilder: (context, index) {
                           final semester = items[index];
+                          final datesAvailable =
+                              !widget.requireCalendarDates ||
+                              calendar.datesFor(semester) != null;
                           return ListTile(
+                            enabled: datesAvailable,
                             selected: semester.id == selected,
                             title: Text(semesterLabel(semester.id)),
-                            subtitle: semester.id == official
+                            subtitle: !datesAvailable
+                                ? const Text('学期起止日期待确认')
+                                : semester.id == official
                                 ? const Text('当前学期')
                                 : null,
                             trailing: semester.id == selected
                                 ? const Icon(Icons.check)
                                 : null,
-                            onTap: () => Navigator.pop(context, semester.id),
+                            onTap: datesAvailable
+                                ? () => Navigator.pop(context, semester.id)
+                                : null,
                           );
                         },
                       ),

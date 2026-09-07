@@ -40,10 +40,12 @@ class UnscheduledCourse {
     required this.courseId,
     required this.courseName,
     required this.details,
+    this.semesterId,
   });
   final String courseId;
   final String courseName;
   final List<String> details;
+  final String? semesterId;
 }
 
 class HomeScheduleDayOption {

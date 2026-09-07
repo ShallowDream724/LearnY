@@ -11,6 +11,7 @@ import 'package:learn_y/core/design/theme.dart';
 import 'package:learn_y/core/providers/providers.dart';
 import 'package:learn_y/core/providers/connectivity_provider.dart';
 import 'package:learn_y/demo/demo_environment.dart';
+import 'package:learn_y/core/database/database.dart' show Semester;
 
 import '../../test/support/schedule_fixture.dart';
 
@@ -86,6 +87,24 @@ void main() {
                     child: ScheduleFixture(
                       counts: sample.value,
                       estimated: sample.key == 'estimated',
+                      semesters: const [
+                        Semester(
+                          id: '2025-2026-3',
+                          startDate: '2026-06-29',
+                          endDate: '2026-09-13',
+                          startYear: 2025,
+                          endYear: 2026,
+                          type: 'summer',
+                        ),
+                        Semester(
+                          id: '2026-2027-1',
+                          startDate: '2026-09-14',
+                          endDate: '2027-01-17',
+                          startYear: 2026,
+                          endYear: 2027,
+                          type: 'fall',
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -98,6 +117,11 @@ void main() {
         await tester.tap(find.byTooltip('查看整周课表'));
         await tester.pumpAndSettle();
         await capture(tester, key, 'week_${width.toInt()}_${sample.key}');
+        if (sample.key == 'estimated') {
+          await tester.tap(find.byTooltip('下一周'));
+          await tester.pumpAndSettle();
+          await capture(tester, key, 'boundary_${width.toInt()}');
+        }
       }
     }
   });

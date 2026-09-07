@@ -8,6 +8,8 @@ import '../../../core/auth/auth_controller.dart';
 import '../../../core/schedule/schedule_models.dart';
 import '../../../core/schedule/schedule_projection.dart';
 import '../../../core/schedule/schedule_repository.dart';
+import '../../../core/schedule/schedule_semester_navigation.dart';
+import '../../../core/semester/semester_repository.dart';
 import '../../../core/sync/sync_operation.dart';
 import '../../../core/utils/deadline_time.dart';
 
@@ -16,7 +18,46 @@ final scheduleRepositoryProvider = Provider<ScheduleRepository>((ref) {
     database: ref.watch(databaseProvider),
     apiClient: ref.watch(learningReadApiProvider),
     courseCatalog: ref.watch(courseCatalogRepositoryProvider),
+    academicCalendar: ref.watch(academicCalendarProvider),
   );
+});
+
+final scheduleSemesterNavigationProvider = Provider<ScheduleSemesterNavigation>(
+  (ref) {
+    return ScheduleSemesterNavigation(
+      ref.watch(semesterCatalogProvider).valueOrNull ?? [],
+      ref.watch(academicCalendarProvider),
+    );
+  },
+);
+
+final homeScheduleBrowseDateProvider = Provider<DateTime>((ref) {
+  final today = ref.watch(homeScheduleTodayProvider);
+  final explicit = ref.watch(homeScheduleSelectedDateProvider);
+  final navigation = ref.watch(scheduleSemesterNavigationProvider);
+  final term = navigation.datesFor(ref.watch(currentSemesterIdProvider));
+  if (explicit != null && (term == null || term.contains(explicit))) {
+    return explicit;
+  }
+  if (term == null) return today;
+  final enteredOn = ref.watch(_homeScheduleEnteredOnProvider);
+  if (!enteredOn.isAfter(DateTime.parse(term.end))) {
+    final start = DateTime.parse(term.start);
+    final end = DateTime.parse(term.end);
+    return today.isBefore(start)
+        ? start
+        : today.isAfter(end)
+        ? end
+        : today;
+  }
+  return navigation.initialDate(term, today);
+});
+
+// Midnight can advance the day, but cannot silently leave the selected term.
+final _homeScheduleEnteredOnProvider = Provider<DateTime>((ref) {
+  ref.watch(currentSemesterIdProvider);
+  ref.watch(dataSessionEpochProvider);
+  return ref.read(homeScheduleTodayProvider);
 });
 
 final homeScheduleTodayProvider = Provider<DateTime>((ref) {
@@ -35,12 +76,12 @@ final homeScheduleVisibleDaysProvider = Provider<List<HomeScheduleDayOption>>((
 });
 
 final homeScheduleWeekStartProvider = Provider<DateTime>((ref) {
-  final selected = ref.watch(homeScheduleSelectedDateProvider);
-  return scheduleWeekStart(selected ?? ref.watch(homeScheduleTodayProvider));
+  return scheduleWeekStart(ref.watch(homeScheduleBrowseDateProvider));
 });
 
 final homeScheduleSelectedDateProvider = StateProvider<DateTime?>((ref) {
   ref.watch(dataSessionEpochProvider);
+  ref.watch(currentSemesterIdProvider);
   return null;
 });
 

@@ -23,3 +23,6 @@ The `estimated` sample includes jagged inferred-duration blocks, provenance,
 and an unassigned lab reminder. Dense samples retain 30 and 35 occurrences;
 the timetable scrolls vertically when needed. Every width also captures the
 compact daily entry before opening the independent weekly overlay.
+
+Fixtures include summer/autumn bounds. `boundary_<width>.png` captures the
+semester-end confirmation with the current week still visible underneath.

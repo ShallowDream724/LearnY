@@ -5,10 +5,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/design/app_theme_colors.dart';
 import '../../../core/schedule/schedule_models.dart';
 import '../../../core/schedule/schedule_projection.dart';
+import '../../../core/semester/academic_calendar.dart';
+import '../../../core/semester/semester_models.dart';
+import '../../../core/semester/semester_switcher.dart';
 import '../providers/home_schedule_provider.dart';
 import '../../auth/widgets/campus_authorization_screen.dart';
 import 'schedule_status.dart';
 import 'weekly_timetable.dart';
+import 'schedule_pager.dart';
+import 'schedule_semester_confirmation.dart';
 
 Future<void> showScheduleDialog(
   BuildContext context, {
@@ -44,31 +49,129 @@ class ScheduleDialog extends ConsumerStatefulWidget {
 class _ScheduleDialogState extends ConsumerState<ScheduleDialog> {
   static final _firstWeek = DateTime(1970, 1, 5);
   static final _lastWeek = scheduleWeekStart(DateTime(2100, 12, 31));
-  late DateTime _week = scheduleWeekStart(widget.initialDate);
-  late final _pages = PageController(initialPage: _pageFor(_week));
+  late DateTime _focusDate = widget.initialDate;
+  DateTime get _week => scheduleWeekStart(_focusDate);
+  String? _semesterId;
+  bool _navigating = false;
   bool _showWeekends = false;
-  int _pageFor(DateTime date) =>
-      scheduleWeekStart(date).difference(_firstWeek).inDays ~/ 7;
-  @override
-  void dispose() {
-    _pages.dispose();
-    super.dispose();
+
+  AcademicTermDates? get _term {
+    final navigation = ref.read(scheduleSemesterNavigationProvider);
+    return navigation.datesFor(_semesterId) ?? navigation.termOn(_focusDate);
   }
 
   void _go(DateTime date) {
     final week = scheduleWeekStart(date);
     if (week.isBefore(_firstWeek) || week.isAfter(_lastWeek)) return;
-    _pages.jumpToPage(_pageFor(week));
-    setState(() => _week = week);
+    final term = ref.read(scheduleSemesterNavigationProvider).termOn(date);
+    setState(() {
+      _focusDate = date;
+      _semesterId = term?.id;
+    });
+  }
+
+  void _move(int direction) {
+    if (_navigating) return;
+    final date = _week.add(Duration(days: direction * 7));
+    if (date.isBefore(_firstWeek) || date.isAfter(_lastWeek)) return;
+    final term = _term;
+    if (term != null &&
+        (date.isBefore(scheduleWeekStart(DateTime.parse(term.start))) ||
+            date.isAfter(scheduleWeekStart(DateTime.parse(term.end))))) {
+      _crossBoundary(direction);
+      return;
+    }
+    _goWithinTerm(date);
+  }
+
+  void _goWithinTerm(DateTime date) {
+    final id = _term?.id;
+    setState(() {
+      _focusDate = date;
+      _semesterId = id;
+    });
+  }
+
+  Future<void> _crossBoundary(int direction) async {
+    if (_navigating) return;
+    _navigating = true;
+    try {
+      final navigation = ref.read(scheduleSemesterNavigationProvider);
+      final term = _term;
+      if (term == null) return;
+      final adjacent = navigation.adjacent(term.id, direction);
+      final next = navigation.datesFor(adjacent?.id);
+      if (next == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              adjacent == null
+                  ? '暂无相邻学期信息'
+                  : '${semesterLabel(adjacent.id)}的起止日期待确认',
+            ),
+          ),
+        );
+        return;
+      }
+      final accepted = await confirmScheduleSemesterChange(
+        context,
+        semesterId: next.id,
+        home: false,
+        direction: direction,
+      );
+      if (accepted && mounted) {
+        setState(() {
+          _semesterId = next.id;
+          _focusDate = navigation.boundaryDate(next, direction);
+        });
+      }
+    } finally {
+      _navigating = false;
+    }
+  }
+
+  Future<void> _pickSemester() async {
+    if (_navigating) return;
+    _navigating = true;
+    try {
+      final id = await showSemesterPicker(
+        context,
+        selectedId: _term?.id,
+        requireCalendarDates: true,
+      );
+      if (id == null || !mounted) return;
+      final navigation = ref.read(scheduleSemesterNavigationProvider);
+      final term = navigation.datesFor(id);
+      if (term == null) return;
+      setState(() {
+        _semesterId = id;
+        _focusDate = navigation.initialDate(
+          term,
+          ref.read(homeScheduleTodayProvider),
+        );
+      });
+    } finally {
+      _navigating = false;
+    }
   }
 
   Future<void> _pickDate() async {
+    final term = _term;
+    final first = term == null ? _firstWeek : DateTime.parse(term.start);
+    final last = term == null
+        ? DateTime(2100, 12, 31)
+        : DateTime.parse(term.end);
+    final initial = _focusDate.isBefore(first)
+        ? first
+        : _focusDate.isAfter(last)
+        ? last
+        : _focusDate;
     final date = await showDatePicker(
       context: context,
-      initialDate: _week,
+      initialDate: initial,
       currentDate: ref.read(homeScheduleTodayProvider),
-      firstDate: _firstWeek,
-      lastDate: DateTime(2100, 12, 31),
+      firstDate: first,
+      lastDate: last,
     );
     if (date != null && mounted) _go(date);
   }
@@ -84,6 +187,14 @@ class _ScheduleDialogState extends ConsumerState<ScheduleDialog> {
   @override
   Widget build(BuildContext context) {
     final today = ref.watch(homeScheduleTodayProvider);
+    ref.watch(scheduleSemesterNavigationProvider);
+    final term = _term;
+    final firstWeek = term == null
+        ? _firstWeek
+        : scheduleWeekStart(DateTime.parse(term.start));
+    final lastWeek = term == null
+        ? _lastWeek
+        : scheduleWeekStart(DateTime.parse(term.end));
     final state = ref.watch(scheduleWeekProvider(_week));
     final loading =
         state.isLoading || (state.valueOrNull?.isRefreshing ?? false);
@@ -107,7 +218,7 @@ class _ScheduleDialogState extends ConsumerState<ScheduleDialog> {
           ),
           _ChangeWeekIntent: CallbackAction<_ChangeWeekIntent>(
             onInvoke: (intent) {
-              _go(_week.add(Duration(days: intent.delta * 7)));
+              _move(intent.delta);
               return null;
             },
           ),
@@ -132,9 +243,36 @@ class _ScheduleDialogState extends ConsumerState<ScheduleDialog> {
                   child: Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          '课表',
-                          style: Theme.of(context).textTheme.titleMedium,
+                        child: Tooltip(
+                          message: '切换课表学期',
+                          child: TextButton(
+                            style: TextButton.styleFrom(
+                              alignment: Alignment.centerLeft,
+                              padding: EdgeInsets.zero,
+                            ),
+                            onPressed: _pickSemester,
+                            child: Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    compact
+                                        ? semesterLabel(
+                                            term?.id,
+                                          ).replaceFirst(' ', '\n')
+                                        : semesterLabel(term?.id),
+                                    maxLines: compact ? 2 : 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: context.colors.text,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                const Icon(Icons.expand_more, size: 16),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                       IconButton(
@@ -201,7 +339,7 @@ class _ScheduleDialogState extends ConsumerState<ScheduleDialog> {
                       IconButton(
                         tooltip: '上一周',
                         onPressed: _week.isAfter(_firstWeek)
-                            ? () => _go(_week.subtract(const Duration(days: 7)))
+                            ? () => _move(-1)
                             : null,
                         icon: const Icon(Icons.chevron_left),
                       ),
@@ -222,7 +360,7 @@ class _ScheduleDialogState extends ConsumerState<ScheduleDialog> {
                       IconButton(
                         tooltip: '下一周',
                         onPressed: _week.isBefore(_lastWeek)
-                            ? () => _go(_week.add(const Duration(days: 7)))
+                            ? () => _move(1)
                             : null,
                         icon: const Icon(Icons.chevron_right),
                       ),
@@ -230,14 +368,16 @@ class _ScheduleDialogState extends ConsumerState<ScheduleDialog> {
                   ),
                 ),
                 Expanded(
-                  child: PageView.builder(
-                    controller: _pages,
-                    itemCount: _pageFor(_lastWeek) + 1,
-                    onPageChanged: (page) => setState(
-                      () => _week = _firstWeek.add(Duration(days: page * 7)),
-                    ),
-                    itemBuilder: (_, page) => _ScheduleWeekPage(
-                      week: _firstWeek.add(Duration(days: page * 7)),
+                  child: SchedulePager(
+                    date: _week,
+                    firstDate: firstWeek,
+                    lastDate: lastWeek,
+                    stepDays: 7,
+                    onDateChanged: _goWithinTerm,
+                    onBoundary: _crossBoundary,
+                    itemBuilder: (_, week) => _ScheduleWeekPage(
+                      week: week,
+                      term: term,
                       showWeekends: _showWeekends,
                       onOpenItem: _openItem,
                       onOpenCourse: (id) {
@@ -267,17 +407,38 @@ class _ScheduleWeekPage extends ConsumerWidget {
     required this.showWeekends,
     required this.onOpenItem,
     required this.onOpenCourse,
+    this.term,
   });
   final DateTime week;
   final bool showWeekends;
   final ValueChanged<TodayScheduleItem> onOpenItem;
   final ValueChanged<String> onOpenCourse;
+  final AcademicTermDates? term;
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(scheduleWeekProvider(week));
     final state = async.valueOrNull;
-    final snapshot =
+    final rawSnapshot =
         state?.snapshot ?? emptyScheduleSnapshot(buildHomeScheduleDays(week));
+    final snapshot = term == null
+        ? rawSnapshot
+        : HomeScheduleSnapshot(
+            days: rawSnapshot.days,
+            hasRoutineData: rawSnapshot.hasRoutineData,
+            unscheduledCourses: rawSnapshot.unscheduledCourses
+                .where(
+                  (course) =>
+                      course.semesterId == null ||
+                      course.semesterId == term!.id,
+                )
+                .toList(),
+            itemsByDateKey: {
+              for (final day in rawSnapshot.days)
+                day.dateKey: term!.contains(day.date)
+                    ? rawSnapshot.itemsFor(day)
+                    : const [],
+            },
+          );
     final failure =
         state?.failure ?? (async.hasError ? ScheduleFailure.storage : null);
     final loading = async.isLoading || (state?.isRefreshing ?? false);

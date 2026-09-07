@@ -79,7 +79,7 @@ class SyncNotifier extends StateNotifier<SyncState> {
   Future<SyncState> syncCourse(String courseId, {bool force = false}) =>
       _enqueue(_SyncKind.course, courseId: courseId, force: force);
 
-  Future<SyncState> selectSemester(String id) {
+  Future<SyncState> selectSemester(String id, {bool waitForRefresh = true}) {
     invalidateScope();
     final request = ++_selectionRequest;
     final owner = _ref.read(authProvider).username;
@@ -102,7 +102,10 @@ class SyncNotifier extends StateNotifier<SyncState> {
       if (!mounted || request != _selectionRequest) {
         return const SyncState(status: SyncStatus.cancelled);
       }
-      return syncAll(force: true);
+      final refresh = syncAll(force: true);
+      if (waitForRefresh) return refresh;
+      unawaited(refresh);
+      return result;
     });
   }
 

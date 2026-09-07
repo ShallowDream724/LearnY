@@ -321,6 +321,7 @@ class ScheduleRepository {
         if (unresolved.isNotEmpty) {
           unassigned.add(
             UnscheduledCourse(
+              semesterId: semester.id,
               courseId: course.id,
               courseName: course.chineseName.isNotEmpty
                   ? course.chineseName

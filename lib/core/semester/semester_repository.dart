@@ -7,6 +7,7 @@ import '../database/database.dart';
 import '../providers/api_client_provider.dart';
 import '../providers/app_providers.dart';
 import 'semester_models.dart';
+import 'academic_calendar.dart';
 
 class SemesterRepository {
   const SemesterRepository({required this.apiClient, required this.database});
@@ -114,6 +115,10 @@ final semesterRepositoryProvider = Provider<SemesterRepository>((ref) {
     database: ref.watch(databaseProvider),
   );
 });
+
+final academicCalendarProvider = Provider<AcademicCalendar>(
+  (ref) => const AcademicCalendar(),
+);
 
 final semesterCatalogProvider = StreamProvider<List<Semester>>((ref) {
   return ref.watch(databaseProvider).watchSemesters();
