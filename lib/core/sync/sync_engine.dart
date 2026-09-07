@@ -4,7 +4,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 
 import '../api/enums.dart';
-import '../api/learn_api.dart';
+import '../api/learning_read_api.dart';
 import '../api/models.dart' as api;
 import '../database/app_state_keys.dart';
 import '../database/database.dart';
@@ -34,7 +34,7 @@ class SyncEngine {
     required this.semesterRepository,
   });
 
-  final Learn2018Helper apiClient;
+  final LearningReadApi apiClient;
   final AppDatabase database;
   final FileRepository fileRepository;
   final SemesterRepository semesterRepository;

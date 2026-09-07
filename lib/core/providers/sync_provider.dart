@@ -22,7 +22,7 @@ final syncTimeoutProvider = Provider<Duration>(
 
 final _syncEngineProvider = Provider<SyncEngine>((ref) {
   return SyncEngine(
-    apiClient: ref.watch(apiClientProvider),
+    apiClient: ref.watch(learningReadApiProvider),
     database: ref.watch(databaseProvider),
     fileRepository: ref.watch(fileRepositoryProvider),
     semesterRepository: ref.watch(semesterRepositoryProvider),

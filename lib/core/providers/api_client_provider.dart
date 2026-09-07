@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/learn_api.dart';
+import '../api/learning_read_api.dart';
 import '../auth/session_recovery_coordinator.dart';
 import 'app_providers.dart';
 
@@ -25,4 +26,8 @@ final apiClientProvider = Provider<Learn2018Helper>((ref) {
     ),
   );
   return helper;
+});
+
+final learningReadApiProvider = Provider<LearningReadApi>((ref) {
+  return ref.watch(apiClientProvider);
 });

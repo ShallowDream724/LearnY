@@ -25,6 +25,7 @@ import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 
 import 'enums.dart';
+import 'learning_read_api.dart';
 import 'models.dart';
 import 'urls.dart' as urls;
 import 'utils.dart';
@@ -125,7 +126,6 @@ bool isAuthenticatedLearnPage({
   return true;
 }
 
-@visibleForTesting
 String? extractCsrfTokenFromPage(String pageSource) {
   if (pageSource.isEmpty) {
     return null;
@@ -217,7 +217,7 @@ String _authResponsePreview(String responseBody, {int maxLength = 240}) {
 // Learn2018Helper
 // ---------------------------------------------------------------------------
 
-class Learn2018Helper {
+class Learn2018Helper implements LearningReadApi {
   final CredentialProvider? _provider;
   final CookieJar _cookieJar;
   final SessionRecoveryHandler? _sessionRecoveryHandler;
@@ -953,6 +953,7 @@ class Learn2018Helper {
   // getCalendar
   // -------------------------------------------------------------------
 
+  @override
   Future<List<CalendarEvent>> getCalendar(
     String startDate,
     String endDate, {
@@ -1041,6 +1042,7 @@ class Learn2018Helper {
   // getSemesterIdList
   // -------------------------------------------------------------------
 
+  @override
   Future<List<String>> getSemesterIdList() async {
     final json = await _fetchJson(urls.learnSemesterList());
     if (json is! List) {
@@ -1054,6 +1056,7 @@ class Learn2018Helper {
   // getCurrentSemester
   // -------------------------------------------------------------------
 
+  @override
   Future<SemesterInfo> getCurrentSemester() async {
     final json = await _fetchJson(urls.learnCurrentSemester());
     if (json['message'] != 'success') {
@@ -1075,6 +1078,7 @@ class Learn2018Helper {
   // getCourseList
   // -------------------------------------------------------------------
 
+  @override
   Future<List<CourseInfo>> getCourseList(
     String semesterID, {
     CourseType courseType = CourseType.student,
@@ -1182,6 +1186,7 @@ class Learn2018Helper {
   // getNotificationList
   // -------------------------------------------------------------------
 
+  @override
   Future<List<Notification>> getNotificationList(
     String courseID, {
     CourseType courseType = CourseType.student,
@@ -1262,6 +1267,7 @@ class Learn2018Helper {
   // getFileList
   // -------------------------------------------------------------------
 
+  @override
   Future<List<CourseFile>> getFileList(
     String courseID, {
     CourseType courseType = CourseType.student,
@@ -1538,6 +1544,7 @@ class Learn2018Helper {
   // getHomeworkList
   // -------------------------------------------------------------------
 
+  @override
   Future<List<Homework>> getHomeworkList(
     String courseID, {
     CourseType courseType = CourseType.student,

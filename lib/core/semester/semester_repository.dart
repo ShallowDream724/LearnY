@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../api/learn_api.dart';
+import '../api/learning_read_api.dart';
 import '../api/models.dart' as api;
 import '../database/app_state_keys.dart';
 import '../database/database.dart';
@@ -11,7 +11,7 @@ import 'semester_models.dart';
 class SemesterRepository {
   const SemesterRepository({required this.apiClient, required this.database});
 
-  final Learn2018Helper apiClient;
+  final LearningReadApi apiClient;
   final AppDatabase database;
 
   Future<SemesterCatalogRefresh> refreshCatalog({
@@ -110,7 +110,7 @@ class SemesterRepository {
 
 final semesterRepositoryProvider = Provider<SemesterRepository>((ref) {
   return SemesterRepository(
-    apiClient: ref.watch(apiClientProvider),
+    apiClient: ref.watch(learningReadApiProvider),
     database: ref.watch(databaseProvider),
   );
 });

@@ -22,6 +22,7 @@ import '../../core/sync/sync_actions.dart';
 import 'providers/home_providers.dart';
 import 'providers/home_schedule_provider.dart';
 import 'widgets/home_sections.dart';
+import 'widgets/home_schedule_section.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -45,10 +46,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Future<void> _onRefresh() async {
     final syncState = (await ref.read(syncActionsProvider).refreshAll()).state;
-    await resetHomeScheduleRemoteRefreshState(
-      database: ref.read(databaseProvider),
-    );
-    ref.invalidate(homeScheduleSnapshotProvider);
+    if (!mounted) return;
+    await ref.read(homeScheduleActionsProvider).refresh();
     if (!mounted) return;
     if (syncState.status == SyncStatus.success) {
       final msg = syncState.syncWarnings.isNotEmpty

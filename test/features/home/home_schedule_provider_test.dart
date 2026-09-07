@@ -4,7 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:learn_y/core/api/models.dart' as api;
 import 'package:learn_y/core/database/database.dart' as db;
-import 'package:learn_y/features/home/providers/home_schedule_provider.dart';
+import 'package:learn_y/core/schedule/schedule_models.dart';
+import 'package:learn_y/core/schedule/schedule_projection.dart';
+import 'package:learn_y/core/schedule/schedule_cache_codec.dart';
 
 void main() {
   group('buildHomeScheduleSnapshotFromCachedCourses', () {
@@ -389,46 +391,49 @@ void main() {
       );
     });
 
-    test('merges adjacent items after combining remote and local snapshots', () {
-      final days = buildHomeScheduleDays(DateTime(2026, 3, 24), length: 1);
-      final remote = buildHomeScheduleSnapshotFromCalendarEvents(
-        days: days,
-        events: const [
-          api.CalendarEvent(
-            location: '六教6A414',
-            status: '',
-            startTime: '13:30',
-            endTime: '15:05',
-            date: '20260324',
-            courseName: '土力学',
-          ),
-        ],
-      );
-      final local = HomeScheduleSnapshot(
-        days: days,
-        itemsByDateKey: {
-          days.first.dateKey: const [
-            TodayScheduleItem(
-              courseId: 'course-1',
-              courseName: '土力学',
-              startTime: '15:20',
-              endTime: '16:55',
+    test(
+      'merges adjacent items after combining remote and local snapshots',
+      () {
+        final days = buildHomeScheduleDays(DateTime(2026, 3, 24), length: 1);
+        final remote = buildHomeScheduleSnapshotFromCalendarEvents(
+          days: days,
+          events: const [
+            api.CalendarEvent(
               location: '六教6A414',
+              status: '',
+              startTime: '13:30',
+              endTime: '15:05',
+              date: '20260324',
+              courseName: '土力学',
             ),
           ],
-        },
-      );
+        );
+        final local = HomeScheduleSnapshot(
+          days: days,
+          itemsByDateKey: {
+            days.first.dateKey: const [
+              TodayScheduleItem(
+                courseId: 'course-1',
+                courseName: '土力学',
+                startTime: '15:20',
+                endTime: '16:55',
+                location: '六教6A414',
+              ),
+            ],
+          },
+        );
 
-      final merged = mergeHomeScheduleSnapshots(
-        primary: remote,
-        fallback: local,
-      );
+        final merged = mergeHomeScheduleSnapshots(
+          primary: remote,
+          fallback: local,
+        );
 
-      final items = merged.itemsFor(days.first);
-      expect(items, hasLength(1));
-      expect(items.first.startTime, '13:30');
-      expect(items.first.endTime, '16:55');
-    });
+        final items = merged.itemsFor(days.first);
+        expect(items, hasLength(1));
+        expect(items.first.startTime, '13:30');
+        expect(items.first.endTime, '16:55');
+      },
+    );
   });
 }
 

@@ -11,6 +11,7 @@ import 'package:learn_y/core/database/app_state_keys.dart';
 import 'package:learn_y/core/database/database.dart';
 import 'package:learn_y/core/providers/providers.dart';
 import 'package:learn_y/core/providers/sync_provider.dart';
+import 'package:learn_y/core/semester/semester_repository.dart';
 import 'package:learn_y/core/semester/semester_switcher.dart';
 import 'package:learn_y/features/home/providers/home_schedule_provider.dart';
 
@@ -256,10 +257,15 @@ void main() {
       final second = fixture.sync.syncAll();
       expect(identical(first, second), isTrue);
       await first;
+      await fixture.container.read(serverCurrentSemesterIdProvider.future);
+      fixture.container.listen(homeScheduleProvider, (_, _) {});
       final schedule = await fixture.container.read(
-        homeScheduleSnapshotProvider.future,
+        homeScheduleProvider.future,
       );
-      expect(schedule.itemsByDateKey.values.expand((items) => items), isEmpty);
+      expect(
+        schedule.snapshot.itemsByDateKey.values.expand((items) => items),
+        isEmpty,
+      );
       expect(fixture.client.calendarCalls, 0);
     },
   );

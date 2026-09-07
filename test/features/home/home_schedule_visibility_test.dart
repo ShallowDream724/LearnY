@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:learn_y/core/auth/auth_controller.dart';
-import 'package:learn_y/features/home/widgets/home_sections.dart';
+import 'package:learn_y/features/home/widgets/home_schedule_section.dart';
 
 void main() {
   test('cached auth state still shows the home schedule section', () {

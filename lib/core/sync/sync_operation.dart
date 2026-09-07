@@ -10,8 +10,10 @@ class SyncOperation {
 
   void cancel() => _cancelled = true;
 
+  bool get isActive => !_cancelled && (_isCurrent?.call() ?? true);
+
   void ensureActive() {
-    if (_cancelled || !(_isCurrent?.call() ?? true)) {
+    if (!isActive) {
       throw const SyncCancelled();
     }
   }

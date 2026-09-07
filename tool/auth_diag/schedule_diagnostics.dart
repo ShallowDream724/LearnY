@@ -10,7 +10,8 @@ import 'package:learn_y/core/api/models.dart' as api;
 import 'package:learn_y/core/api/urls.dart' as urls;
 import 'package:learn_y/core/api/utils.dart';
 import 'package:learn_y/core/database/database.dart' as db;
-import 'package:learn_y/features/home/providers/home_schedule_provider.dart';
+import 'package:learn_y/core/schedule/schedule_models.dart';
+import 'package:learn_y/core/schedule/schedule_projection.dart';
 
 Future<int> runScheduleDiagnostics(List<String> args) async {
   final options = _CliOptions.parse(args);
@@ -289,7 +290,7 @@ Future<_RawCalendarProbeResult> _probeCalendarRaw({
   return _RawCalendarProbeResult(
     rawPreview: preview,
     statusCode: rawResp.statusCode,
-    uri: rawResp.realUri?.toString(),
+    uri: rawResp.realUri.toString(),
   );
 }
 
