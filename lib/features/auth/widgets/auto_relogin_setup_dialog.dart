@@ -56,6 +56,7 @@ class _AutoReloginSetupDialogState extends State<AutoReloginSetupDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      scrollable: true,
       titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
       contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
       actionsPadding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
@@ -70,7 +71,7 @@ class _AutoReloginSetupDialogState extends State<AutoReloginSetupDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '启用后，LearnY 会将账号密码与设备指纹保存到系统安全存储中，仅用于会话过期后的静默恢复，不会上传到我们的服务器。若出现“信任当前设备 / 180天”等提示，建议在统一身份页面中勾选。',
+              '账号密码保存在系统安全存储中，用于会话过期后恢复登录。若学校提示信任当前设备，请确认后继续。',
               style: AppTypography.bodyMedium.copyWith(
                 color: context.colors.subtitle,
                 height: 1.45,
@@ -79,6 +80,7 @@ class _AutoReloginSetupDialogState extends State<AutoReloginSetupDialog> {
             const SizedBox(height: 16),
             TextField(
               controller: _usernameController,
+              autofocus: widget.initialUsername.isEmpty,
               decoration: const InputDecoration(
                 labelText: '统一身份账号',
                 hintText: '请输入学号或统一身份账号',
@@ -89,11 +91,13 @@ class _AutoReloginSetupDialogState extends State<AutoReloginSetupDialog> {
             const SizedBox(height: 12),
             TextField(
               controller: _passwordController,
+              autofocus: widget.initialUsername.isNotEmpty,
               obscureText: _obscurePassword,
               decoration: InputDecoration(
                 labelText: '密码',
                 hintText: '请输入统一身份认证密码',
                 suffixIcon: IconButton(
+                  tooltip: _obscurePassword ? '显示密码' : '隐藏密码',
                   onPressed: () {
                     setState(() {
                       _obscurePassword = !_obscurePassword;

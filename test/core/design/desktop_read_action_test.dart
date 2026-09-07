@@ -32,6 +32,10 @@ void main() {
 
   testWidgets('Android retains swipe-to-read behavior', (tester) async {
     var reads = 0;
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData(platform: TargetPlatform.android),
@@ -47,8 +51,8 @@ void main() {
         ),
       ),
     );
-    expect(find.byTooltip('标为已读'), findsNothing);
-    await tester.drag(find.byType(SwipeToRead), const Offset(-130, 0));
+    expect(find.byTooltip('标为已读'), findsOneWidget);
+    await tester.drag(find.byType(SwipeToRead), const Offset(-200, 0));
     await tester.pumpAndSettle();
     expect(reads, 1);
   });

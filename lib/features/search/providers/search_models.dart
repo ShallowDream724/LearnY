@@ -104,6 +104,7 @@ class SearchState {
     this.recentSearches = const <String>[],
     this.isSearching = false,
     this.hasSearched = false,
+    this.errorMessage,
   });
 
   final String query;
@@ -111,6 +112,7 @@ class SearchState {
   final List<String> recentSearches;
   final bool isSearching;
   final bool hasSearched;
+  final String? errorMessage;
 
   SearchState copyWith({
     String? query,
@@ -118,6 +120,8 @@ class SearchState {
     List<String>? recentSearches,
     bool? isSearching,
     bool? hasSearched,
+    String? errorMessage,
+    bool clearError = false,
   }) {
     return SearchState(
       query: query ?? this.query,
@@ -125,6 +129,7 @@ class SearchState {
       recentSearches: recentSearches ?? this.recentSearches,
       isSearching: isSearching ?? this.isSearching,
       hasSearched: hasSearched ?? this.hasSearched,
+      errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
     );
   }
 }

@@ -34,7 +34,7 @@ class AppThemeColors {
       isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
   Color get tertiary =>
       isDark ? AppColors.darkTextTertiary : AppColors.lightTextTertiary;
-  Color get infoAccent => isDark ? AppColors.info : const Color(0xFF007AFF);
+  Color get infoAccent => isDark ? AppColors.primaryLight : AppColors.primary;
   Color get success => AppColors.success;
 }
 

@@ -26,22 +26,7 @@ class LoginAutoReloginCard extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      decoration: BoxDecoration(
-        color: c.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: enabled ? AppColors.primary.withAlpha(70) : c.border,
-          width: 0.8,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(context.isDark ? 20 : 8),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -57,7 +42,7 @@ class LoginAutoReloginCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      showGuideBody ? '建议在首次登录时一并完成授权' : '会话过期后可尝试静默恢复',
+                      '会话过期后自动尝试恢复登录',
                       style: AppTypography.bodySmall.copyWith(
                         color: c.subtitle,
                       ),
@@ -70,18 +55,6 @@ class LoginAutoReloginCard extends StatelessWidget {
           ),
           if (showGuideBody) ...[
             const SizedBox(height: 10),
-            _GuideLine(
-              icon: Icons.task_alt_rounded,
-              text: '首次登录时即可完成静默恢复能力校验',
-              color: c.subtitle,
-            ),
-            const SizedBox(height: 6),
-            _GuideLine(
-              icon: Icons.verified_user_outlined,
-              text: '若出现“信任当前设备 / 180天”，建议勾选',
-              color: c.subtitle,
-            ),
-            const SizedBox(height: 6),
             _GuideLine(
               icon: Icons.security_rounded,
               text: '账号密码只保存在系统安全存储中',
@@ -96,9 +69,7 @@ class LoginAutoReloginCard extends StatelessWidget {
                 onPressed: onLearnMore,
                 style: TextButton.styleFrom(
                   foregroundColor: AppColors.primary,
-                  padding: EdgeInsets.zero,
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
                 ),
                 child: const Text('了解详情'),
               ),

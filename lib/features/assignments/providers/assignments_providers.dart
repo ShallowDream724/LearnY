@@ -7,6 +7,7 @@ import '../../../core/utils/deadline_time.dart';
 enum HomeworkFilter { all, pending, submitted, graded, noSubmissionNeeded }
 
 enum AssignmentTimelineGroup {
+  overdue,
   thisWeek,
   nextWeek,
   later,
@@ -15,6 +16,7 @@ enum AssignmentTimelineGroup {
 }
 
 const assignmentTimelineOrder = <AssignmentTimelineGroup>[
+  AssignmentTimelineGroup.overdue,
   AssignmentTimelineGroup.thisWeek,
   AssignmentTimelineGroup.nextWeek,
   AssignmentTimelineGroup.later,
@@ -60,9 +62,10 @@ class AssignmentsPresentation {
   bool get isEmpty => filteredHomeworks.isEmpty;
 }
 
-final homeworkFilterProvider = StateProvider<HomeworkFilter>(
-  (ref) => HomeworkFilter.all,
-);
+final homeworkFilterProvider = StateProvider<HomeworkFilter>((ref) {
+  ref.watch(currentSemesterIdProvider);
+  return HomeworkFilter.all;
+});
 
 final assignmentHomeworksProvider = StreamProvider<List<Homework>>((ref) {
   final database = ref.watch(databaseProvider);
@@ -230,7 +233,7 @@ AssignmentTimelineGroup _classifyHomework(
   }
   final remaining = deadline.difference(now);
   if (remaining.isNegative) {
-    return AssignmentTimelineGroup.thisWeek;
+    return AssignmentTimelineGroup.overdue;
   }
 
   final nowMonday = _mondayOfWeek(now);

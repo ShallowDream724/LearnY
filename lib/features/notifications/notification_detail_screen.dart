@@ -8,14 +8,13 @@
 // - Top action: mark unread / read
 // - Responsive: constrained width on tablets for readability
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/design/app_toast.dart';
 import '../../core/design/app_theme_colors.dart';
+import '../../core/design/app_surfaces.dart';
 import '../../core/design/colors.dart';
-import '../../core/design/responsive.dart';
 import '../../core/design/shimmer.dart';
 import '../../core/design/typography.dart';
 import '../../core/database/database.dart' as db;
@@ -49,8 +48,14 @@ class _NotificationDetailScreenState
   @override
   void initState() {
     super.initState();
-    Future.microtask(() {
-      ref.read(notificationActionsProvider).markRead(widget.notificationId);
+    Future.microtask(() async {
+      try {
+        await ref
+            .read(notificationActionsProvider)
+            .markRead(widget.notificationId);
+      } catch (_) {
+        if (mounted) AppToast.showError(context, message: '通知已打开，标记已读失败');
+      }
     });
   }
 
@@ -117,10 +122,15 @@ class _NotificationDetailScreenState
               ),
             ),
             SliverFillRemaining(
-              child: Center(
-                child: Text(
-                  '加载失败',
-                  style: AppTypography.titleMedium.copyWith(color: c.subtitle),
+              child: AppEmptyState(
+                icon: Icons.error_outline_rounded,
+                title: '通知加载失败',
+                action: FilledButton.tonalIcon(
+                  onPressed: () => ref.invalidate(
+                    notificationDetailProvider(widget.notificationId),
+                  ),
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('重试'),
                 ),
               ),
             ),
@@ -128,11 +138,16 @@ class _NotificationDetailScreenState
         ),
         data: (notification) {
           if (notification == null) {
-            return Center(
-              child: Text(
-                '通知未找到',
-                style: AppTypography.titleMedium.copyWith(color: c.subtitle),
-              ),
+            return CustomScrollView(
+              slivers: [
+                SliverAppBar(pinned: true, title: Text(widget.courseName)),
+                const SliverFillRemaining(
+                  child: AppEmptyState(
+                    icon: Icons.notifications_none_rounded,
+                    title: '通知未找到',
+                  ),
+                ),
+              ],
             );
           }
 
@@ -171,53 +186,49 @@ class _NotificationDetailScreenState
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
                 sliver: SliverList(
                   delegate: SliverChildListDelegate([
-                    ResponsiveContent(
+                    ReadingWidth(
+                      maxWidth: 760,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (notification.markedImportant)
-                                    Container(
-                                      margin: const EdgeInsets.only(
-                                        top: 4,
-                                        right: 8,
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 2,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.warning.withAlpha(20),
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(
-                                          color: AppColors.warning.withAlpha(
-                                            60,
-                                          ),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        '重要',
-                                        style: AppTypography.labelSmall
-                                            .copyWith(
-                                              color: AppColors.warning,
-                                              fontSize: 10,
-                                            ),
-                                      ),
-                                    ),
-                                  Expanded(
-                                    child: Text(
-                                      notification.title,
-                                      style: AppTypography.headlineSmall
-                                          .copyWith(color: c.text),
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (notification.markedImportant)
+                                Container(
+                                  margin: const EdgeInsets.only(
+                                    top: 4,
+                                    right: 8,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.warning.withAlpha(20),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                      color: AppColors.warning.withAlpha(60),
                                     ),
                                   ),
-                                ],
-                              )
-                              .animate()
-                              .fadeIn(duration: 300.ms)
-                              .slideY(begin: 0.05, end: 0),
+                                  child: Text(
+                                    '重要',
+                                    style: AppTypography.labelSmall.copyWith(
+                                      color: AppColors.warning,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ),
+                              Expanded(
+                                child: Text(
+                                  notification.title,
+                                  style: AppTypography.headlineSmall.copyWith(
+                                    color: c.text,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
 
                           const SizedBox(height: 12),
 
@@ -245,21 +256,28 @@ class _NotificationDetailScreenState
                               ),
                               const SizedBox(width: 10),
                               Expanded(
-                                child: Text(
-                                  notification.publisher,
-                                  style: AppTypography.bodyMedium.copyWith(
-                                    color: c.subtitle,
-                                  ),
-                                ),
-                              ),
-                              Text(
-                                _formatFullTime(notification.publishTime),
-                                style: AppTypography.bodySmall.copyWith(
-                                  color: c.tertiary,
+                                child: Wrap(
+                                  spacing: 16,
+                                  runSpacing: 4,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    Text(
+                                      notification.publisher,
+                                      style: AppTypography.bodyMedium.copyWith(
+                                        color: c.subtitle,
+                                      ),
+                                    ),
+                                    Text(
+                                      _formatFullTime(notification.publishTime),
+                                      style: AppTypography.bodySmall.copyWith(
+                                        color: c.subtitle,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
-                          ).animate(delay: 100.ms).fadeIn(duration: 250.ms),
+                          ),
 
                           // Expiry indicator
                           if (notification.expireTime != null) ...[
@@ -272,11 +290,12 @@ class _NotificationDetailScreenState
                                   color: c.tertiary,
                                 ),
                                 const SizedBox(width: 4),
-                                Text(
-                                  '有效期至 ${_formatFullTime(notification.expireTime!)}',
-                                  style: AppTypography.bodySmall.copyWith(
-                                    color: c.tertiary,
-                                    fontSize: 11,
+                                Expanded(
+                                  child: Text(
+                                    '有效期至 ${_formatFullTime(notification.expireTime!)}',
+                                    style: AppTypography.bodySmall.copyWith(
+                                      color: c.tertiary,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -292,9 +311,7 @@ class _NotificationDetailScreenState
 
                           // ── Content body ──
                           if (hasContent)
-                            _ContentBody(
-                              htmlContent: notification.content,
-                            ).animate(delay: 200.ms).fadeIn(duration: 300.ms)
+                            _ContentBody(htmlContent: notification.content)
                           else
                             Text(
                               '（无内容）',
@@ -318,7 +335,7 @@ class _NotificationDetailScreenState
                               entry: attachmentEntry,
                               showSize: false,
                               onTap: () => _openAttachment(attachmentEntry),
-                            ).animate(delay: 300.ms).fadeIn(duration: 250.ms),
+                            ),
                           ],
 
                           // ── Comment ──
@@ -334,14 +351,7 @@ class _NotificationDetailScreenState
                             const SizedBox(height: 8),
                             Container(
                               width: double.infinity,
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(
-                                color: AppColors.primary.withAlpha(8),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: AppColors.primary.withAlpha(30),
-                                ),
-                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 8),
                               child: Text(
                                 notification.comment!,
                                 style: AppTypography.bodyMedium.copyWith(
@@ -396,11 +406,7 @@ class _ContentBody extends StatelessWidget {
 
     return AuthenticatedHtmlContent(
       html: htmlContent,
-      textStyle: AppTypography.bodyLarge.copyWith(
-        color: c.text,
-        height: 1.8,
-        letterSpacing: 0.1,
-      ),
+      textStyle: AppTypography.bodyLarge.copyWith(color: c.text, height: 1.8),
     );
   }
 }

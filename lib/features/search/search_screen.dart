@@ -1,12 +1,10 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/design/app_theme_colors.dart';
+import '../../core/design/app_surfaces.dart';
 import '../../core/design/colors.dart';
-import '../../core/design/responsive.dart';
 import '../../core/design/typography.dart';
 import '../../core/router/router.dart';
 import '../search/widgets/search_result_sections.dart';
@@ -25,13 +23,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   final _focusNode = FocusNode();
   final _scrollController = ScrollController();
   final Map<String, bool> _collapsedSections = <String, bool>{};
-  final Map<String, GlobalKey> _sectionKeys = <String, GlobalKey>{};
+  final Map<String, double> _groupScrollOffsets = <String, double>{};
+  String? _selectedGroupId;
+  int _queryVersion = 0;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _focusNode.requestFocus();
+      if (mounted) _focusNode.requestFocus();
     });
   }
 
@@ -44,7 +44,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   void _onSearchChanged(String query) {
-    setState(_collapsedSections.clear);
+    if (_scrollController.hasClients) _scrollController.jumpTo(0);
+    setState(() {
+      _collapsedSections.clear();
+      _groupScrollOffsets.clear();
+      _selectedGroupId = null;
+      _queryVersion++;
+    });
     ref.read(searchControllerProvider.notifier).onQueryChanged(query);
   }
 
@@ -53,14 +59,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     _controller.selection = TextSelection.fromPosition(
       TextPosition(offset: query.length),
     );
-    setState(_collapsedSections.clear);
+    _onSearchChanged(query);
     ref.read(searchControllerProvider.notifier).searchImmediately(query);
   }
 
   void _onResultTap(SearchResult result) {
+    _focusNode.unfocus();
     switch (result.navigationType) {
       case SearchNavigationType.courseDetail:
-        context.go(Routes.courseDetail(result.courseId));
+        context.push(Routes.courseDetail(result.courseId));
         break;
       case SearchNavigationType.notificationDetail:
         context.push(
@@ -98,116 +105,28 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     });
   }
 
-  GlobalKey _keyForSection(String sectionId) {
-    return _sectionKeys.putIfAbsent(sectionId, GlobalKey.new);
-  }
-
-  Future<void> _openSectionMenu(List<SearchResultGroup> groups) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) {
-        final c = context.colors;
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '跳转到结果分组',
-                  style: AppTypography.titleMedium.copyWith(color: c.text),
-                ),
-                const SizedBox(height: 12),
-                for (final group in groups)
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(
-                      group.section.icon,
-                      size: 18,
-                      color: group.section.accentColor,
-                    ),
-                    title: Text(group.section.title),
-                    trailing: Text(
-                      '${group.results.length}',
-                      style: AppTypography.labelMedium.copyWith(
-                        color: c.tertiary,
-                      ),
-                    ),
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      unawaited(_jumpToSection(group.section.id, groups));
-                    },
-                  ),
-              ],
-            ),
+  void _selectGroup(String? id) {
+    if (_selectedGroupId == id) return;
+    if (_scrollController.hasClients) {
+      _groupScrollOffsets[_selectedGroupId ?? 'all'] = _scrollController.offset;
+    }
+    final version = _queryVersion;
+    setState(() {
+      _selectedGroupId = id;
+      if (id != null) _collapsedSections[id] = false;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          version == _queryVersion &&
+          _selectedGroupId == id &&
+          _scrollController.hasClients) {
+        _scrollController.jumpTo(
+          (_groupScrollOffsets[id ?? 'all'] ?? 0).clamp(
+            0.0,
+            _scrollController.position.maxScrollExtent,
           ),
         );
-      },
-    );
-  }
-
-  Future<void> _jumpToSection(
-    String sectionId,
-    List<SearchResultGroup> groups,
-  ) async {
-    setState(() => _collapsedSections[sectionId] = false);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(_scrollToSection(sectionId, groups));
-    });
-  }
-
-  Future<void> _scrollToSection(
-    String sectionId,
-    List<SearchResultGroup> groups,
-  ) async {
-    if (!mounted || !_scrollController.hasClients) {
-      return;
-    }
-
-    final visibleContext = _sectionKeys[sectionId]?.currentContext;
-    if (visibleContext != null) {
-      await Scrollable.ensureVisible(
-        visibleContext,
-        duration: const Duration(milliseconds: 260),
-        curve: Curves.easeOutCubic,
-        alignment: 0.05,
-      );
-      return;
-    }
-
-    final items = _buildListItems(
-      resultCount: 0,
-      split: splitSearchResultGroups(groups),
-    );
-    final targetIndex = _indexOfSection(sectionId, items);
-    if (targetIndex == null) {
-      return;
-    }
-
-    final estimatedOffset = _estimateOffsetToIndex(targetIndex, items);
-    final maxScroll = _scrollController.position.maxScrollExtent;
-    final targetOffset = estimatedOffset.clamp(0.0, maxScroll);
-    await _scrollController.animateTo(
-      targetOffset,
-      duration: const Duration(milliseconds: 320),
-      curve: Curves.easeOutCubic,
-    );
-    if (!mounted) {
-      return;
-    }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final targetContext = _sectionKeys[sectionId]?.currentContext;
-      if (targetContext == null) {
-        return;
       }
-      Scrollable.ensureVisible(
-        targetContext,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutCubic,
-        alignment: 0.05,
-      );
     });
   }
 
@@ -215,39 +134,88 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   Widget build(BuildContext context) {
     final c = context.colors;
     final searchState = ref.watch(searchControllerProvider);
+    ref.listen(searchControllerProvider, (previous, next) {
+      if (next.query.isEmpty &&
+          previous?.query.isNotEmpty == true &&
+          _controller.text.isNotEmpty) {
+        _controller.clear();
+        setState(() {
+          _selectedGroupId = null;
+          _collapsedSections.clear();
+          _groupScrollOffsets.clear();
+          _queryVersion++;
+        });
+      }
+    });
     final groups = groupSearchResults(searchState.results);
+    final selectedGroups = groups
+        .where((group) => group.section.id == _selectedGroupId)
+        .toList();
+    final visibleGroups = selectedGroups.isEmpty ? groups : selectedGroups;
 
     return Scaffold(
       backgroundColor: c.bg,
       appBar: AppBar(
-        titleSpacing: 0,
-        title: Padding(
-          padding: const EdgeInsets.only(right: 12),
-          child: _SearchField(
-            controller: _controller,
-            focusNode: _focusNode,
-            onChanged: _onSearchChanged,
-          ),
-        ),
+        title: const Text('搜索'),
         actions: [
           if (groups.isNotEmpty)
-            IconButton(
-              tooltip: '结果分组',
+            PopupMenuButton<String>(
+              tooltip: '筛选结果分组',
               icon: Icon(Icons.list_alt_rounded, color: c.subtitle, size: 20),
-              onPressed: () => _openSectionMenu(groups),
+              onSelected: (id) => _selectGroup(id == 'all' ? null : id),
+              itemBuilder: (context) => [
+                const PopupMenuItem(value: 'all', child: Text('全部结果')),
+                for (final group in groups)
+                  PopupMenuItem(
+                    value: group.section.id,
+                    child: Text(
+                      '${group.section.title} (${group.results.length})',
+                    ),
+                  ),
+              ],
             ),
           if (_controller.text.isNotEmpty)
             IconButton(
+              tooltip: '清除搜索',
               icon: Icon(Icons.clear_rounded, color: c.subtitle, size: 20),
               onPressed: () {
                 _controller.clear();
-                setState(_collapsedSections.clear);
-                ref.read(searchControllerProvider.notifier).onQueryChanged('');
+                _onSearchChanged('');
               },
             ),
         ],
       ),
-      body: ResponsiveContent(child: _buildBody(searchState, groups)),
+      body: ReadingWidth(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: _SearchField(
+                controller: _controller,
+                focusNode: _focusNode,
+                onChanged: _onSearchChanged,
+                onSubmitted: (query) => ref
+                    .read(searchControllerProvider.notifier)
+                    .searchImmediately(query),
+              ),
+            ),
+            if (selectedGroups.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: InputChip(
+                    label: Text(selectedGroups.single.section.title),
+                    onDeleted: () => _selectGroup(null),
+                    deleteButtonTooltipMessage: '返回全部结果',
+                  ),
+                ),
+              ),
+            Expanded(child: _buildBody(searchState, visibleGroups)),
+          ],
+        ),
+      ),
     );
   }
 
@@ -281,24 +249,24 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       return _buildRecentSearches(searchState);
     }
 
-    if (searchState.results.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.search_off_rounded, size: 48, color: c.tertiary),
-            const SizedBox(height: 12),
-            Text(
-              '未找到相关内容',
-              style: AppTypography.titleMedium.copyWith(color: c.subtitle),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '试试课程名、文件类型、附件或拼音',
-              style: AppTypography.bodySmall.copyWith(color: c.tertiary),
-            ),
-          ],
+    if (searchState.errorMessage != null) {
+      return AppEmptyState(
+        icon: Icons.error_outline_rounded,
+        title: searchState.errorMessage!,
+        action: FilledButton.tonalIcon(
+          onPressed: () => ref
+              .read(searchControllerProvider.notifier)
+              .searchImmediately(_controller.text),
+          icon: const Icon(Icons.refresh_rounded),
+          label: const Text('重试'),
         ),
+      );
+    }
+
+    if (searchState.results.isEmpty) {
+      return const AppEmptyState(
+        icon: Icons.search_off_rounded,
+        title: '未找到相关内容',
       );
     }
 
@@ -309,19 +277,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final c = context.colors;
 
     if (searchState.recentSearches.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.search_rounded, size: 48, color: c.tertiary),
-            const SizedBox(height: 12),
-            Text(
-              '搜索课程、通知、作业、文件与附件',
-              style: AppTypography.bodyMedium.copyWith(color: c.tertiary),
-            ),
-          ],
-        ),
-      );
+      return const AppEmptyState(icon: Icons.search_rounded, title: '搜索');
     }
 
     return ListView(
@@ -334,20 +290,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               style: AppTypography.labelMedium.copyWith(color: c.subtitle),
             ),
             const Spacer(),
-            InkWell(
-              onTap: () => ref
+            IconButton(
+              tooltip: '清除搜索记录',
+              onPressed: () => ref
                   .read(searchControllerProvider.notifier)
                   .clearRecentSearches(),
-              borderRadius: BorderRadius.circular(4),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                child: Text(
-                  '清除',
-                  style: AppTypography.labelSmall.copyWith(
-                    color: AppColors.primary,
-                  ),
-                ),
-              ),
+              icon: const Icon(Icons.delete_outline_rounded, size: 20),
             ),
           ],
         ),
@@ -356,27 +304,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           spacing: 8,
           runSpacing: 8,
           children: searchState.recentSearches.map((query) {
-            return Material(
-              color: c.surface,
-              borderRadius: BorderRadius.circular(20),
-              child: InkWell(
-                onTap: () => _onRecentTap(query),
-                borderRadius: BorderRadius.circular(20),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: c.border, width: 0.5),
-                  ),
-                  child: Text(
-                    query,
-                    style: AppTypography.bodySmall.copyWith(color: c.text),
-                  ),
-                ),
-              ),
+            return ActionChip(
+              avatar: Icon(Icons.history_rounded, size: 16, color: c.subtitle),
+              label: Text(query),
+              onPressed: () => _onRecentTap(query),
             );
           }).toList(),
         ),
@@ -391,7 +322,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final c = context.colors;
     final split = splitSearchResultGroups(groups);
     final items = _buildListItems(
-      resultCount: searchState.results.length,
+      resultCount: groups.fold(
+        0,
+        (count, group) => count + group.results.length,
+      ),
       split: split,
     );
 
@@ -414,14 +348,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             ),
           ),
           _SearchSpacerItem(:final height) => SizedBox(height: height),
-          _SearchGroupHeaderItem(:final group) => Container(
-            key: _keyForSection(group.section.id),
-            child: SearchSectionHeader(
-              section: group.section,
-              count: group.results.length,
-              collapsed: _isCollapsed(group.section.id),
-              onTap: () => _toggleSection(group.section.id),
-            ),
+          _SearchGroupHeaderItem(:final group) => SearchSectionHeader(
+            section: group.section,
+            count: group.results.length,
+            collapsed: _isCollapsed(group.section.id),
+            onTap: () => _toggleSection(group.section.id),
           ),
           _SearchResultItem(:final result) => Padding(
             padding: const EdgeInsets.only(bottom: 8),
@@ -465,36 +396,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
     return items;
   }
-
-  int? _indexOfSection(String sectionId, List<_SearchListItem> items) {
-    for (var index = 0; index < items.length; index += 1) {
-      final item = items[index];
-      if (item is _SearchGroupHeaderItem &&
-          item.group.section.id == sectionId) {
-        return index;
-      }
-    }
-    return null;
-  }
-
-  double _estimateOffsetToIndex(int targetIndex, List<_SearchListItem> items) {
-    var offset = 0.0;
-    for (var index = 0; index < targetIndex; index += 1) {
-      offset += _estimatedItemHeight(items[index]);
-    }
-    return offset;
-  }
-
-  double _estimatedItemHeight(_SearchListItem item) {
-    return switch (item) {
-      _SearchSummaryItem() => 24,
-      _SearchSectionMarkerItem() => 30,
-      _SearchGroupHeaderItem() => 36,
-      _SearchResultItem(:final result) =>
-        result.isFavorite || result.isDownloaded ? 92 : 80,
-      _SearchSpacerItem(:final height) => height,
-    };
-  }
 }
 
 class _SearchField extends StatelessWidget {
@@ -502,34 +403,29 @@ class _SearchField extends StatelessWidget {
     required this.controller,
     required this.focusNode,
     required this.onChanged,
+    required this.onSubmitted,
   });
 
   final TextEditingController controller;
   final FocusNode focusNode;
   final ValueChanged<String> onChanged;
+  final ValueChanged<String> onSubmitted;
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
 
-    return Container(
-      height: 40,
-      decoration: BoxDecoration(
-        color: c.surface,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: TextField(
-        controller: controller,
-        focusNode: focusNode,
-        onChanged: onChanged,
-        style: AppTypography.bodyMedium.copyWith(color: c.text),
-        decoration: InputDecoration(
-          hintText: '搜索课程、通知、作业、文件、附件或拼音...',
-          hintStyle: AppTypography.bodyMedium.copyWith(color: c.tertiary),
-          prefixIcon: Icon(Icons.search_rounded, size: 20, color: c.tertiary),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 10),
-        ),
+    return TextField(
+      controller: controller,
+      focusNode: focusNode,
+      onChanged: onChanged,
+      onSubmitted: onSubmitted,
+      textInputAction: TextInputAction.search,
+      style: AppTypography.bodyMedium.copyWith(color: c.text),
+      decoration: InputDecoration(
+        hintText: '课程、通知、作业或文件',
+        hintStyle: AppTypography.bodyMedium.copyWith(color: c.tertiary),
+        prefixIcon: Icon(Icons.search_rounded, size: 20, color: c.tertiary),
       ),
     );
   }

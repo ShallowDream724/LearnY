@@ -36,7 +36,7 @@ void main() {
     },
   );
 
-  testWidgets('semester toolbar fits phone, tablet and desktop widths', (
+  testWidgets('semester controls fit phone, tablet and desktop widths', (
     tester,
   ) async {
     final fixture = Fixture();
@@ -56,12 +56,19 @@ void main() {
               ).copyWith(textScaler: TextScaler.linear(1.5)),
               child: child!,
             ),
-            home: const Scaffold(body: Column(children: [SemesterToolbar()])),
+            home: const Scaffold(
+              body: Row(
+                children: [
+                  Expanded(child: SemesterSelector()),
+                  SemesterSyncControl(),
+                ],
+              ),
+            ),
           ),
         ),
       );
       expect(tester.takeException(), isNull);
-      expect(find.text('2025-2026 春季学期'), findsOneWidget);
+      expect(find.byTooltip('2025-2026 春季学期'), findsOneWidget);
     }
     await tester.pumpWidget(const SizedBox());
   });

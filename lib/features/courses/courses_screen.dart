@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/design/action_sheet.dart';
 import '../../core/design/app_theme_colors.dart';
+import '../../core/design/app_surfaces.dart';
 import '../../core/design/app_toast.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/cooldown_toast.dart';
-import '../../core/design/responsive.dart';
 import '../../core/design/shimmer.dart';
 import '../../core/design/typography.dart';
 import '../../core/providers/sync_models.dart';
 import '../../core/router/router.dart';
+import '../../core/semester/semester_switcher.dart';
 import '../../core/shell/shell_layout_metrics.dart';
 import '../../core/sync/sync_actions.dart';
 import 'providers/course_workbench_controller.dart';
@@ -33,6 +33,10 @@ class CoursesScreen extends ConsumerStatefulWidget {
 class _CoursesScreenState extends ConsumerState<CoursesScreen> {
   final _scrollController = ScrollController();
   final Map<String, Size> _cardSizes = <String, Size>{};
+  final Map<String, GlobalKey> _cardKeys = <String, GlobalKey>{};
+  Offset _dragAnchorOffset = Offset.zero;
+  int? _activePointer;
+  bool _isSaving = false;
   late final CourseDragAutoScroller _dragAutoScroller;
   double _latestFallbackCardWidth = 160;
 
@@ -62,7 +66,7 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
   }
 
   Future<void> _handleCancel(CourseWorkbenchState workbenchState) async {
-    if (!workbenchState.isEditing) {
+    if (!workbenchState.isEditing || _isSaving) {
       return;
     }
 
@@ -74,7 +78,7 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
         confirmLabel: '放弃修改',
         confirmColor: AppColors.error,
       );
-      if (confirmed != true) {
+      if (!mounted || confirmed != true) {
         return;
       }
     }
@@ -84,21 +88,35 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
   }
 
   Future<void> _handleSave() async {
+    if (_isSaving) return;
+    setState(() => _isSaving = true);
     _clearTransientDragState(clearWorkbenchState: false);
-    final success = await _workbenchController.save();
-    if (!mounted) {
-      return;
-    }
-    if (success) {
-      AppToast.showSuccess(context, message: '课程工作台已更新');
-    } else {
-      AppToast.showWarning(context, message: '当前课程信息不完整，请稍后再试');
+    try {
+      final success = await _workbenchController.save();
+      if (!mounted) return;
+      if (success) {
+        AppToast.showSuccess(context, message: '课程已更新');
+      } else {
+        AppToast.showWarning(context, message: '当前课程信息不完整，请稍后再试');
+      }
+    } catch (_) {
+      if (mounted) AppToast.showWarning(context, message: '保存失败，请重试');
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
   Future<void> _openCardMenu(ResolvedCourseCardModel card) async {
+    if (_isSaving) return;
     _clearTransientDragState();
-    final action = await showCourseWorkbenchMenu(context, card: card);
+    final cards = ref.read(courseWorkbenchControllerProvider).draftCards;
+    final index = cards.indexWhere((item) => item.course.id == card.course.id);
+    final action = await showCourseWorkbenchMenu(
+      context,
+      card: card,
+      canMoveEarlier: index > 0,
+      canMoveLater: index >= 0 && index < cards.length - 1,
+    );
     if (!mounted || action == null) {
       return;
     }
@@ -128,6 +146,26 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
           AppToast.showInfo(context, message: '已恢复默认图标和简称');
         }
         break;
+      case CourseWorkbenchMenuAction.moveEarlier:
+      case CourseWorkbenchMenuAction.moveLater:
+        final currentCards = ref
+            .read(courseWorkbenchControllerProvider)
+            .draftCards;
+        final current = currentCards.indexWhere(
+          (item) => item.course.id == card.course.id,
+        );
+        final target =
+            current +
+            (action == CourseWorkbenchMenuAction.moveEarlier ? -1 : 1);
+        if (current >= 0 && target >= 0 && target < currentCards.length) {
+          controller.previewReorder(
+            draggedCourseId: card.course.id,
+            targetCourseId: currentCards[target].course.id,
+            insertIndex: target > current ? target + 1 : target,
+          );
+          controller.completeDragging();
+        }
+        break;
     }
   }
 
@@ -149,7 +187,7 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
       _openCardMenu(card);
       return;
     }
-    context.go(Routes.courseDetail(card.course.id));
+    context.push(Routes.courseDetail(card.course.id));
   }
 
   void _handleBrowseLongPress(
@@ -166,10 +204,11 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
   }) {
     final size = _cardSizes[courseId] ?? Size(fallbackWidth, 184);
     _dragAutoScroller.updateDragRect(
-      Rect.fromCenter(
-        center: globalPosition,
-        width: size.width,
-        height: size.height,
+      Rect.fromLTWH(
+        globalPosition.dx - _dragAnchorOffset.dx,
+        globalPosition.dy - _dragAnchorOffset.dy,
+        size.width,
+        size.height,
       ),
     );
   }
@@ -178,6 +217,7 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
     PointerMoveEvent event,
     CourseWorkbenchState workbenchState,
   ) {
+    if (event.pointer != _activePointer) return;
     final courseId = workbenchState.draggingCourseId;
     if (courseId == null) {
       return;
@@ -189,7 +229,12 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
     );
   }
 
-  void _handleGlobalPointerEnd(CourseWorkbenchState workbenchState) {
+  void _handleGlobalPointerEnd(
+    PointerEvent event,
+    CourseWorkbenchState workbenchState,
+  ) {
+    if (event.pointer != _activePointer) return;
+    _activePointer = null;
     if (workbenchState.draggingCourseId == null) {
       return;
     }
@@ -237,18 +282,16 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
     final c = context.colors;
     final cardsAsync = ref.watch(resolvedCourseCardsProvider);
     final workbenchState = ref.watch(courseWorkbenchControllerProvider);
-    _latestFallbackCardWidth = _estimateCardWidth(
-      context,
-      courseGridColumns(context),
-    );
 
     return Scaffold(
       body: Listener(
         behavior: HitTestBehavior.translucent,
+        onPointerDown: (event) => _activePointer ??= event.pointer,
         onPointerMove: (event) =>
             _handleGlobalPointerMove(event, workbenchState),
-        onPointerUp: (_) => _handleGlobalPointerEnd(workbenchState),
-        onPointerCancel: (_) => _handleGlobalPointerEnd(workbenchState),
+        onPointerUp: (event) => _handleGlobalPointerEnd(event, workbenchState),
+        onPointerCancel: (event) =>
+            _handleGlobalPointerEnd(event, workbenchState),
         child: RefreshIndicator(
           onRefresh: workbenchState.isEditing ? () async {} : _handleRefresh,
           color: AppColors.primary,
@@ -257,22 +300,31 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               SliverAppBar(
+                toolbarHeight: semesterToolbarHeight(context),
+                titleSpacing: pageGutter(context),
                 floating: true,
                 snap: true,
                 leading: workbenchState.isEditing
                     ? TextButton(
-                        onPressed: () => _handleCancel(workbenchState),
+                        onPressed: _isSaving
+                            ? null
+                            : () => _handleCancel(workbenchState),
                         child: const Text('取消'),
                       )
                     : null,
                 leadingWidth: workbenchState.isEditing ? 68 : null,
-                title: Text(
-                  workbenchState.isEditing ? '编辑课程' : '课程',
-                  style: AppTypography.headlineMedium.copyWith(color: c.text),
-                ),
+                title: workbenchState.isEditing
+                    ? Text(
+                        '编辑课程',
+                        style: AppTypography.headlineMedium.copyWith(
+                          color: c.text,
+                        ),
+                      )
+                    : const SemesterPageTitle(title: '课程'),
                 actions: workbenchState.isEditing
                     ? [
                         PopupMenuButton<String>(
+                          enabled: !_isSaving,
                           tooltip: '更多',
                           onSelected: (value) {
                             if (value == 'reset-order') {
@@ -291,54 +343,20 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
                           ],
                         ),
                         TextButton(
-                          onPressed: _handleSave,
-                          child: const Text('完成'),
+                          onPressed: _isSaving ? null : _handleSave,
+                          child: Text(_isSaving ? '保存中' : '完成'),
                         ),
                       ]
                     : [
                         if (cardsAsync.valueOrNull?.isNotEmpty == true)
-                          TextButton(
+                          IconButton(
+                            tooltip: '编辑课程',
                             onPressed: () =>
                                 _enterEditMode(cardsAsync.valueOrNull!),
-                            child: const Text('编辑'),
+                            icon: const Icon(Icons.edit_outlined),
                           ),
                       ],
               ),
-              if (workbenchState.isEditing)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: c.surface,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: c.border, width: 0.5),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.drag_indicator_rounded,
-                            size: 18,
-                            color: c.subtitle,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              '长按拖动排序，轻点课程卡可更换图标或设置简称。',
-                              style: AppTypography.bodySmall.copyWith(
-                                color: c.subtitle,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
               cardsAsync.when(
                 loading: () => const SliverFillRemaining(child: ListSkeleton()),
                 error: (error, _) => _buildError(c),
@@ -350,7 +368,11 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
                     return _buildEmpty(c);
                   }
 
-                  return _buildGridSliver(context, displayCards, workbenchState);
+                  return _buildGridSliver(
+                    context,
+                    displayCards,
+                    workbenchState,
+                  );
                 },
               ),
             ],
@@ -362,22 +384,14 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
 
   SliverFillRemaining _buildError(AppThemeColors c) {
     return SliverFillRemaining(
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.error_outline_rounded, size: 48, color: c.subtitle),
-            const SizedBox(height: 12),
-            Text(
-              '加载失败',
-              style: AppTypography.titleMedium.copyWith(color: c.text),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '请下拉刷新重试',
-              style: AppTypography.bodySmall.copyWith(color: c.tertiary),
-            ),
-          ],
+      hasScrollBody: false,
+      child: AppEmptyState(
+        icon: Icons.error_outline_rounded,
+        title: '课程加载失败',
+        action: OutlinedButton.icon(
+          onPressed: _handleRefresh,
+          icon: const Icon(Icons.refresh_rounded),
+          label: const Text('重试'),
         ),
       ),
     );
@@ -385,19 +399,8 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
 
   SliverFillRemaining _buildEmpty(AppThemeColors c) {
     return SliverFillRemaining(
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.school_outlined, size: 48, color: c.tertiary),
-            const SizedBox(height: 12),
-            Text(
-              '暂无课程',
-              style: AppTypography.titleMedium.copyWith(color: c.tertiary),
-            ),
-          ],
-        ),
-      ),
+      hasScrollBody: false,
+      child: const AppEmptyState(icon: Icons.school_outlined, title: '本学期暂无课程'),
     );
   }
 
@@ -406,47 +409,62 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
     List<ResolvedCourseCardModel> cards,
     CourseWorkbenchState workbenchState,
   ) {
-    final cols = courseGridColumns(context);
     final controller = ref.read(courseWorkbenchControllerProvider.notifier);
-    final cardWidth = _estimateCardWidth(context, cols);
-
-    return SliverPadding(
-      padding: EdgeInsets.fromLTRB(16, 8, 16, shellContentBottomInset(context)),
-      sliver: SliverList(
-        delegate: SliverChildBuilderDelegate((context, rowIndex) {
-          final startIndex = rowIndex * cols;
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (
-                  var columnIndex = 0;
-                  columnIndex < cols;
-                  columnIndex += 1
-                ) ...[
-                  if (columnIndex > 0) const SizedBox(width: 10),
-                  if (startIndex + columnIndex < cards.length)
-                    Expanded(
-                      child: _buildGridCardCell(
-                        localContext: context,
-                        card: cards[startIndex + columnIndex],
-                        allCards: cards,
-                        cardIndex: startIndex + columnIndex,
-                        columns: cols,
-                        workbenchState: workbenchState,
-                        controller: controller,
-                        feedbackWidth: cardWidth,
-                      ),
-                    )
-                  else
-                    const Expanded(child: SizedBox()),
-                ],
-              ],
-            ),
-          );
-        }, childCount: (cards.length + cols - 1) ~/ cols),
-      ),
+    return SliverLayoutBuilder(
+      builder: (context, constraints) {
+        final gutter = pageGutterForWidth(constraints.crossAxisExtent);
+        final width = constraints.crossAxisExtent - gutter * 2;
+        final minCardWidth = MediaQuery.textScalerOf(context).scale(170);
+        final cols = ((width + 12) / (minCardWidth + 12))
+            .floor()
+            .clamp(1, 4)
+            .toInt();
+        final cardWidth = (width - (cols - 1) * 12) / cols;
+        _latestFallbackCardWidth = cardWidth;
+        return SliverPadding(
+          padding: EdgeInsets.fromLTRB(
+            gutter,
+            8,
+            gutter,
+            shellContentBottomInset(context),
+          ),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate((context, rowIndex) {
+              final startIndex = rowIndex * cols;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (
+                      var columnIndex = 0;
+                      columnIndex < cols;
+                      columnIndex += 1
+                    ) ...[
+                      if (columnIndex > 0) const SizedBox(width: 12),
+                      if (startIndex + columnIndex < cards.length)
+                        Expanded(
+                          child: _buildGridCardCell(
+                            localContext: context,
+                            card: cards[startIndex + columnIndex],
+                            allCards: cards,
+                            cardIndex: startIndex + columnIndex,
+                            columns: cols,
+                            workbenchState: workbenchState,
+                            controller: controller,
+                            feedbackWidth: cardWidth,
+                          ),
+                        )
+                      else
+                        const Expanded(child: SizedBox()),
+                    ],
+                  ],
+                ),
+              );
+            }, childCount: (cards.length + cols - 1) ~/ cols),
+          ),
+        );
+      },
     );
   }
 
@@ -464,6 +482,7 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
     final isDragging = workbenchState.draggingCourseId == card.course.id;
     final isHoverTarget = workbenchState.hoverCourseId == card.course.id;
     final colorIndex = _stableColorIndex(card.course.id);
+    final targetKey = _cardKeys.putIfAbsent(card.course.id, GlobalKey.new);
     final baseCard = _MeasureCardSize(
       onSizeChanged: (size) {
         _cardSizes[card.course.id] = size;
@@ -485,13 +504,11 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
     );
 
     if (!workbenchState.isEditing) {
-      return cardWidget
-          .animate(delay: (60 * cardIndex).ms)
-          .fadeIn(duration: 300.ms)
-          .scale(begin: const Offset(0.95, 0.95), end: const Offset(1, 1));
+      return cardWidget;
     }
 
     return DragTarget<String>(
+      key: targetKey,
       onWillAcceptWithDetails: (details) => details.data != card.course.id,
       onAcceptWithDetails: (_) {
         _handleDragFinished(controller);
@@ -501,10 +518,10 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
         final isTargeted = candidateData.isNotEmpty;
         return AnimatedContainer(
           key: ValueKey('course-cell-${card.course.id}'),
-          duration: const Duration(milliseconds: 140),
+          duration: AppMotion.duration(context, AppMotion.feedback),
           curve: Curves.easeOutCubic,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(8),
             boxShadow: isTargeted
                 ? [
                     BoxShadow(
@@ -516,12 +533,25 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
                 : const [],
           ),
           child: AnimatedScale(
-            duration: const Duration(milliseconds: 150),
+            duration: AppMotion.duration(context, AppMotion.feedback),
             curve: Curves.easeOutCubic,
             scale: isHoverTarget && !isDragging ? 0.985 : 1,
             child: LongPressDraggable<String>(
               data: card.course.id,
-              dragAnchorStrategy: pointerDragAnchorStrategy,
+              dragAnchorStrategy: (draggable, context, position) {
+                final offset = childDragAnchorStrategy(
+                  draggable,
+                  context,
+                  position,
+                );
+                _dragAnchorOffset = offset;
+                return offset;
+              },
+              maxSimultaneousDrags:
+                  _isSaving ||
+                      (workbenchState.draggingCourseId != null && !isDragging)
+                  ? 0
+                  : 1,
               feedback: SizedBox(
                 width: feedbackWidth,
                 child: Material(
@@ -548,7 +578,8 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
         );
       },
       onMove: (details) {
-        final renderBox = context.findRenderObject() as RenderBox?;
+        final renderBox =
+            targetKey.currentContext?.findRenderObject() as RenderBox?;
         if (renderBox == null || !renderBox.hasSize) {
           return;
         }
@@ -581,14 +612,6 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
     return localPosition.dx < targetSize.width / 2
         ? targetIndex
         : targetIndex + 1;
-  }
-
-  double _estimateCardWidth(BuildContext context, int cols) {
-    final totalWidth = MediaQuery.sizeOf(context).width;
-    const horizontalPadding = 32.0;
-    const gap = 10.0;
-    final availableWidth = totalWidth - horizontalPadding - (cols - 1) * gap;
-    return availableWidth / cols;
   }
 
   int _stableColorIndex(String courseId) {
@@ -634,10 +657,10 @@ class _AnimatedDragCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedOpacity(
-      duration: const Duration(milliseconds: 120),
+      duration: AppMotion.duration(context, AppMotion.feedback),
       opacity: isDragging ? 0.3 : 1,
       child: AnimatedScale(
-        duration: const Duration(milliseconds: 140),
+        duration: AppMotion.duration(context, AppMotion.feedback),
         curve: Curves.easeOutCubic,
         scale: isDragging ? 0.985 : 1,
         child: child,

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/design/app_theme_colors.dart';
+import '../../core/design/app_surfaces.dart';
 import '../../core/design/typography.dart';
 import '../../core/router/router.dart';
 import '../search/providers/search_models.dart';
@@ -165,7 +166,7 @@ class _CourseSearchScreenState extends ConsumerState<CourseSearchScreen> {
     if (visibleContext != null) {
       await Scrollable.ensureVisible(
         visibleContext,
-        duration: const Duration(milliseconds: 260),
+        duration: AppMotion.duration(context),
         curve: Curves.easeOutCubic,
         alignment: 0.05,
       );
@@ -186,7 +187,7 @@ class _CourseSearchScreenState extends ConsumerState<CourseSearchScreen> {
     final targetOffset = estimatedOffset.clamp(0.0, maxScroll);
     await _scrollController.animateTo(
       targetOffset,
-      duration: const Duration(milliseconds: 320),
+      duration: AppMotion.duration(context),
       curve: Curves.easeOutCubic,
     );
     if (!mounted) {
@@ -199,7 +200,7 @@ class _CourseSearchScreenState extends ConsumerState<CourseSearchScreen> {
       }
       Scrollable.ensureVisible(
         targetContext,
-        duration: const Duration(milliseconds: 220),
+        duration: AppMotion.duration(context),
         curve: Curves.easeOutCubic,
         alignment: 0.05,
       );
@@ -238,6 +239,7 @@ class _CourseSearchScreenState extends ConsumerState<CourseSearchScreen> {
             ),
           if (_controller.text.isNotEmpty)
             IconButton(
+              tooltip: '清空搜索',
               icon: Icon(Icons.clear_rounded, color: c.subtitle, size: 20),
               onPressed: () {
                 _controller.clear();
@@ -249,7 +251,7 @@ class _CourseSearchScreenState extends ConsumerState<CourseSearchScreen> {
             ),
         ],
       ),
-      body: _buildBody(searchState, groups),
+      body: ReadingWidth(child: _buildBody(searchState, groups)),
     );
   }
 
@@ -277,18 +279,9 @@ class _CourseSearchScreenState extends ConsumerState<CourseSearchScreen> {
     }
 
     if (!state.hasSearched) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.search_rounded, size: 48, color: c.tertiary),
-            const SizedBox(height: 12),
-            Text(
-              '搜索这门课的通知、作业、文件与附件',
-              style: AppTypography.bodyMedium.copyWith(color: c.tertiary),
-            ),
-          ],
-        ),
+      return AppEmptyState(
+        icon: Icons.search_rounded,
+        title: widget.courseName,
       );
     }
 
@@ -435,7 +428,7 @@ class _CourseSearchField extends StatelessWidget {
     final c = context.colors;
 
     return Container(
-      height: 40,
+      constraints: const BoxConstraints(minHeight: 44),
       decoration: BoxDecoration(
         color: c.surface,
         borderRadius: BorderRadius.circular(12),
@@ -446,7 +439,7 @@ class _CourseSearchField extends StatelessWidget {
         onChanged: onChanged,
         style: AppTypography.bodyMedium.copyWith(color: c.text),
         decoration: InputDecoration(
-          hintText: '搜索这门课的通知、作业、文件、附件或拼音...',
+          hintText: '搜索课程内容',
           hintStyle: AppTypography.bodyMedium.copyWith(color: c.tertiary),
           prefixIcon: Icon(Icons.search_rounded, size: 20, color: c.tertiary),
           border: InputBorder.none,

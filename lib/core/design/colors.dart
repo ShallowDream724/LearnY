@@ -6,17 +6,17 @@ library;
 
 import 'package:flutter/material.dart';
 
-/// Core brand colors — deep scholarly tones.
+/// Shared palette; resolve foreground roles through the active theme.
 abstract final class AppColors {
   // ─────────────────────────────────────────────
   //  Brand
   // ─────────────────────────────────────────────
 
-  /// Primary — a refined indigo-violet, conveys intellect and trust.
-  static const Color primary = Color(0xFF6366F1);
-  static const Color primaryLight = Color(0xFF818CF8);
-  static const Color primaryDark = Color(0xFF4F46E5);
-  static const Color primaryContainer = Color(0xFF312E81);
+  /// Primary action colors, with a distinct light foreground for dark surfaces.
+  static const Color primary = Color(0xFF006BD6);
+  static const Color primaryLight = Color(0xFF70B1FF);
+  static const Color primaryDark = Color(0xFF0754A7);
+  static const Color primaryContainer = Color(0xFF153B63);
 
   /// Secondary — a warm amber for accents, badges, and highlights.
   static const Color secondary = Color(0xFFF59E0B);
@@ -66,32 +66,32 @@ abstract final class AppColors {
   //  Dark theme surfaces
   // ─────────────────────────────────────────────
 
-  static const Color darkBackground = Color(0xFF0F172A);
-  static const Color darkSurface = Color(0xFF1E293B);
-  static const Color darkSurfaceHigh = Color(0xFF334155);
-  static const Color darkBorder = Color(0xFF475569);
+  static const Color darkBackground = Color(0xFF18191C);
+  static const Color darkSurface = Color(0xFF222326);
+  static const Color darkSurfaceHigh = Color(0xFF2D2F33);
+  static const Color darkBorder = Color(0xFF3B3D42);
 
-  static const Color darkTextPrimary = Color(0xFFF1F5F9);
-  static const Color darkTextSecondary = Color(0xFF94A3B8);
-  static const Color darkTextTertiary = Color(0xFF64748B);
+  static const Color darkTextPrimary = Color(0xFFF3F4F6);
+  static const Color darkTextSecondary = Color(0xFFBABEC6);
+  static const Color darkTextTertiary = Color(0xFF979DA7);
 
   // ─────────────────────────────────────────────
   //  Light theme surfaces
   // ─────────────────────────────────────────────
 
-  static const Color lightBackground = Color(0xFFF8FAFC);
+  static const Color lightBackground = Color(0xFFF7F8FA);
   static const Color lightSurface = Color(0xFFFFFFFF);
-  static const Color lightSurfaceHigh = Color(0xFFF1F5F9);
-  static const Color lightBorder = Color(0xFFE2E8F0);
+  static const Color lightSurfaceHigh = Color(0xFFF0F2F5);
+  static const Color lightBorder = Color(0xFFE0E3E8);
 
-  static const Color lightTextPrimary = Color(0xFF0F172A);
-  static const Color lightTextSecondary = Color(0xFF475569);
-  static const Color lightTextTertiary = Color(0xFF94A3B8);
+  static const Color lightTextPrimary = Color(0xFF1D2026);
+  static const Color lightTextSecondary = Color(0xFF5D636C);
+  static const Color lightTextTertiary = Color(0xFF707780);
 
   // ─────────────────────────────────────────────
   //  Unread / notification badge
   // ─────────────────────────────────────────────
 
   static const Color unreadBadge = Color(0xFFEF4444);
-  static const Color newBadge = Color(0xFF6366F1);
+  static const Color newBadge = primary;
 }

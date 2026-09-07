@@ -61,7 +61,8 @@ class _SchedulePagerState extends State<_SchedulePager> {
   }
 
   bool _onScroll(ScrollNotification notification) {
-    if (notification.metrics.axis != Axis.horizontal || notification.depth != 0) {
+    if (notification.metrics.axis != Axis.horizontal ||
+        notification.depth != 0) {
       return false;
     }
     if (notification is ScrollStartNotification &&

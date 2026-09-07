@@ -65,6 +65,57 @@ void main() {
     await pending;
     await fixture.db.close();
   });
+
+  test(
+    'a failed search can be retried without becoming an empty result',
+    () async {
+      final fixture = SearchFixture();
+      addTearDown(fixture.dispose);
+      final failed = fixture.controller.searchImmediately('course');
+      fixture.repository.oldCorpus.completeError(
+        StateError('corpus unavailable'),
+      );
+      await failed;
+      expect(
+        fixture.container.read(searchControllerProvider).errorMessage,
+        isNotNull,
+      );
+      expect(
+        fixture.container.read(searchControllerProvider).isSearching,
+        isFalse,
+      );
+      fixture.repository.oldCorpus = Completer<List<SearchDocument>>();
+      final retry = fixture.controller.searchImmediately('course');
+      expect(
+        fixture.container.read(searchControllerProvider).errorMessage,
+        isNull,
+      );
+      fixture.repository.oldCorpus.complete([document('recovered')]);
+      await retry;
+      final state = fixture.container.read(searchControllerProvider);
+      expect(state.query, 'course');
+      expect(state.results.single.id, 'recovered');
+      expect(state.errorMessage, isNull);
+    },
+  );
+
+  test(
+    'failure from the previous semester cannot replace the current results',
+    () async {
+      final fixture = SearchFixture();
+      addTearDown(fixture.dispose);
+      final pending = fixture.controller.searchImmediately('course');
+      fixture.container.read(currentSemesterIdProvider.notifier).state = 'new';
+      await Future<void>.delayed(Duration.zero);
+      fixture.repository.oldCorpus.completeError(
+        StateError('old corpus failed'),
+      );
+      await pending;
+      final state = fixture.container.read(searchControllerProvider);
+      expect(state.results.single.id, 'new');
+      expect(state.errorMessage, isNull);
+    },
+  );
 }
 
 class SearchFixture {
@@ -95,7 +146,7 @@ class SearchFixture {
 
 class DelayedRepository extends SearchRepository {
   DelayedRepository(super.ref);
-  final oldCorpus = Completer<List<SearchDocument>>();
+  var oldCorpus = Completer<List<SearchDocument>>();
   @override
   Future<List<SearchDocument>> loadCorpus({required String semesterId}) =>
       semesterId == 'old' ? oldCorpus.future : Future.value([document('new')]);

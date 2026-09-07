@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/design/app_theme_colors.dart';
@@ -9,18 +10,20 @@ import '../../../core/files/file_models.dart';
 import '../../../core/files/widgets/file_attachment_card.dart';
 import '../../../core/html/authenticated_html_content.dart';
 import '../../../core/router/router.dart';
+import '../../../core/providers/providers.dart';
 import '../../../core/utils/deadline_time.dart';
 import '../../../core/utils/homework_grade_display.dart';
 
-class HomeworkStatusHeader extends StatelessWidget {
+class HomeworkStatusHeader extends ConsumerWidget {
   const HomeworkStatusHeader({super.key, required this.homework});
 
   final db.Homework homework;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final c = context.colors;
-    final (statusText, statusColor, statusIcon) = _statusInfo();
+    final now = ref.watch(minuteTickProvider).valueOrNull ?? nowInShanghai();
+    final (statusText, statusColor, statusIcon) = _statusInfo(now);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -64,7 +67,7 @@ class HomeworkStatusHeader extends StatelessWidget {
     );
   }
 
-  (String, Color, IconData) _statusInfo() {
+  (String, Color, IconData) _statusInfo(DateTime now) {
     if (homework.graded) {
       return ('已批改', AppColors.success, Icons.check_circle_rounded);
     }
@@ -72,24 +75,24 @@ class HomeworkStatusHeader extends StatelessWidget {
       return ('已提交', AppColors.info, Icons.cloud_done_rounded);
     }
     final deadline = tryParseEpochMillisToLocal(homework.deadline);
-    if (deadline != null && deadline.isBefore(nowInShanghai())) {
+    if (deadline != null && deadline.isBefore(now)) {
       return ('已超期', AppColors.error, Icons.error_rounded);
     }
     return ('待提交', AppColors.warning, Icons.pending_rounded);
   }
 }
 
-class HomeworkDeadlineCard extends StatelessWidget {
+class HomeworkDeadlineCard extends ConsumerWidget {
   const HomeworkDeadlineCard({super.key, required this.homework});
 
   final db.Homework homework;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final c = context.colors;
 
     final deadline = tryParseEpochMillisToLocal(homework.deadline);
-    final now = nowInShanghai();
+    final now = ref.watch(minuteTickProvider).valueOrNull ?? nowInShanghai();
     final isOverdue = deadline != null && deadline.isBefore(now);
     final isPending = !homework.submitted && !homework.graded;
 
@@ -117,73 +120,54 @@ class HomeworkDeadlineCard extends StatelessWidget {
       countdownColor = AppColors.error;
     }
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: c.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: c.border, width: 0.5),
-      ),
-      child: Column(
-        children: [
-          Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 12,
+          runSpacing: 6,
+          children: [
+            Text(
+              '截止时间',
+              style: AppTypography.labelMedium.copyWith(color: c.subtitle),
+            ),
+            Text(
+              deadline != null
+                  ? '${deadline.year}/${deadline.month}/${deadline.day} '
+                        '${formatHourMinuteLabel(deadline)}'
+                  : '未知',
+              style: AppTypography.titleSmall.copyWith(color: c.text),
+            ),
+          ],
+        ),
+        if (homework.lateSubmissionDeadline != null) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 12,
+            runSpacing: 6,
             children: [
-              Icon(Icons.event_rounded, size: 18, color: c.subtitle),
-              const SizedBox(width: 8),
               Text(
-                '截止时间',
+                '补交截止',
                 style: AppTypography.labelMedium.copyWith(color: c.subtitle),
               ),
-              const Spacer(),
               Text(
-                deadline != null
-                    ? '${deadline.year}/${deadline.month}/${deadline.day} '
-                          '${formatHourMinuteLabel(deadline)}'
-                    : '未知',
-                style: AppTypography.titleSmall.copyWith(color: c.text),
+                formatHomeworkFullTime(homework.lateSubmissionDeadline!),
+                style: AppTypography.bodySmall.copyWith(color: c.subtitle),
               ),
             ],
           ),
-          if (homework.lateSubmissionDeadline != null) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(Icons.schedule_rounded, size: 18, color: c.subtitle),
-                const SizedBox(width: 8),
-                Text(
-                  '补交截止',
-                  style: AppTypography.labelMedium.copyWith(color: c.subtitle),
-                ),
-                const Spacer(),
-                Text(
-                  formatHomeworkFullTime(homework.lateSubmissionDeadline!),
-                  style: AppTypography.bodySmall.copyWith(color: c.subtitle),
-                ),
-              ],
-            ),
-          ],
-          if (countdown != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              decoration: BoxDecoration(
-                color: countdownColor.withAlpha(12),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Center(
-                child: Text(
-                  countdown,
-                  style: AppTypography.titleSmall.copyWith(
-                    color: countdownColor,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-          ],
         ],
-      ),
+        if (countdown != null) ...[
+          const SizedBox(height: 12),
+          Text(
+            countdown,
+            style: AppTypography.titleSmall.copyWith(
+              color: countdownColor,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -220,27 +204,13 @@ class HomeworkGradeSection extends StatelessWidget {
     final grade = gradeDisplay.numericGrade;
     final gradeColor = _gradeColor(grade);
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: c.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: c.border, width: 0.5),
-      ),
+    return HomeworkSectionCard(
+      title: '批改结果',
+      icon: Icons.grading_rounded,
+      iconColor: AppColors.success,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(Icons.grading_rounded, size: 18, color: AppColors.success),
-              const SizedBox(width: 8),
-              Text(
-                '批改结果',
-                style: AppTypography.titleMedium.copyWith(color: c.text),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
           Row(
             children: [
               if (gradeDisplay.hasDisplayValue)
@@ -404,11 +374,9 @@ class HomeworkSectionCard extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.only(top: 16),
       decoration: BoxDecoration(
-        color: c.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: c.border, width: 0.5),
+        border: Border(top: BorderSide(color: c.border)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -417,9 +385,11 @@ class HomeworkSectionCard extends StatelessWidget {
             children: [
               Icon(icon, size: 18, color: iconColor),
               const SizedBox(width: 8),
-              Text(
-                title,
-                style: AppTypography.titleMedium.copyWith(color: c.text),
+              Expanded(
+                child: Text(
+                  title,
+                  style: AppTypography.titleMedium.copyWith(color: c.text),
+                ),
               ),
             ],
           ),
@@ -452,11 +422,10 @@ class HomeworkMetaChip extends StatelessWidget {
       children: [
         Icon(icon, size: 13, color: chipColor),
         const SizedBox(width: 4),
-        Text(
-          label,
-          style: AppTypography.bodySmall.copyWith(
-            color: chipColor,
-            fontSize: 11,
+        Flexible(
+          child: Text(
+            label,
+            style: AppTypography.bodySmall.copyWith(color: chipColor),
           ),
         ),
       ],

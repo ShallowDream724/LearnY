@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/design/app_toast.dart';
+import '../../core/design/app_surfaces.dart';
 import '../../core/design/app_theme_colors.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/cooldown_toast.dart';
@@ -20,6 +21,8 @@ import '../../core/providers/providers.dart';
 import '../../core/providers/sync_models.dart';
 import '../../core/shell/shell_layout_metrics.dart';
 import '../../core/sync/sync_actions.dart';
+import '../../core/semester/semester_switcher.dart';
+import '../../core/router/router.dart';
 import 'providers/home_providers.dart';
 import 'providers/home_schedule_provider.dart';
 import 'widgets/home_sections.dart';
@@ -33,7 +36,6 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  bool _hasBootstrappedHome = false;
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _notificationsSectionKey = GlobalKey();
   double? _pendingViewportOffset;
@@ -100,18 +102,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           _pendingViewportOffset = null;
         });
       }
-
-      if (_hasBootstrappedHome || !next.hasValue) return;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && !_hasBootstrappedHome) {
-          setState(() => _hasBootstrappedHome = true);
-        }
-      });
     });
 
     final c = context.colors;
     final authState = ref.watch(authProvider);
-    final homeAsync = _hasBootstrappedHome ? null : ref.watch(homeDataProvider);
+    final homeAsync = ref.watch(homeDataProvider);
+    ref.listen(currentSemesterIdProvider, (previous, next) {
+      if (previous != next) {
+        _pendingViewportOffset = null;
+        if (_scrollController.hasClients) _scrollController.jumpTo(0);
+      }
+    });
 
     Future<void> scrollToNotificationsSection() async {
       final targetContext = _notificationsSectionKey.currentContext;
@@ -120,103 +121,89 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       }
       await Scrollable.ensureVisible(
         targetContext,
-        duration: const Duration(milliseconds: 360),
+        duration: AppMotion.duration(context),
         curve: Curves.easeOutCubic,
         alignment: 0.08,
       );
     }
 
     return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: _onRefresh,
-        color: AppColors.primary,
-        child: CustomScrollView(
-          key: const PageStorageKey('home_scroll_view'),
-          controller: _scrollController,
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            SliverAppBar(
-              floating: true,
-              snap: true,
-              title: !usesDesktopControls(context)
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _greeting(),
-                          style: AppTypography.bodySmall.copyWith(
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final gutter = pageGutterForWidth(constraints.maxWidth);
+          return RefreshIndicator(
+            onRefresh: _onRefresh,
+            color: AppColors.primary,
+            child: CustomScrollView(
+              key: const PageStorageKey('home_scroll_view'),
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverAppBar(
+                  toolbarHeight: semesterToolbarHeight(context),
+                  titleSpacing: gutter,
+                  title: SemesterPageTitle(
+                    title: '${_greeting()}，${authState.username ?? "LearnY"}',
+                  ),
+                  actions: [
+                    IconButton(
+                      tooltip: '课程文件',
+                      icon: const Icon(Icons.folder_open_outlined),
+                      onPressed: () => context.push(Routes.files),
+                    ),
+                    IconButton(
+                      tooltip: '搜索',
+                      icon: const Icon(Icons.search_rounded),
+                      onPressed: () {
+                        context.push('/search');
+                      },
+                    ),
+                    if (!shouldShowRail(context)) const SemesterSyncControl(),
+                    SizedBox(width: gutter - 8),
+                  ],
+                ),
+                homeAsync.when(
+                  skipLoadingOnReload: true,
+                  skipLoadingOnRefresh: true,
+                  loading: () =>
+                      const SliverFillRemaining(child: ListSkeleton()),
+                  error: (error, _) => SliverFillRemaining(
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.error_outline_rounded,
+                            size: 48,
                             color: c.subtitle,
                           ),
-                        ),
-                        Text(
-                          authState.username ?? 'LearnY',
-                          style: AppTypography.headlineSmall.copyWith(
-                            color: c.text,
+                          const SizedBox(height: 12),
+                          Text(
+                            '加载失败',
+                            style: AppTypography.titleMedium.copyWith(
+                              color: c.text,
+                            ),
                           ),
-                        ),
-                      ],
-                    )
-                  : Text(
-                      '${_greeting()}，${authState.username ?? "LearnY"}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTypography.titleMedium.copyWith(color: c.text),
+                          const SizedBox(height: 8),
+                          TextButton(
+                            onPressed: _onRefresh,
+                            child: const Text('重试'),
+                          ),
+                        ],
+                      ),
                     ),
-              actions: [
-                IconButton(
-                  tooltip: '搜索',
-                  icon: const Icon(Icons.search_rounded),
-                  onPressed: () {
-                    context.push('/search');
-                  },
+                  ),
+                  data: (_) => _HomeContentSliver(
+                    gutter: gutter,
+                    notificationsSectionKey: _notificationsSectionKey,
+                    onUnreadStatTap: scrollToNotificationsSection,
+                    onBeforeNotificationSwipeRead: preserveViewport,
+                  ),
                 ),
               ],
             ),
-            if (!_hasBootstrappedHome)
-              homeAsync!.when(
-                skipLoadingOnReload: true,
-                skipLoadingOnRefresh: true,
-                loading: () => const SliverFillRemaining(child: ListSkeleton()),
-                error: (error, _) => SliverFillRemaining(
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.error_outline_rounded,
-                          size: 48,
-                          color: c.subtitle,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          '加载失败',
-                          style: AppTypography.titleMedium.copyWith(
-                            color: c.text,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextButton(
-                          onPressed: _onRefresh,
-                          child: const Text('重试'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                data: (_) => _HomeContentSliver(
-                  notificationsSectionKey: _notificationsSectionKey,
-                  onUnreadStatTap: scrollToNotificationsSection,
-                  onBeforeNotificationSwipeRead: preserveViewport,
-                ),
-              )
-            else
-              _HomeContentSliver(
-                notificationsSectionKey: _notificationsSectionKey,
-                onUnreadStatTap: scrollToNotificationsSection,
-                onBeforeNotificationSwipeRead: preserveViewport,
-              ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -241,30 +228,58 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
 class _HomeContentSliver extends StatelessWidget {
   const _HomeContentSliver({
+    required this.gutter,
     required this.notificationsSectionKey,
     required this.onUnreadStatTap,
     required this.onBeforeNotificationSwipeRead,
   });
 
   final GlobalKey notificationsSectionKey;
+  final double gutter;
   final VoidCallback onUnreadStatTap;
   final VoidCallback onBeforeNotificationSwipeRead;
 
   @override
   Widget build(BuildContext context) {
     return SliverPadding(
-      padding: EdgeInsets.fromLTRB(16, 8, 16, shellContentBottomInset(context)),
+      padding: EdgeInsets.fromLTRB(
+        gutter,
+        8,
+        gutter,
+        shellContentBottomInset(context),
+      ),
       sliver: SliverList(
         delegate: SliverChildListDelegate([
           HomeStatsSection(onUnreadTap: onUnreadStatTap),
           const SizedBox(height: 20),
           const HomeTodayScheduleSection(),
-          const HomeUrgentAssignmentsSection(),
-          HomeUnreadNotificationsSection(
-            key: notificationsSectionKey,
-            onBeforeSwipeRead: onBeforeNotificationSwipeRead,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final updates = Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  HomeUnreadNotificationsSection(
+                    key: notificationsSectionKey,
+                    onBeforeSwipeRead: onBeforeNotificationSwipeRead,
+                  ),
+                  const HomeUnreadFilesSection(),
+                ],
+              );
+              if (constraints.maxWidth < 840) {
+                return Column(
+                  children: [const HomeUrgentAssignmentsSection(), updates],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Expanded(child: HomeUrgentAssignmentsSection()),
+                  const SizedBox(width: 32),
+                  Expanded(child: updates),
+                ],
+              );
+            },
           ),
-          const HomeUnreadFilesSection(),
         ]),
       ),
     );

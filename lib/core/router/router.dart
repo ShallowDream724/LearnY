@@ -22,6 +22,7 @@ import '../../features/courses/course_detail_screen.dart';
 import '../../features/courses/course_search_screen.dart';
 
 import '../../features/files/file_detail_screen.dart';
+import '../../features/files/files_screen.dart';
 import '../../features/files/favorite_files_screen.dart';
 import '../../features/files/file_manager_screen.dart';
 import '../../features/files/unread_files_screen.dart';
@@ -40,6 +41,7 @@ abstract final class Routes {
   static const String courses = '/courses';
   static const String profile = '/profile';
   static const String search = '/search';
+  static const String files = '/files';
 
   // Detail routes (full screen, above shell)
   static String loginWithReturnTo(String? location) {
@@ -204,6 +206,11 @@ GoRouter buildRouter({required WidgetRef ref}) {
         path: Routes.search,
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const SearchScreen(),
+      ),
+      GoRoute(
+        path: Routes.files,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const FilesScreen(),
       ),
 
       GoRoute(

@@ -1,13 +1,18 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 
 import '../../../core/design/app_theme_colors.dart';
+import '../../../core/design/app_surfaces.dart';
 import '../../../core/design/colors.dart';
 import '../../../core/design/typography.dart';
 import '../providers/course_workbench_models.dart';
 
-enum CourseWorkbenchMenuAction { chooseIcon, editAlias, restoreDefault }
+enum CourseWorkbenchMenuAction {
+  chooseIcon,
+  editAlias,
+  restoreDefault,
+  moveEarlier,
+  moveLater,
+}
 
 @immutable
 class CourseIconPickerResult {
@@ -31,6 +36,8 @@ class CourseAliasEditorResult {
 Future<CourseWorkbenchMenuAction?> showCourseWorkbenchMenu(
   BuildContext context, {
   required ResolvedCourseCardModel card,
+  bool canMoveEarlier = false,
+  bool canMoveLater = false,
 }) {
   return _showWorkbenchSheet<CourseWorkbenchMenuAction>(
     context,
@@ -46,13 +53,32 @@ Future<CourseWorkbenchMenuAction?> showCourseWorkbenchMenu(
               style: AppTypography.titleLarge.copyWith(color: c.text),
             ),
             const SizedBox(height: 6),
-            Text(
-              card.course.name,
-              style: AppTypography.bodySmall.copyWith(color: c.subtitle),
-            ),
+            if (card.displayTitle != card.course.name)
+              Text(
+                card.course.name,
+                style: AppTypography.bodySmall.copyWith(color: c.subtitle),
+              ),
             const SizedBox(height: 16),
             _WorkbenchCardGroup(
               children: [
+                if (canMoveEarlier)
+                  _WorkbenchActionTile(
+                    icon: Icons.arrow_upward_rounded,
+                    title: '向前移动',
+                    subtitle: '',
+                    onTap: () => Navigator.of(
+                      context,
+                    ).pop(CourseWorkbenchMenuAction.moveEarlier),
+                  ),
+                if (canMoveLater)
+                  _WorkbenchActionTile(
+                    icon: Icons.arrow_downward_rounded,
+                    title: '向后移动',
+                    subtitle: '',
+                    onTap: () => Navigator.of(
+                      context,
+                    ).pop(CourseWorkbenchMenuAction.moveLater),
+                  ),
                 _WorkbenchActionTile(
                   icon: Icons.grid_view_rounded,
                   title: '更换图标',
@@ -108,18 +134,13 @@ Future<CourseIconPickerResult?> showCourseIconPickerSheet(
               '课程图标',
               style: AppTypography.titleLarge.copyWith(color: c.text),
             ),
-            const SizedBox(height: 6),
-            Text(
-              '受控图标库会继续扩展，但不会开放成杂乱的应用图标墙。',
-              style: AppTypography.bodySmall.copyWith(color: c.subtitle),
-            ),
             const SizedBox(height: 16),
             _WorkbenchCardGroup(
               children: [
                 _WorkbenchActionTile(
                   icon: Icons.refresh_rounded,
                   title: '恢复默认图标',
-                  subtitle: '回到首字与默认图标位',
+                  subtitle: '',
                   selected: selectedIconKey == null,
                   onTap: () => Navigator.of(context).pop(
                     const CourseIconPickerResult(
@@ -170,92 +191,104 @@ Future<CourseAliasEditorResult?> showCourseAliasEditorSheet(
   BuildContext context, {
   required ResolvedCourseCardModel card,
 }) {
-  final controller = TextEditingController(text: card.alias ?? '');
   return _showWorkbenchSheet<CourseAliasEditorResult>(
     context,
     respectKeyboard: true,
-    child: Builder(
-      builder: (context) {
-        final c = context.colors;
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '设置简称',
-              style: AppTypography.titleLarge.copyWith(color: c.text),
+    child: _CourseAliasEditor(card: card),
+  );
+}
+
+class _CourseAliasEditor extends StatefulWidget {
+  const _CourseAliasEditor({required this.card});
+  final ResolvedCourseCardModel card;
+
+  @override
+  State<_CourseAliasEditor> createState() => _CourseAliasEditorState();
+}
+
+class _CourseAliasEditorState extends State<_CourseAliasEditor> {
+  late final controller = TextEditingController(text: widget.card.alias ?? '');
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final card = widget.card;
+    final c = context.colors;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('设置简称', style: AppTypography.titleLarge.copyWith(color: c.text)),
+        const SizedBox(height: 6),
+        Text(
+          card.course.name,
+          style: AppTypography.bodySmall.copyWith(color: c.subtitle),
+        ),
+        const SizedBox(height: 14),
+        TextField(
+          controller: controller,
+          maxLength: 10,
+          autofocus: true,
+          textInputAction: TextInputAction.done,
+          decoration: InputDecoration(
+            hintText: '课程简称',
+            filled: true,
+            fillColor: c.surfaceHigh,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: c.border, width: 0.5),
             ),
-            const SizedBox(height: 6),
-            Text(
-              '建议 2 到 4 个字，最多 6 个中文字符。留空会恢复默认课程名。',
-              style: AppTypography.bodySmall.copyWith(color: c.subtitle),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: c.border, width: 0.5),
             ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: controller,
-              maxLength: 10,
-              autofocus: true,
-              textInputAction: TextInputAction.done,
-              decoration: InputDecoration(
-                hintText: card.course.name,
-                counterText: '',
-                filled: true,
-                fillColor: c.surfaceHigh,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide(color: c.border, width: 0.5),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide(color: c.border, width: 0.5),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: const BorderSide(
-                    color: AppColors.primary,
-                    width: 1,
-                  ),
-                ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: AppColors.primary, width: 1),
+            ),
+          ),
+          onSubmitted: (value) {
+            Navigator.of(context).pop(
+              CourseAliasEditorResult(
+                submitted: true,
+                alias: _normalizeAlias(value),
               ),
-              onSubmitted: (value) {
-                Navigator.of(context).pop(
-                  CourseAliasEditorResult(
-                    submitted: true,
-                    alias: _normalizeAlias(value),
-                  ),
-                );
-              },
+            );
+          },
+        ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('取消'),
+              ),
             ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('取消'),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: () {
-                      Navigator.of(context).pop(
-                        CourseAliasEditorResult(
-                          submitted: true,
-                          alias: _normalizeAlias(controller.text),
-                        ),
-                      );
-                    },
-                    child: const Text('完成'),
-                  ),
-                ),
-              ],
+            const SizedBox(width: 10),
+            Expanded(
+              child: FilledButton(
+                onPressed: () {
+                  Navigator.of(context).pop(
+                    CourseAliasEditorResult(
+                      submitted: true,
+                      alias: _normalizeAlias(controller.text),
+                    ),
+                  );
+                },
+                child: const Text('完成'),
+              ),
             ),
           ],
-        );
-      },
-    ),
-  ).whenComplete(controller.dispose);
+        ),
+      ],
+    );
+  }
 }
 
 Future<T?> _showWorkbenchSheet<T>(
@@ -265,71 +298,51 @@ Future<T?> _showWorkbenchSheet<T>(
   bool scrollable = false,
   bool respectKeyboard = false,
 }) {
-  return showGeneralDialog<T>(
-    context: context,
-    useRootNavigator: true,
-    barrierColor: Colors.black.withAlpha(68),
-    barrierDismissible: true,
-    barrierLabel: '关闭',
-    transitionDuration: const Duration(milliseconds: 220),
-    pageBuilder: (sheetContext, animation, secondaryAnimation) {
-      final bottomInset = respectKeyboard
-          ? MediaQuery.viewInsetsOf(sheetContext).bottom
-          : 0.0;
-      final maxHeight =
-          MediaQuery.sizeOf(sheetContext).height * maxHeightFactor;
-
-      return Material(
-        type: MaterialType.transparency,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => Navigator.of(sheetContext).maybePop(),
-          child: SafeArea(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(12, 0, 12, 12 + bottomInset),
-              child: Align(
-                alignment: Alignment.bottomCenter,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.deferToChild,
-                  onTap: () {},
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxHeight: maxHeight),
-                    child: _WorkbenchSheetSurface(
-                      child: scrollable
-                          ? SingleChildScrollView(
-                              padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
-                              child: child,
-                            )
-                          : Padding(
-                              padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
-                              child: child,
-                            ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
+  Widget content(BuildContext context) => ConstrainedBox(
+    constraints: BoxConstraints(
+      maxWidth: 560,
+      maxHeight: MediaQuery.sizeOf(context).height * maxHeightFactor,
+    ),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Align(
+          alignment: Alignment.centerRight,
+          child: IconButton(
+            tooltip: '关闭',
+            icon: const Icon(Icons.close_rounded),
+            onPressed: () => Navigator.of(context).pop(),
           ),
         ),
-      );
-    },
-    transitionBuilder: (sheetContext, animation, secondaryAnimation, dialog) {
-      final curved = CurvedAnimation(
-        parent: animation,
-        curve: Curves.easeOutCubic,
-        reverseCurve: Curves.easeInCubic,
-      );
-      return FadeTransition(
-        opacity: curved,
-        child: SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(0, 0.08),
-            end: Offset.zero,
-          ).animate(curved),
-          child: dialog,
+        Flexible(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            child: child,
+          ),
         ),
-      );
-    },
+      ],
+    ),
+  );
+  if (MediaQuery.sizeOf(context).width >= 600) {
+    return showDialog<T>(
+      context: context,
+      builder: (context) => Dialog(child: content(context)),
+    );
+  }
+  return showModalBottomSheet<T>(
+    context: context,
+    useRootNavigator: true,
+    useSafeArea: true,
+    isScrollControlled: true,
+    showDragHandle: true,
+    sheetAnimationStyle: AnimationStyle(duration: AppMotion.duration(context)),
+    builder: (context) => Padding(
+      padding: EdgeInsets.only(
+        bottom: respectKeyboard ? MediaQuery.viewInsetsOf(context).bottom : 0,
+      ),
+      child: content(context),
+    ),
   );
 }
 
@@ -341,63 +354,6 @@ String? _normalizeAlias(String raw) {
   return normalized;
 }
 
-class _WorkbenchSheetSurface extends StatelessWidget {
-  const _WorkbenchSheetSurface({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final isDark = context.isDark;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(28),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: isDark
-                ? c.surface.withAlpha(238)
-                : Colors.white.withAlpha(238),
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(
-              color: isDark
-                  ? Colors.white.withAlpha(14)
-                  : c.border.withAlpha(140),
-              width: 0.6,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withAlpha(isDark ? 36 : 18),
-                blurRadius: 30,
-                spreadRadius: 2,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 10, bottom: 8),
-                child: Container(
-                  width: 34,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: c.tertiary.withAlpha(isDark ? 86 : 70),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                ),
-              ),
-              Flexible(child: child),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _WorkbenchCardGroup extends StatelessWidget {
   const _WorkbenchCardGroup({required this.children});
 
@@ -405,15 +361,7 @@ class _WorkbenchCardGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: c.surfaceHigh.withAlpha(context.isDark ? 204 : 232),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: c.border.withAlpha(120), width: 0.5),
-      ),
-      child: Column(children: children),
-    );
+    return Column(children: children);
   }
 }
 
@@ -439,7 +387,7 @@ class _WorkbenchActionTile extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(8),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
           child: Row(
@@ -462,13 +410,15 @@ class _WorkbenchActionTile extends StatelessWidget {
                       title,
                       style: AppTypography.titleSmall.copyWith(color: c.text),
                     ),
-                    const SizedBox(height: 3),
-                    Text(
-                      subtitle,
-                      style: AppTypography.bodySmall.copyWith(
-                        color: c.subtitle,
+                    if (subtitle.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        subtitle,
+                        style: AppTypography.bodySmall.copyWith(
+                          color: c.subtitle,
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -504,15 +454,15 @@ class _CourseIconOptionTile extends StatelessWidget {
       color: selected
           ? AppColors.primary.withAlpha(context.isDark ? 34 : 14)
           : c.surfaceHigh.withAlpha(context.isDark ? 180 : 216),
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(8),
       child: InkWell(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(8),
         onTap: onTap,
         child: Container(
           width: 92,
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: selected ? AppColors.primary : c.border,
               width: selected ? 1 : 0.5,

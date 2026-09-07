@@ -11,7 +11,10 @@ import 'package:learn_y/core/design/theme.dart';
 import 'package:learn_y/core/providers/providers.dart';
 import 'package:learn_y/core/providers/connectivity_provider.dart';
 import 'package:learn_y/demo/demo_environment.dart';
-import 'package:learn_y/core/database/database.dart' show Semester;
+import 'package:learn_y/core/database/database.dart'
+    show Semester, CourseDao, HomeworkDao;
+import 'package:learn_y/core/router/router.dart';
+import 'package:learn_y/features/home/home_screen.dart';
 
 import '../../test/support/schedule_fixture.dart';
 
@@ -140,9 +143,6 @@ void main() {
           overrides: [
             ...demo.overrides,
             connectivityProvider.overrideWith((ref) => _Connected()),
-            minuteTickProvider.overrideWith(
-              (ref) => Stream.value(scheduleToday),
-            ),
             appSessionCoordinatorProvider.overrideWith(
               (ref) => AppSessionCoordinator(
                 RiverpodAppSessionCoordinatorDelegate(ref),
@@ -154,19 +154,106 @@ void main() {
         ),
       ),
     );
-    for (final size in [const Size(1440, 900), const Size(390, 844)]) {
-      tester.view.physicalSize = size;
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 100)),
-      );
+    Future<void> settleData() async {
       for (var i = 0; i < 8; i++) {
         await tester.pump(const Duration(milliseconds: 100));
         await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+          () => Future<void>.delayed(const Duration(milliseconds: 30)),
         );
       }
-      await capture(tester, key, 'home_${size.width.toInt()}');
     }
+
+    await settleData();
+    final router = GoRouter.of(tester.element(find.byType(HomeScreen)));
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(LearnYApp)),
+    );
+    final courses = (await tester.runAsync(
+      () => demo.database.getCoursesBySemester(demo.selectedSemesterId),
+    ))!;
+    final homeworks = (await tester.runAsync(
+      () => demo.database.getHomeworksBySemester(demo.selectedSemesterId),
+    ))!;
+    final routes = {
+      'home': Routes.home,
+      'assignments': Routes.assignments,
+      'courses': Routes.courses,
+      'profile': Routes.profile,
+      'unread_files': Routes.unreadFiles,
+      'files': Routes.files,
+      if (courses.isNotEmpty)
+        'course_detail': Routes.courseDetail(courses.first.id),
+      if (homeworks.isNotEmpty)
+        'homework_detail': Routes.homeworkDetail(
+          homeworkId: homeworks.first.id,
+          courseId: homeworks.first.courseId,
+          courseName: courses
+              .where((course) => course.id == homeworks.first.courseId)
+              .first
+              .name,
+        ),
+    };
+    for (final size in [
+      const Size(1440, 900),
+      const Size(390, 844),
+      const Size(800, 1000),
+    ]) {
+      tester.view.physicalSize = size;
+      for (final entry in routes.entries) {
+        if (size.width == 800 && !['home', 'courses'].contains(entry.key)) {
+          continue;
+        }
+        final mainRoute = [
+          'home',
+          'assignments',
+          'courses',
+          'profile',
+        ].contains(entry.key);
+        router.go(mainRoute ? entry.value : Routes.home);
+        if (!mainRoute) router.push(entry.value);
+        await settleData();
+        await capture(tester, key, '${entry.key}_${size.width.toInt()}');
+      }
+      if (size.width != 800) {
+        final pending = homeworks.firstWhere(
+          (hw) => !hw.submitted && !hw.graded,
+        );
+        router.go(Routes.home);
+        router.push(
+          Routes.homeworkDetail(
+            homeworkId: pending.id,
+            courseId: pending.courseId,
+            courseName: courses
+                .firstWhere((c) => c.id == pending.courseId)
+                .name,
+          ),
+        );
+        await settleData();
+        await tester.tap(find.text('提交作业'));
+        await settleData();
+        await capture(tester, key, 'submission_${size.width.toInt()}');
+        await tester.tap(find.byTooltip('关闭'));
+        await settleData();
+      }
+    }
+    tester.view.physicalSize = const Size(390, 844);
+    tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    for (final entry in {
+      'home': Routes.home,
+      'assignments': Routes.assignments,
+    }.entries) {
+      router.go(entry.value);
+      await settleData();
+      await capture(tester, key, '${entry.key}_390_large_text');
+    }
+    tester.platformDispatcher.clearTextScaleFactorTestValue();
+    await tester.runAsync(
+      () => container.read(themeModeProvider.notifier).setTheme('dark'),
+    );
+    router.go(Routes.home);
+    await settleData();
+    await capture(tester, key, 'home_390_dark');
     await tester.pumpWidget(const SizedBox());
     await tester.pumpAndSettle();
   });

@@ -51,7 +51,17 @@ class SearchController extends StateNotifier<SearchState> {
       return cached;
     }
 
-    final future = _repository.loadCorpus(semesterId: semesterId);
+    late final Future<List<SearchDocument>> future;
+    future = _repository.loadCorpus(semesterId: semesterId).catchError((
+      Object error,
+      StackTrace stackTrace,
+    ) {
+      if (identical(_documentsFuture, future)) {
+        _documentsFuture = null;
+        _documentsSemesterId = null;
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    });
     _documentsSemesterId = semesterId;
     _documentsFuture = future;
     return future;
@@ -68,11 +78,12 @@ class SearchController extends StateNotifier<SearchState> {
         results: const <SearchResult>[],
         isSearching: false,
         hasSearched: false,
+        clearError: true,
       );
       return;
     }
 
-    state = state.copyWith(query: query, isSearching: true);
+    state = state.copyWith(query: query, isSearching: true, clearError: true);
     _debounce = Timer(const Duration(milliseconds: 300), () {
       unawaited(_performSearch(query));
     });
@@ -88,11 +99,12 @@ class SearchController extends StateNotifier<SearchState> {
         results: const <SearchResult>[],
         isSearching: false,
         hasSearched: false,
+        clearError: true,
       );
       return;
     }
 
-    state = state.copyWith(query: query, isSearching: true);
+    state = state.copyWith(query: query, isSearching: true, clearError: true);
     await _performSearch(query);
   }
 
@@ -107,6 +119,7 @@ class SearchController extends StateNotifier<SearchState> {
         results: const <SearchResult>[],
         isSearching: false,
         hasSearched: true,
+        clearError: true,
       );
       return;
     }
@@ -126,12 +139,10 @@ class SearchController extends StateNotifier<SearchState> {
         results: results,
         isSearching: false,
         hasSearched: true,
+        clearError: true,
       );
       unawaited(_persistRecentSearch(query, generation));
     } catch (error, stackTrace) {
-      if (_documentsSemesterId == semesterId) {
-        _documentsFuture = null;
-      }
       debugPrint('Search failed for "$query": $error\n$stackTrace');
       if (!mounted || generation != _searchGeneration) {
         return;
@@ -141,6 +152,7 @@ class SearchController extends StateNotifier<SearchState> {
         results: const <SearchResult>[],
         isSearching: false,
         hasSearched: true,
+        errorMessage: '搜索暂时不可用，请重试',
       );
     }
   }
@@ -182,6 +194,7 @@ class SearchController extends StateNotifier<SearchState> {
       results: const [],
       isSearching: false,
       hasSearched: false,
+      clearError: true,
     );
     if (query.isNotEmpty) unawaited(searchImmediately(query));
   }

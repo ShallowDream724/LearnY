@@ -1,15 +1,4 @@
-/// Apple-style cooldown toast — a capsule pill that slides down from the
-/// top of the screen with frosted glass background.
-///
-/// Usage:
-///   CooldownToast.show(context, seconds: 23);
-///
-/// Design:
-/// - Slides down from behind SafeArea with spring curve
-/// - Frosted glass capsule (BackdropFilter blur)
-/// - Checkmark icon + "已是最新 · Xs 后可刷新"
-/// - Auto-dismisses after 2s with fade-out
-/// - Only one toast at a time (previous dismissed)
+/// Explains a refresh cooldown without making a new freshness claim.
 library;
 
 import 'package:flutter/material.dart';
@@ -19,9 +8,9 @@ import 'app_toast.dart';
 class CooldownToast {
   /// Show a cooldown toast. [seconds] = remaining cooldown.
   static void show(BuildContext context, {required int seconds}) {
-    AppToast.showSuccess(
+    AppToast.showInfo(
       context,
-      message: '已是最新 · ${seconds}s 后可刷新',
+      message: '刚刚已刷新，$seconds 秒后可再试',
       duration: const Duration(milliseconds: 2500),
     );
   }

@@ -1,27 +1,18 @@
-/// App shell — adaptive navigation: bottom bar on phones, side rail on tablets.
-///
-/// Phone keeps the top-level tabs in a swipeable PageView and mirrors its
-/// progress into the bottom bar for lightweight transition feedback.
-library;
-
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../design/app_surfaces.dart';
 import '../design/app_theme_colors.dart';
-import '../design/colors.dart';
 import '../design/responsive.dart';
 import '../design/typography.dart';
-import '../providers/providers.dart';
 import '../providers/connectivity_provider.dart';
+import '../providers/providers.dart';
 import '../router/router.dart';
 import '../semester/semester_switcher.dart';
-import 'jelly_bottom_nav_bar.dart';
-import 'shell_nav_motion.dart';
+import 'app_bottom_navigation.dart';
 
-const _shellDestinations = <ShellNavDestinationData>[
+const _destinations = <ShellNavDestinationData>[
   ShellNavDestinationData(
     icon: Icons.home_outlined,
     selectedIcon: Icons.home_rounded,
@@ -45,179 +36,177 @@ const _shellDestinations = <ShellNavDestinationData>[
 ];
 
 class AppShell extends ConsumerWidget {
+  const AppShell({super.key, required this.navigationShell});
   final StatefulNavigationShell navigationShell;
 
-  const AppShell({super.key, required this.navigationShell});
-
-  void _onTap(BuildContext context, int index) {
-    if (index == navigationShell.currentIndex) {
-      return;
-    }
-    HapticFeedback.selectionClick();
-    navigationShell.goBranch(index);
+  void _select(int index) {
+    if (index != navigationShell.currentIndex) navigationShell.goBranch(index);
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final index = navigationShell.currentIndex;
-    final useRail = shouldShowRail(context);
+    final rail = shouldShowRail(context);
     final auth = ref.watch(authProvider);
-    final connectivity = ref.watch(connectivityProvider);
-    final pageProgress = ref.watch(shellPageProgressProvider);
-    final resolvedPageProgress = pageProgress ?? index.toDouble();
-    final isOffline = connectivity.status == NetworkStatus.offline;
-    final isSessionExpired = auth.requiresReauthentication;
-    final needsCampusVerification = ref.watch(
+    final offline =
+        ref.watch(connectivityProvider).status == NetworkStatus.offline;
+    final campusVerification = ref.watch(
       campusIdentityVerificationRequiredProvider,
     );
-    final currentLocation = GoRouterState.of(context).uri.toString();
-
-    // Wrap child with app-level banners.
-    final content = Column(
-      children: [
-        if (!useRail) const SemesterToolbar(),
-        AnimatedSize(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-          child: isSessionExpired || needsCampusVerification
-              ? _SessionExpiredBanner(
-                  message: isSessionExpired
-                      ? auth.errorMessage
-                      : '校园登录需要验证，可继续查看已有内容',
-                  onLogin: () {
-                    context.go(Routes.loginWithReturnTo(currentLocation));
-                  },
-                )
-              : const SizedBox.shrink(),
-        ),
-        AnimatedSize(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-          child: isOffline ? _OfflineBanner() : const SizedBox.shrink(),
-        ),
-        Expanded(child: navigationShell),
-      ],
-    );
-
-    if (useRail) {
-      return _buildRailLayout(context, index, content);
-    }
-    return _buildBottomNavLayout(context, resolvedPageProgress, content);
-  }
-
-  // ─────────────────────────────────────────────
-  //  Tablet: NavigationRail
-  // ─────────────────────────────────────────────
-
-  Widget _buildRailLayout(BuildContext context, int index, Widget content) {
-    final c = context.colors;
-    final layout = layoutTypeOf(context);
-    final extended = layout == LayoutType.expanded;
-
-    return Scaffold(
-      body: Row(
+    final location = GoRouterState.of(context).uri.toString();
+    final content = ContentLayout(
+      child: Column(
         children: [
-          // Side rail
-          Container(
-            decoration: BoxDecoration(
-              color: c.surface,
-              border: Border(right: BorderSide(color: c.border, width: 0.5)),
+          if (auth.requiresReauthentication || campusVerification)
+            _AccessNotice(
+              icon: Icons.lock_clock_outlined,
+              message: auth.requiresReauthentication
+                  ? '登录已过期，已有内容仍可查看'
+                  : '校园登录需要验证，已有内容仍可查看',
+              action: TextButton(
+                onPressed: () => context.go(Routes.loginWithReturnTo(location)),
+                child: const Text('重新登录'),
+              ),
+            )
+          else if (offline)
+            const _AccessNotice(
+              icon: Icons.wifi_off_outlined,
+              message: '当前离线，正在显示已保存的内容',
             ),
-            child: NavigationRail(
-              scrollable: true,
-              selectedIndex: index,
-              onDestinationSelected: (i) => _onTap(context, i),
-              extended: extended,
-              minWidth: 72,
-              minExtendedWidth: 200,
-              backgroundColor: Colors.transparent,
-              indicatorColor: AppColors.primary.withAlpha(30),
-              selectedIconTheme: const IconThemeData(
-                color: AppColors.primary,
-                size: 24,
-              ),
-              unselectedIconTheme: IconThemeData(color: c.tertiary, size: 24),
-              selectedLabelTextStyle: AppTypography.labelSmall.copyWith(
-                color: AppColors.primary,
-              ),
-              unselectedLabelTextStyle: AppTypography.labelSmall.copyWith(
-                color: c.tertiary,
-              ),
-              labelType: extended
-                  ? NavigationRailLabelType.none
-                  : NavigationRailLabelType.all,
-              leading: Padding(
-                padding: EdgeInsets.symmetric(
-                  vertical: 16,
-                  horizontal: extended ? 8 : 0,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    extended
-                        ? Text(
-                            'LearnY',
-                            style: AppTypography.headlineSmall.copyWith(
-                              color: c.text,
-                            ),
-                          )
-                        : Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [
-                                  AppColors.primary,
-                                  AppColors.primaryDark,
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Icon(
-                              Icons.school_rounded,
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                          ),
-                    const SizedBox(height: 12),
-                    SemesterToolbar(inRail: true, iconOnly: !extended),
-                  ],
-                ),
-              ),
-              destinations: [
-                for (final destination in _shellDestinations)
-                  NavigationRailDestination(
-                    icon: Icon(destination.icon),
-                    selectedIcon: Icon(destination.selectedIcon),
-                    label: Text(destination.label),
-                  ),
-              ],
-            ),
-          ),
-
-          // Content area
-          Expanded(child: content),
+          Expanded(child: navigationShell),
         ],
       ),
     );
-  }
-
-  // ─────────────────────────────────────────────
-  //  Phone: bottom NavigationBar
-  // ─────────────────────────────────────────────
-
-  Widget _buildBottomNavLayout(
-    BuildContext context,
-    double pageProgress,
-    Widget content,
-  ) {
     return Scaffold(
-      extendBody: true,
-      body: content,
-      bottomNavigationBar: JellyBottomNavBar(
-        destinations: _shellDestinations,
-        pageProgress: pageProgress,
-        onTap: (i) => _onTap(context, i),
+      body: rail
+          ? Row(
+              children: [
+                _Sidebar(
+                  index: navigationShell.currentIndex,
+                  onSelected: _select,
+                ),
+                Expanded(child: content),
+              ],
+            )
+          : content,
+      bottomNavigationBar: rail
+          ? null
+          : AppBottomNavigation(
+              destinations: _destinations,
+              selectedIndex: navigationShell.currentIndex,
+              onTap: _select,
+            ),
+    );
+  }
+}
+
+class _Sidebar extends StatelessWidget {
+  const _Sidebar({required this.index, required this.onSelected});
+  final int index;
+  final ValueChanged<int> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final extended = MediaQuery.sizeOf(context).width >= 1000;
+    return Material(
+      color: c.surface,
+      child: Container(
+        width: extended ? 208 : 76,
+        decoration: BoxDecoration(
+          border: Border(right: BorderSide(color: c.border, width: .5)),
+        ),
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: EdgeInsets.fromLTRB(extended ? 24 : 8, 28, 8, 28),
+                child: extended
+                    ? Text(
+                        'LearnY',
+                        style: AppTypography.headlineMedium.copyWith(
+                          color: c.text,
+                        ),
+                      )
+                    : Tooltip(
+                        message: 'LearnY',
+                        child: Icon(Icons.school_outlined, color: c.infoAccent),
+                      ),
+              ),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  children: [
+                    for (final (i, destination) in _destinations.indexed)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: extended
+                            ? ListTile(
+                                selected: i == index,
+                                selectedColor: c.infoAccent,
+                                selectedTileColor: c.infoAccent.withAlpha(20),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                minLeadingWidth: 20,
+                                horizontalTitleGap: 12,
+                                leading: Icon(
+                                  i == index
+                                      ? destination.selectedIcon
+                                      : destination.icon,
+                                  size: 20,
+                                ),
+                                title: Text(
+                                  destination.label,
+                                  style: AppTypography.titleMedium,
+                                ),
+                                onTap: () => onSelected(i),
+                              )
+                            : IconButton(
+                                tooltip: destination.label,
+                                isSelected: i == index,
+                                style: IconButton.styleFrom(
+                                  backgroundColor: i == index
+                                      ? c.infoAccent.withAlpha(20)
+                                      : null,
+                                  foregroundColor: i == index
+                                      ? c.infoAccent
+                                      : c.subtitle,
+                                ),
+                                icon: Icon(destination.icon),
+                                selectedIcon: Icon(destination.selectedIcon),
+                                onPressed: () => onSelected(i),
+                              ),
+                      ),
+                  ],
+                ),
+              ),
+              const Divider(),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 12,
+                ),
+                child: extended
+                    ? const Row(
+                        children: [
+                          Expanded(child: SemesterSelector()),
+                          SemesterSyncControl(),
+                        ],
+                      )
+                    : const Column(
+                        children: [
+                          SemesterSelector(iconOnly: true),
+                          SemesterSyncControl(),
+                        ],
+                      ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -227,251 +216,95 @@ Widget buildAppShellBranchContainer(
   BuildContext context,
   StatefulNavigationShell navigationShell,
   List<Widget> children,
-) {
-  return _AppShellBranchContainer(
-    navigationShell: navigationShell,
-    children: children,
-  );
-}
+) => _BranchPager(navigationShell: navigationShell, children: children);
 
-class _AppShellBranchContainer extends ConsumerStatefulWidget {
-  const _AppShellBranchContainer({
-    required this.navigationShell,
-    required this.children,
-  });
-
+/// Keep one pager identity across resizing, so branch navigators retain context.
+/// Taps switch directly; touch swipes use Flutter's own page physics.
+class _BranchPager extends StatefulWidget {
+  const _BranchPager({required this.navigationShell, required this.children});
   final StatefulNavigationShell navigationShell;
   final List<Widget> children;
 
   @override
-  ConsumerState<_AppShellBranchContainer> createState() =>
-      _AppShellBranchContainerState();
+  State<_BranchPager> createState() => _BranchPagerState();
 }
 
-class _AppShellBranchContainerState
-    extends ConsumerState<_AppShellBranchContainer>
-    with SingleTickerProviderStateMixin {
-  late final PageController _pageController;
-  late final AnimationController _navProgressController;
-  Animation<double>? _navProgressAnimation;
-  bool _isSyncingFromShell = false;
-  bool _ignorePageProgressListener = false;
+class _BranchPagerState extends State<_BranchPager> {
+  late final PageController _controller;
+  int? _selectionFromPager;
 
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(
+    _controller = PageController(
       initialPage: widget.navigationShell.currentIndex,
     );
-    _navProgressController = AnimationController(vsync: this)
-      ..addListener(_handleVisualProgressTick);
-    _pageController.addListener(_handlePageProgressChanged);
-    _setShellPageProgress(widget.navigationShell.currentIndex.toDouble());
   }
 
   @override
-  void didUpdateWidget(covariant _AppShellBranchContainer oldWidget) {
+  void didUpdateWidget(covariant _BranchPager oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.navigationShell.currentIndex !=
         widget.navigationShell.currentIndex) {
-      _syncToShellIndex(widget.navigationShell.currentIndex);
-    }
-    if (shouldShowRail(context)) {
-      _setShellPageProgress(widget.navigationShell.currentIndex.toDouble());
+      final target = widget.navigationShell.currentIndex;
+      final fromPager = _selectionFromPager == target;
+      _selectionFromPager = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted ||
+            !_controller.hasClients ||
+            widget.navigationShell.currentIndex != target) {
+          return;
+        }
+        // Pager-driven changes keep their physics; explicit navigation cancels it.
+        if (!fromPager) _controller.jumpToPage(target);
+      });
     }
   }
 
   @override
   void dispose() {
-    _navProgressController
-      ..removeListener(_handleVisualProgressTick)
-      ..dispose();
-    _pageController.removeListener(_handlePageProgressChanged);
-    _pageController.dispose();
+    _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final currentIndex = widget.navigationShell.currentIndex;
-    if (shouldShowRail(context)) {
-      return IndexedStack(index: currentIndex, children: widget.children);
-    }
-
-    final currentPath = GoRouterState.of(context).uri.path;
-    final swipeEnabled = _isTopLevelTabPath(currentPath);
-
+    final path = GoRouterState.of(context).uri.path;
+    final topLevel = const [
+      Routes.home,
+      Routes.assignments,
+      Routes.courses,
+      Routes.profile,
+    ].contains(path);
     return PageView(
-      controller: _pageController,
-      physics: swipeEnabled
+      controller: _controller,
+      physics: !shouldShowRail(context) && topLevel
           ? const PageScrollPhysics()
           : const NeverScrollableScrollPhysics(),
       onPageChanged: (index) {
-        if (_isSyncingFromShell ||
-            index == widget.navigationShell.currentIndex) {
-          return;
+        if (widget.navigationShell.currentIndex != index) {
+          _selectionFromPager = index;
+          widget.navigationShell.goBranch(index);
         }
-        widget.navigationShell.goBranch(index);
       },
       children: [
-        for (final child in widget.children)
-          _ShellBranchKeepAlive(child: child),
+        for (final child in widget.children) _KeepBranch(child: child),
       ],
     );
   }
-
-  void _handlePageProgressChanged() {
-    if (!_pageController.hasClients || _ignorePageProgressListener) {
-      return;
-    }
-    _stopVisualProgressAnimation();
-    final page =
-        _pageController.page ?? widget.navigationShell.currentIndex.toDouble();
-    _setShellPageProgress(page);
-  }
-
-  void _handleVisualProgressTick() {
-    final value = _navProgressAnimation?.value;
-    if (value == null) {
-      return;
-    }
-    _setShellPageProgress(value);
-  }
-
-  void _setShellPageProgress(double page) {
-    if (!mounted) {
-      return;
-    }
-
-    void write() {
-      if (!mounted) {
-        return;
-      }
-      final current = ref.read(shellPageProgressProvider);
-      if (current != null && (current - page).abs() < 0.0001) {
-        return;
-      }
-      ref.read(shellPageProgressProvider.notifier).state = page;
-    }
-
-    final phase = SchedulerBinding.instance.schedulerPhase;
-    if (phase == SchedulerPhase.idle ||
-        phase == SchedulerPhase.postFrameCallbacks) {
-      write();
-      return;
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) => write());
-  }
-
-  Future<void> _syncToShellIndex(int targetIndex) async {
-    if (!_pageController.hasClients) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _syncToShellIndex(targetIndex);
-        }
-      });
-      return;
-    }
-
-    final currentPage =
-        _pageController.page?.round() ?? _pageController.initialPage;
-    if (currentPage == targetIndex) {
-      _stopVisualProgressAnimation();
-      _setShellPageProgress(targetIndex.toDouble());
-      return;
-    }
-
-    _isSyncingFromShell = true;
-    try {
-      final distance = (currentPage - targetIndex).abs();
-      if (distance > 1) {
-        final fromProgress =
-            ref.read(shellPageProgressProvider) ?? currentPage.toDouble();
-        _ignorePageProgressListener = true;
-        _pageController.jumpToPage(targetIndex);
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            _ignorePageProgressListener = false;
-          }
-        });
-        _animateShellProgress(
-          from: fromProgress,
-          to: targetIndex.toDouble(),
-          distance: distance,
-        );
-      } else {
-        _stopVisualProgressAnimation();
-        await _pageController.animateToPage(
-          targetIndex,
-          duration: const Duration(milliseconds: 280),
-          curve: Curves.easeOutCubic,
-        );
-      }
-    } finally {
-      _isSyncingFromShell = false;
-    }
-  }
-
-  void _animateShellProgress({
-    required double from,
-    required double to,
-    required int distance,
-  }) {
-    if ((from - to).abs() < 0.0001) {
-      _setShellPageProgress(to);
-      return;
-    }
-
-    _navProgressController.stop();
-    _navProgressController.duration = Duration(
-      milliseconds: switch (distance) {
-        0 || 1 => 280,
-        2 => 340,
-        _ => 400,
-      },
-    );
-    _navProgressAnimation = Tween<double>(begin: from, end: to).animate(
-      CurvedAnimation(
-        parent: _navProgressController,
-        curve: Curves.easeOutCubic,
-      ),
-    );
-    _navProgressController
-      ..value = 0
-      ..forward();
-  }
-
-  void _stopVisualProgressAnimation() {
-    if (!_navProgressController.isAnimating) {
-      return;
-    }
-    _navProgressController.stop();
-    _navProgressAnimation = null;
-  }
-
-  bool _isTopLevelTabPath(String path) {
-    return path == Routes.home ||
-        path == Routes.assignments ||
-        path == Routes.courses ||
-        path == Routes.profile;
-  }
 }
 
-class _ShellBranchKeepAlive extends StatefulWidget {
-  const _ShellBranchKeepAlive({required this.child});
-
+class _KeepBranch extends StatefulWidget {
+  const _KeepBranch({required this.child});
   final Widget child;
-
   @override
-  State<_ShellBranchKeepAlive> createState() => _ShellBranchKeepAliveState();
+  State<_KeepBranch> createState() => _KeepBranchState();
 }
 
-class _ShellBranchKeepAliveState extends State<_ShellBranchKeepAlive>
+class _KeepBranchState extends State<_KeepBranch>
     with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
-
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -479,77 +312,33 @@ class _ShellBranchKeepAliveState extends State<_ShellBranchKeepAlive>
   }
 }
 
-class _SessionExpiredBanner extends StatelessWidget {
-  final String? message;
-  final VoidCallback onLogin;
-
-  const _SessionExpiredBanner({required this.message, required this.onLogin});
+class _AccessNotice extends StatelessWidget {
+  const _AccessNotice({required this.icon, required this.message, this.action});
+  final IconData icon;
+  final String message;
+  final Widget? action;
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      color: AppColors.warning.withAlpha(context.isDark ? 46 : 20),
-      child: SafeArea(
-        bottom: false,
+  Widget build(BuildContext context) => Material(
+    color: context.colors.surfaceHigh,
+    child: SafeArea(
+      bottom: false,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         child: Row(
           children: [
-            Icon(Icons.lock_clock_rounded, size: 16, color: AppColors.warning),
-            const SizedBox(width: 8),
+            Icon(icon, size: 18, color: context.colors.subtitle),
+            const SizedBox(width: 10),
             Expanded(
               child: Text(
-                message?.trim().isNotEmpty == true
-                    ? message!.trim()
-                    : '会话已过期，可继续查看缓存数据',
-                style: AppTypography.bodySmall.copyWith(
-                  color: AppColors.warning,
-                  fontWeight: FontWeight.w600,
-                ),
+                message,
+                style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
-            TextButton(
-              onPressed: onLogin,
-              style: TextButton.styleFrom(
-                foregroundColor: AppColors.warning,
-                minimumSize: const Size(0, 32),
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: const Text('重新登录'),
-            ),
+            ?action,
           ],
         ),
       ),
-    );
-  }
-}
-
-/// Subtle offline indicator banner.
-class _OfflineBanner extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      color: AppColors.warning.withAlpha(context.isDark ? 40 : 25),
-      child: SafeArea(
-        bottom: false,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.wifi_off_rounded, size: 14, color: AppColors.warning),
-            const SizedBox(width: 6),
-            Text(
-              '网络不可用，显示的是缓存数据',
-              style: AppTypography.bodySmall.copyWith(
-                color: AppColors.warning,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+    ),
+  );
 }

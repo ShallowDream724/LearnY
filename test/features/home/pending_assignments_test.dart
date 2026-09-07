@@ -7,7 +7,7 @@ import 'package:learn_y/core/database/app_state_keys.dart';
 import 'package:learn_y/core/database/database.dart';
 import 'package:learn_y/core/providers/providers.dart';
 import 'package:learn_y/core/providers/sync_models.dart';
-import 'package:learn_y/features/home/widgets/urgent_deadline_banner.dart';
+import 'package:learn_y/features/home/widgets/pending_assignments.dart';
 
 void main() {
   testWidgets('compact empty assignments retain validated reminder settings', (
@@ -24,16 +24,13 @@ void main() {
         container: container,
         child: const MaterialApp(
           home: Scaffold(
-            body: UrgentDeadlineBanner(assignments: [], pendingAssignments: 0),
+            body: PendingAssignments(assignments: [], pendingAssignments: 0),
           ),
         ),
       ),
     );
     await tester.pumpAndSettle();
-    expect(
-      tester.getSize(find.byType(UrgentDeadlineBanner)).height,
-      lessThan(64),
-    );
+    expect(find.text('暂无待交作业'), findsOneWidget);
     await tester.tap(find.byIcon(Icons.tune));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField), '0');
@@ -66,7 +63,7 @@ void main() {
           overrides: [databaseProvider.overrideWithValue(db)],
           child: MaterialApp(
             home: Scaffold(
-              body: UrgentDeadlineBanner(
+              body: PendingAssignments(
                 assignments: const [
                   HomeworkSummary(
                     id: 'hw',

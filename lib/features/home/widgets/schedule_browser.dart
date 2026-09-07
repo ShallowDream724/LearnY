@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/design/app_theme_colors.dart';
 import '../../../core/design/typography.dart';
+import '../../../core/design/app_surfaces.dart';
 import '../../../core/schedule/schedule_models.dart';
 import '../../../core/schedule/schedule_projection.dart';
 import 'schedule_status.dart';
@@ -149,169 +150,159 @@ class _ScheduleBrowserState extends State<ScheduleBrowser> {
               final columns =
                   items.length == 1 || constraints.maxWidth < 280 || scale > 1.4
                   ? 1
+                  : constraints.maxWidth >= 840
+                  ? 3
                   : 2;
-              final tileHeight = 70.0 * scale;
+              final tileHeight = 76.0 * scale;
               final rows = (items.length / columns).ceil();
               final contentHeight = items.isEmpty
                   ? (widget.failure != null ? 58.0 : 38.0) * scale
                   : rows * tileHeight + math.max(0, rows - 1) * 6 + 8;
-              return Container(
-                decoration: BoxDecoration(
-                  color: c.surface,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: c.border, width: .5),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        const SizedBox(width: 4),
-                        IconButton(
-                          tooltip: '前一天',
-                          onPressed: () => _move(-1),
-                          icon: const Icon(Icons.chevron_left, size: 18),
-                        ),
-                        Expanded(
-                          child: TextButton(
-                            onPressed: _pickDate,
-                            child: Text(
-                              '${day.isToday ? '今天 · ' : ''}${day.weekdayLabel} · ${day.shortDateLabel}',
-                              style: AppTypography.labelMedium.copyWith(
-                                color: c.text,
-                                fontWeight: FontWeight.w700,
-                              ),
+              return Column(
+                children: [
+                  Row(
+                    children: [
+                      const SizedBox(width: 4),
+                      IconButton(
+                        tooltip: '前一天',
+                        onPressed: () => _move(-1),
+                        icon: const Icon(Icons.chevron_left, size: 18),
+                      ),
+                      Expanded(
+                        child: TextButton(
+                          onPressed: _pickDate,
+                          child: Text(
+                            '${day.isToday ? '今天 · ' : ''}${day.weekdayLabel} · ${day.shortDateLabel}',
+                            style: AppTypography.labelMedium.copyWith(
+                              color: c.text,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                         ),
-                        IconButton(
-                          tooltip: '后一天',
-                          onPressed: () => _move(1),
-                          icon: const Icon(Icons.chevron_right, size: 18),
-                        ),
-                        const SizedBox(width: 4),
-                      ],
+                      ),
+                      IconButton(
+                        tooltip: '后一天',
+                        onPressed: () => _move(1),
+                        icon: const Icon(Icons.chevron_right, size: 18),
+                      ),
+                      const SizedBox(width: 4),
+                    ],
+                  ),
+                  AnimatedSize(
+                    duration: AppMotion.duration(
+                      context,
+                      const Duration(milliseconds: 180),
                     ),
-                    AnimatedSize(
-                      duration: const Duration(milliseconds: 180),
-                      alignment: Alignment.topCenter,
-                      child: SizedBox(
-                        height: contentHeight,
-                        child: SchedulePager(
-                          date: widget.selectedDate,
-                          firstDate: widget.firstDate ?? _firstDay,
-                          lastDate: widget.lastDate ?? _lastDay,
-                          stepDays: 1,
-                          onDateChanged: widget.onDateSelected,
-                          onBoundary: widget.onBoundary,
-                          itemBuilder: (context, pageDate) {
-                            final date = buildHomeScheduleDays(
-                              pageDate,
-                              length: 1,
-                              today: widget.today,
-                            ).single;
-                            final entries = widget.snapshot.itemsFor(date);
-                            if (entries.isEmpty) {
-                              final text =
-                                  widget.failure != null &&
-                                      !widget.snapshot.hasRoutineData
-                                  ? scheduleFailureLabel(widget.failure!)
-                                  : widget.isLoading && !widget.hasCalendarData
-                                  ? '正在加载课表'
-                                  : !widget.hasCalendarData
-                                  ? '暂无课表缓存'
-                                  : date.isToday
-                                  ? '今天没有课'
-                                  : '${date.shortDateLabel} 没有课';
-                              return Padding(
-                                padding: const EdgeInsets.fromLTRB(
-                                  12,
-                                  0,
-                                  12,
-                                  8,
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      widget.failure == null
-                                          ? Icons.event_available_outlined
-                                          : Icons.cloud_off_outlined,
-                                      size: 17,
-                                      color: c.tertiary,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        text,
-                                        style: AppTypography.bodySmall.copyWith(
-                                          color: c.subtitle,
-                                        ),
-                                      ),
-                                    ),
-                                    if (widget.failure != null)
-                                      IconButton(
-                                        tooltip: '重试课表',
-                                        onPressed: widget.onRetry,
-                                        icon: const Icon(
-                                          Icons.refresh,
-                                          size: 18,
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              );
-                            }
-                            return GridView.builder(
-                              primary: false,
-                              physics: const NeverScrollableScrollPhysics(),
+                    alignment: Alignment.topCenter,
+                    child: SizedBox(
+                      height: contentHeight,
+                      child: SchedulePager(
+                        date: widget.selectedDate,
+                        firstDate: widget.firstDate ?? _firstDay,
+                        lastDate: widget.lastDate ?? _lastDay,
+                        stepDays: 1,
+                        onDateChanged: widget.onDateSelected,
+                        onBoundary: widget.onBoundary,
+                        itemBuilder: (context, pageDate) {
+                          final date = buildHomeScheduleDays(
+                            pageDate,
+                            length: 1,
+                            today: widget.today,
+                          ).single;
+                          final entries = widget.snapshot.itemsFor(date);
+                          if (entries.isEmpty) {
+                            final text =
+                                widget.failure != null &&
+                                    !widget.snapshot.hasRoutineData
+                                ? scheduleFailureLabel(widget.failure!)
+                                : widget.isLoading && !widget.hasCalendarData
+                                ? '正在加载课表'
+                                : !widget.hasCalendarData
+                                ? '暂无课表缓存'
+                                : date.isToday
+                                ? '今天没有课'
+                                : '${date.shortDateLabel} 没有课';
+                            return Padding(
                               padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                              itemCount: entries.length,
-                              gridDelegate:
-                                  SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: entries.length == 1
-                                        ? 1
-                                        : columns,
-                                    crossAxisSpacing: 8,
-                                    mainAxisSpacing: 6,
-                                    mainAxisExtent: tileHeight,
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    widget.failure == null
+                                        ? Icons.event_available_outlined
+                                        : Icons.cloud_off_outlined,
+                                    size: 17,
+                                    color: c.tertiary,
                                   ),
-                              itemBuilder: (_, i) => _DailyCourseTile(
-                                item: entries[i],
-                                onOpen: widget.onOpenCourse,
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      text,
+                                      style: AppTypography.bodySmall.copyWith(
+                                        color: c.subtitle,
+                                      ),
+                                    ),
+                                  ),
+                                  if (widget.failure != null)
+                                    IconButton(
+                                      tooltip: '重试课表',
+                                      onPressed: widget.onRetry,
+                                      icon: const Icon(Icons.refresh, size: 18),
+                                    ),
+                                ],
                               ),
                             );
-                          },
-                        ),
+                          }
+                          return GridView.builder(
+                            primary: false,
+                            physics: const NeverScrollableScrollPhysics(),
+                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                            itemCount: entries.length,
+                            gridDelegate:
+                                SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: entries.length == 1
+                                      ? 1
+                                      : columns,
+                                  crossAxisSpacing: 8,
+                                  mainAxisSpacing: 6,
+                                  mainAxisExtent: tileHeight,
+                                ),
+                            itemBuilder: (_, i) => _DailyCourseTile(
+                              item: entries[i],
+                              onOpen: widget.onOpenCourse,
+                            ),
+                          );
+                        },
                       ),
                     ),
-                    ScheduleNotes(
-                      snapshot: widget.snapshot,
-                      onOpenCourse: widget.onOpenCourse,
-                    ),
-                    if (widget.failure != null &&
-                        items.isNotEmpty &&
-                        !widget.snapshot.hasRoutineData)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                scheduleFailureLabel(widget.failure!),
-                                style: AppTypography.bodySmall.copyWith(
-                                  color: c.subtitle,
-                                ),
+                  ),
+                  ScheduleNotes(
+                    snapshot: widget.snapshot,
+                    onOpenCourse: widget.onOpenCourse,
+                  ),
+                  if (widget.failure != null &&
+                      items.isNotEmpty &&
+                      !widget.snapshot.hasRoutineData)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              scheduleFailureLabel(widget.failure!),
+                              style: AppTypography.bodySmall.copyWith(
+                                color: c.subtitle,
                               ),
                             ),
-                            IconButton(
-                              tooltip: '重试课表',
-                              onPressed: widget.onRetry,
-                              icon: const Icon(Icons.refresh, size: 18),
-                            ),
-                          ],
-                        ),
+                          ),
+                          IconButton(
+                            tooltip: '重试课表',
+                            onPressed: widget.onRetry,
+                            icon: const Icon(Icons.refresh, size: 18),
+                          ),
+                        ],
                       ),
-                  ],
-                ),
+                    ),
+                ],
               );
             },
           ),
@@ -332,7 +323,7 @@ class _DailyCourseTile extends StatelessWidget {
     return Tooltip(
       message: '${item.courseName}\n${item.timeLabel}\n${item.location}',
       child: Material(
-        color: c.bg,
+        color: c.surface,
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
           borderRadius: BorderRadius.circular(8),
@@ -351,7 +342,7 @@ class _DailyCourseTile extends StatelessWidget {
                       child: Text(
                         item.startTime.isEmpty ? '待定' : item.startTime,
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: 12,
                           height: 1.1,
                           fontWeight: FontWeight.w700,
                           color: Theme.of(context).colorScheme.primary,
@@ -368,7 +359,7 @@ class _DailyCourseTile extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 14,
                     height: 1.15,
                     fontWeight: FontWeight.w700,
                     color: c.text,
@@ -380,7 +371,7 @@ class _DailyCourseTile extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 10.5,
+                    fontSize: 12,
                     height: 1.1,
                     color: c.tertiary,
                   ),

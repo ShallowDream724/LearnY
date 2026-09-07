@@ -41,4 +41,4 @@ For a genuinely unsettled interaction, compare a small number of functional alte
 
 Use existing Flutter semantics and accessible controls as foundations. Add a shared component when it unifies meaningful behavior. Keep business protocols out of visual components. Update the relevant product documentation alongside changed behavior, and use a small number of actual Flutter previews for visual checks. Respect the user's request to reserve real-device acceptance for them.
 
-Treat design documents as contracts and direction, not proof of implementation. Inspect the current code and evidence before claiming behavior is finished. The UI drafts present during the 2026-09-07 skill study still require integration and verification.
+Treat design documents as contracts and direction, not proof of implementation. Inspect the current code and evidence before claiming behavior is finished. The 2026-09-07 integration is recorded in the architecture and design review documents; real-device and campus-service acceptance remains distinct from offline Flutter previews.

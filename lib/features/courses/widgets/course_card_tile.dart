@@ -40,15 +40,15 @@ class CourseCardTile extends StatelessWidget {
 
     return Material(
       color: c.surface,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(8),
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(8),
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: isEditing
                   ? accent.withAlpha(context.isDark ? 78 : 96)
@@ -65,20 +65,16 @@ class CourseCardTile extends StatelessWidget {
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [accent, accent.withAlpha(180)],
-                      ),
-                      borderRadius: BorderRadius.circular(10),
+                      color: accent.withAlpha(context.isDark ? 40 : 20),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: Center(
                       child: iconOption != null
-                          ? Icon(iconOption.icon, color: Colors.white, size: 18)
+                          ? Icon(iconOption.icon, color: accent, size: 18)
                           : Text(
                               _initials(card.course.name),
                               style: AppTypography.labelSmall.copyWith(
-                                color: Colors.white,
+                                color: accent,
                                 fontWeight: FontWeight.w700,
                                 fontSize: 12,
                               ),
@@ -87,19 +83,10 @@ class CourseCardTile extends StatelessWidget {
                   ),
                   const Spacer(),
                   if (isEditing)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: accent.withAlpha(context.isDark ? 44 : 18),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        '编辑',
-                        style: AppTypography.labelSmall.copyWith(color: accent),
-                      ),
+                    IconButton(
+                      tooltip: '编辑课程',
+                      onPressed: onTap,
+                      icon: Icon(Icons.more_horiz_rounded, color: c.subtitle),
                     )
                   else if (card.aggregateBadgeCount > 0)
                     Container(
@@ -136,7 +123,9 @@ class CourseCardTile extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 8),
-              Row(
+              Wrap(
+                spacing: 12,
+                runSpacing: 6,
                 children: [
                   _MicroStat(
                     icon: Icons.notifications_none_rounded,
@@ -145,7 +134,6 @@ class CourseCardTile extends StatelessWidget {
                         ? AppColors.info
                         : c.tertiary,
                   ),
-                  const SizedBox(width: 12),
                   _MicroStat(
                     icon: Icons.assignment_outlined,
                     count: card.pendingHomeworks,
@@ -153,7 +141,6 @@ class CourseCardTile extends StatelessWidget {
                         ? AppColors.warning
                         : c.tertiary,
                   ),
-                  const SizedBox(width: 12),
                   _MicroStat(
                     icon: Icons.folder_outlined,
                     count: card.totalFiles,

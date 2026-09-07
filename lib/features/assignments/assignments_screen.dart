@@ -1,874 +1,424 @@
-// Assignments screen — timeline-grouped homework list.
-//
-// Design: assignments grouped by deadline proximity:
-//   本周截止 → 下周截止 → 更远 → 已完成
-// Left-side timeline connector with urgency dots.
-//
-// Architecture:
-//   - Providers          : data fetching + filtering
-//   - _TimeGroup enum    : grouping logic
-//   - _StatsStrip        : compact stats bar
-//   - _FilterRow         : filter pills
-//   - _TimelineSection   : group header + connector + children
-//   - _HomeworkItem      : individual assignment card
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import '../../core/design/responsive.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/design/app_surfaces.dart';
 import '../../core/design/app_theme_colors.dart';
 import '../../core/design/app_toast.dart';
-import '../../core/design/colors.dart';
 import '../../core/design/cooldown_toast.dart';
 import '../../core/design/homework_reminder_menu.dart';
 import '../../core/design/shimmer.dart';
 import '../../core/design/typography.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/providers.dart';
-import '../../core/providers/sync_models.dart';
+import '../../core/providers/sync_provider.dart';
 import '../../core/router/router.dart';
+import '../../core/semester/semester_switcher.dart';
 import '../../core/shell/shell_layout_metrics.dart';
 import '../../core/sync/sync_actions.dart';
 import '../../core/utils/deadline_time.dart';
-import '../../core/utils/homework_grade_display.dart';
 import 'providers/assignments_providers.dart';
+import 'widgets/assignment_list_item.dart';
 
-class _GroupMeta {
-  final String label;
-  final Color color;
-  _GroupMeta(this.label, this.color);
-}
-
-_GroupMeta _groupMeta(AssignmentTimelineGroup g) => switch (g) {
-  AssignmentTimelineGroup.thisWeek => _GroupMeta(
-    '本周截止',
-    const Color(0xFFFF3B30),
-  ),
-  AssignmentTimelineGroup.nextWeek => _GroupMeta(
-    '下周截止',
-    const Color(0xFFFF9500),
-  ),
-  AssignmentTimelineGroup.later => _GroupMeta('更远', const Color(0xFF007AFF)),
-  AssignmentTimelineGroup.done => _GroupMeta('已完成', const Color(0xFF34C759)),
-  AssignmentTimelineGroup.noSubmissionNeeded => _GroupMeta(
-    '无需提交',
-    const Color(0xFF8E8E93),
-  ),
-};
-
-Future<void> _handleHomeworkReminderAction({
-  required BuildContext context,
-  required WidgetRef ref,
-  required Homework homework,
-  required String courseName,
-  required bool isNoSubmissionNeeded,
-  required Offset anchor,
-}) async {
-  if (!isNoSubmissionNeeded && (homework.submitted || homework.graded)) {
-    return;
-  }
-
-  final action = await showHomeworkReminderMenu(
-    context,
-    title: homework.title,
-    courseName: courseName,
-    isNoSubmissionNeeded: isNoSubmissionNeeded,
-    anchor: anchor,
-  );
-  if (!context.mounted || action == null) {
-    return;
-  }
-
-  final markNoSubmissionNeeded =
-      action == HomeworkReminderMenuAction.markNoSubmissionNeeded;
-  await ref
-      .read(homeworkReminderActionsProvider)
-      .setNoSubmissionNeeded(
-        homework.id,
-        noSubmissionNeeded: markNoSubmissionNeeded,
-      );
-  if (!context.mounted) {
-    return;
-  }
-
-  AppToast.showInfo(
-    context,
-    message: markNoSubmissionNeeded ? '已设为无需提交' : '已恢复提交提醒',
-    actionLabel: '撤销',
-    onAction: () {
-      unawaited(
-        ref
-            .read(homeworkReminderActionsProvider)
-            .setNoSubmissionNeeded(
-              homework.id,
-              noSubmissionNeeded: !markNoSubmissionNeeded,
-            ),
-      );
-    },
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  Screen
-// ═══════════════════════════════════════════════════════════════════════════
-
-class AssignmentsScreen extends ConsumerWidget {
+class AssignmentsScreen extends ConsumerStatefulWidget {
   const AssignmentsScreen({super.key});
-
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final c = context.colors;
-    final now = ref.watch(minuteTickProvider).valueOrNull ?? nowInShanghai();
-    final filter = ref.watch(homeworkFilterProvider);
-    final homeworkAsync = ref.watch(assignmentHomeworksProvider);
-    final courseNameAsync = ref.watch(assignmentCourseNameMapProvider);
-    final noSubmissionNeededIds =
-        ref.watch(homeworkNoSubmissionNeededIdsProvider).valueOrNull ??
-        const <String>{};
-
-    return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: () async {
-          final ss =
-              (await ref.read(syncActionsProvider).refreshHomeworksOnly())
-                  .state;
-          if (ss.status == SyncStatus.cooldown && context.mounted) {
-            CooldownToast.show(context, seconds: ss.cooldownSeconds);
-          }
-        },
-        color: AppColors.primary,
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            SliverAppBar(
-              floating: true,
-              snap: true,
-              title: Text(
-                '作业',
-                style: AppTypography.headlineMedium.copyWith(color: c.text),
-              ),
-            ),
-            SliverPadding(
-              padding: EdgeInsets.fromLTRB(
-                16,
-                8,
-                16,
-                shellContentBottomInset(context),
-              ),
-              sliver: homeworkAsync.when(
-                skipLoadingOnReload: true,
-                skipLoadingOnRefresh: true,
-                loading: () => const SliverFillRemaining(child: ListSkeleton()),
-                error: (e, _) => _buildError(context),
-                data: (allHomeworks) {
-                  final courseNames =
-                      courseNameAsync.valueOrNull ?? <String, String>{};
-                  final presentation = buildAssignmentsPresentation(
-                    homeworks: allHomeworks,
-                    filter: filter,
-                    noSubmissionNeededIds: noSubmissionNeededIds,
-                    now: now,
-                  );
-
-                  return SliverList(
-                    delegate: SliverChildListDelegate([
-                      // Stats strip
-                      _StatsStrip(
-                        stats: presentation.stats,
-                      ).animate().fadeIn(duration: 300.ms),
-                      const SizedBox(height: 16),
-
-                      // Filter pills
-                      _FilterRow(
-                        current: filter,
-                        onChanged: (f) =>
-                            ref.read(homeworkFilterProvider.notifier).state = f,
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Timeline groups
-                      if (presentation.isEmpty)
-                        _buildEmpty(context)
-                      else
-                        ...presentation.sections.map(
-                          (section) => _TimelineSection(
-                            group: section.group,
-                            homeworks: section.homeworks,
-                            courseNames: courseNames,
-                            now: now,
-                            onTapItem: (hw) {
-                              final name = courseNames[hw.courseId] ?? '';
-                              context.push(
-                                Routes.homeworkDetail(
-                                  homeworkId: hw.id,
-                                  courseId: hw.courseId,
-                                  courseName: name,
-                                ),
-                              );
-                            },
-                            onLongPressItem:
-                                (hw, isNoSubmissionNeeded, anchor) {
-                                  final name = courseNames[hw.courseId] ?? '';
-                                  return _handleHomeworkReminderAction(
-                                    context: context,
-                                    ref: ref,
-                                    homework: hw,
-                                    courseName: name,
-                                    isNoSubmissionNeeded: isNoSubmissionNeeded,
-                                    anchor: anchor,
-                                  );
-                                },
-                          ),
-                        ),
-                    ]),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  SliverFillRemaining _buildError(BuildContext context) {
-    final c = context.colors;
-    return SliverFillRemaining(
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.error_outline_rounded, size: 48, color: c.subtitle),
-            const SizedBox(height: 12),
-            Text(
-              '加载失败',
-              style: AppTypography.titleMedium.copyWith(color: c.text),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '请下拉刷新重试',
-              style: AppTypography.bodySmall.copyWith(color: c.subtitle),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmpty(BuildContext context) {
-    final c = context.colors;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 32),
-      child: Center(
-        child: Column(
-          children: [
-            Icon(Icons.inbox_rounded, size: 48, color: c.tertiary),
-            const SizedBox(height: 12),
-            Text(
-              '暂无作业',
-              style: AppTypography.titleMedium.copyWith(color: c.tertiary),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  ConsumerState<AssignmentsScreen> createState() => _AssignmentsScreenState();
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  Stats Strip — compact inline stats
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _StatsStrip extends StatelessWidget {
-  final AssignmentStats stats;
-
-  const _StatsStrip({required this.stats});
-
+class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
+  final _scroll = ScrollController();
   @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-      decoration: BoxDecoration(
-        color: c.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: c.border, width: 0.5),
-      ),
-      child: Row(
-        children: [
-          _StatChip(
-            n: stats.pending,
-            label: '待交',
-            color: stats.pending > 0
-                ? const Color(0xFFFF9500)
-                : const Color(0xFF34C759),
-            sub: c.subtitle,
-          ),
-          _StatChip(
-            n: stats.submitted,
-            label: '已交',
-            color: const Color(0xFF007AFF),
-            sub: c.subtitle,
-          ),
-          _StatChip(
-            n: stats.graded,
-            label: '已批',
-            color: const Color(0xFF34C759),
-            sub: c.subtitle,
-          ),
-          _StatChip(
-            n: stats.overdue,
-            label: '超期',
-            color: stats.overdue > 0
-                ? const Color(0xFFFF3B30)
-                : const Color(0xFF34C759),
-            sub: c.subtitle,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatChip extends StatelessWidget {
-  final int n;
-  final String label;
-  final Color color;
-  final Color sub;
-
-  const _StatChip({
-    required this.n,
-    required this.label,
-    required this.color,
-    required this.sub,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Column(
-        children: [
-          Text(
-            n.toString(),
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-              color: color,
-              height: 1.2,
-            ),
-          ),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w500,
-              color: sub,
-              letterSpacing: 0.3,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  Filter Row
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _FilterRow extends StatelessWidget {
-  final HomeworkFilter current;
-  final ValueChanged<HomeworkFilter> onChanged;
-
-  const _FilterRow({required this.current, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: HomeworkFilter.values.map((f) {
-          final isSelected = f == current;
-          final selectedBg = switch (f) {
-            HomeworkFilter.noSubmissionNeeded => const Color(0xFF8E8E93),
-            _ => const Color(0xFF007AFF),
-          };
-          final bg = isSelected
-              ? selectedBg
-              : (context.isDark
-                    ? const Color(0xFF2C2C2E)
-                    : const Color(0xFFF5F5F7));
-          final fg = isSelected
-              ? Colors.white
-              : (context.isDark ? c.subtitle : const Color(0xFF636366));
-
-          return Padding(
-            padding: const EdgeInsets.only(right: 6),
-            child: GestureDetector(
-              onTap: () => onChanged(f),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 13,
-                  vertical: 7,
-                ),
-                decoration: BoxDecoration(
-                  color: bg,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: isSelected
-                        ? Colors.transparent
-                        : (context.isDark
-                              ? const Color(0xFF3A3A3C)
-                              : const Color(0xFFE5E5EA)),
-                    width: 0.5,
-                  ),
-                ),
-                child: Text(
-                  _label(f),
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                    color: fg,
-                  ),
-                ),
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
   }
 
-  String _label(HomeworkFilter f) => switch (f) {
-    HomeworkFilter.all => '全部',
-    HomeworkFilter.pending => '待提交',
-    HomeworkFilter.submitted => '已提交',
-    HomeworkFilter.graded => '已批改',
-    HomeworkFilter.noSubmissionNeeded => '无需提交',
-  };
-}
+  Future<void> _refresh() async {
+    final result =
+        (await ref.read(syncActionsProvider).refreshHomeworksOnly()).state;
+    if (!mounted) return;
+    ref.invalidate(assignmentHomeworksProvider);
+    if (result.status == SyncStatus.cooldown) {
+      CooldownToast.show(context, seconds: result.cooldownSeconds);
+    } else if (result.status == SyncStatus.error) {
+      AppToast.showError(
+        context,
+        message: '作业未能更新',
+        actionLabel: '重试',
+        onAction: _refresh,
+      );
+    }
+  }
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  Timeline Section — one time group with header + connector + items
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _TimelineSection extends StatelessWidget {
-  final AssignmentTimelineGroup group;
-  final List<Homework> homeworks;
-  final Map<String, String> courseNames;
-  final DateTime now;
-  final void Function(Homework hw) onTapItem;
-  final Future<void> Function(
-    Homework hw,
-    bool isNoSubmissionNeeded,
+  Future<void> _reminder(
+    Homework homework,
+    String courseName,
+    bool noSubmissionNeeded,
     Offset anchor,
-  )
-  onLongPressItem;
-
-  const _TimelineSection({
-    required this.group,
-    required this.homeworks,
-    required this.courseNames,
-    required this.now,
-    required this.onTapItem,
-    required this.onLongPressItem,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final meta = _groupMeta(group);
-    final isDone = group == AssignmentTimelineGroup.done;
-    final isNoSubmissionNeededGroup =
-        group == AssignmentTimelineGroup.noSubmissionNeeded;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Group header ──
-          Row(
-            children: [
-              // Dot with halo
-              Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(
-                  color: meta.color,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: meta.color.withAlpha(38),
-                      blurRadius: 0,
-                      spreadRadius: 3,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                meta.label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: meta.color,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                '${homeworks.length} 项',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: c.tertiary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-
-          // ── Items with timeline connector ──
-          Container(
-            margin: const EdgeInsets.only(left: 4),
-            padding: const EdgeInsets.only(left: 18),
-            decoration: BoxDecoration(
-              border: Border(
-                left: BorderSide(
-                  color: context.isDark
-                      ? const Color(0xFF3A3A3C)
-                      : const Color(0xFFE5E5EA),
-                  width: 2,
-                ),
-              ),
-            ),
-            child: Column(
-              children: homeworks.asMap().entries.map((entry) {
-                final hw = entry.value;
-                final courseName = courseNames[hw.courseId] ?? '';
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: _HomeworkItem(
-                    hw: hw,
-                    courseName: courseName,
-                    isDone: isDone,
-                    isNoSubmissionNeeded: isNoSubmissionNeededGroup,
-                    now: now,
-                    onTap: () => onTapItem(hw),
-                    onLongPress: (anchor) =>
-                        onLongPressItem(hw, isNoSubmissionNeededGroup, anchor),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ],
-      ),
+  ) async {
+    final action = await showHomeworkReminderMenu(
+      context,
+      title: homework.title,
+      courseName: courseName,
+      isNoSubmissionNeeded: noSubmissionNeeded,
+      anchor: anchor,
     );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  Homework Item — compact timeline card
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _HomeworkItem extends StatelessWidget {
-  final Homework hw;
-  final String courseName;
-  final bool isDone;
-  final bool isNoSubmissionNeeded;
-  final DateTime now;
-  final VoidCallback? onTap;
-  final ValueChanged<Offset>? onLongPress;
-
-  const _HomeworkItem({
-    required this.hw,
-    required this.courseName,
-    required this.isDone,
-    required this.isNoSubmissionNeeded,
-    required this.now,
-    this.onTap,
-    this.onLongPress,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final isGraded = hw.graded;
-    final isSubmitted = hw.submitted;
-    final gradeDisplay = resolveHomeworkGradeDisplay(
-      grade: hw.grade,
-      gradeLevel: hw.gradeLevel,
-    );
-    final useMonospaceDeadline = _usesMonospaceDeadline();
-
-    // Card background
-    Color cardBg;
-    BoxBorder? cardBorder;
-    if (isNoSubmissionNeeded) {
-      cardBg = context.isDark
-          ? const Color(0xFF2C2C2E)
-          : const Color(0xFFF3F4F6);
-      cardBorder = Border.all(
-        color: context.isDark
-            ? const Color(0xFF48484A).withAlpha(72)
-            : const Color(0xFFD1D1D6),
-        width: 0.5,
-      );
-    } else if (isGraded) {
-      cardBg = context.isDark
-          ? const Color(0xFF1A2E1A)
-          : const Color(0xFFF0FFF4);
-      cardBorder = Border.all(
-        color: const Color(0xFF34C759).withAlpha(context.isDark ? 25 : 20),
-        width: 0.5,
-      );
-    } else {
-      cardBg = c.surface;
-      cardBorder = Border.all(color: c.border, width: 0.5);
+    if (action == null || !mounted) return;
+    final value = action == HomeworkReminderMenuAction.markNoSubmissionNeeded;
+    Future<void> save(bool next) async {
+      try {
+        await ref
+            .read(homeworkReminderActionsProvider)
+            .setNoSubmissionNeeded(homework.id, noSubmissionNeeded: next);
+      } catch (_) {
+        if (mounted) AppToast.showError(context, message: '提醒设置未能保存');
+        rethrow;
+      }
     }
 
-    final opacity = (isSubmitted && !isGraded) ? 0.85 : 1.0;
+    try {
+      await save(value);
+      if (!mounted) return;
+      AppToast.showInfo(
+        context,
+        message: value ? '已设为无需提交' : '已恢复提交提醒',
+        actionLabel: '撤销',
+        onAction: () {
+          unawaited(save(!value).catchError((Object _) {}));
+        },
+      );
+    } catch (_) {
+      /* The failed write already has local feedback. */
+    }
+  }
 
-    return Opacity(
-      opacity: opacity,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onLongPressStart: onLongPress == null
-            ? null
-            : (details) => onLongPress!(details.globalPosition),
-        onSecondaryTapDown: onLongPress == null
-            ? null
-            : (details) => onLongPress!(details.globalPosition),
-        child: Material(
-          color: cardBg,
-          borderRadius: BorderRadius.circular(12),
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                border: cardBorder,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Top: course + status
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          courseName,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: c.tertiary,
-                            letterSpacing: 0.2,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+  @override
+  Widget build(BuildContext context) {
+    final semester = ref.watch(currentSemesterIdProvider);
+    ref.listen(currentSemesterIdProvider, (previous, next) {
+      if (previous != next && _scroll.hasClients) _scroll.jumpTo(0);
+    });
+    final filter = ref.watch(homeworkFilterProvider);
+    final data = ref.watch(assignmentHomeworksProvider);
+    final courses =
+        ref.watch(assignmentCourseNameMapProvider).valueOrNull ??
+        const <String, String>{};
+    final noSubmission =
+        ref.watch(homeworkNoSubmissionNeededIdsProvider).valueOrNull ??
+        const <String>{};
+    final now = ref.watch(minuteTickProvider).valueOrNull ?? nowInShanghai();
+    final sync = ref.watch(syncStateProvider);
+    final syncing = sync.status == SyncStatus.syncing;
+    return Scaffold(
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final gutter = pageGutterForWidth(
+            constraints.maxWidth,
+            maxWidth: 1000,
+          );
+          return RefreshIndicator(
+            onRefresh: _refresh,
+            child: CustomScrollView(
+              key: PageStorageKey('assignments-$semester'),
+              controller: _scroll,
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverAppBar(
+                  toolbarHeight: semesterToolbarHeight(context),
+                  title: const SemesterPageTitle(title: '作业'),
+                  titleSpacing: gutter,
+                  actions: [
+                    IconButton(
+                      tooltip: '刷新作业',
+                      onPressed: syncing ? null : _refresh,
+                      icon: syncing
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.refresh, size: 20),
+                    ),
+                    SizedBox(width: gutter - 8),
+                  ],
+                ),
+                data.when(
+                  skipLoadingOnReload: true,
+                  skipLoadingOnRefresh: true,
+                  loading: () =>
+                      const SliverFillRemaining(child: ListSkeleton()),
+                  error: (_, _) => SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: AppEmptyState(
+                      icon: Icons.cloud_off_outlined,
+                      title: '作业暂时无法读取',
+                      action: TextButton(
+                        onPressed: _refresh,
+                        child: const Text('重试'),
                       ),
-                      _StatusBadge(
-                        hw: hw,
-                        now: now,
-                        isNoSubmissionNeeded: isNoSubmissionNeeded,
-                      ),
-                    ],
+                    ),
                   ),
-                  const SizedBox(height: 4),
-
-                  // Mid: title + time/grade
-                  Row(
-                    children: [
-                      if (isSubmitted && !isGraded) ...[
-                        Icon(
-                          Icons.check_circle_rounded,
-                          size: 14,
-                          color: const Color(0xFF007AFF).withAlpha(180),
+                  data: (all) {
+                    if (all.isEmpty) {
+                      final failed =
+                          sync.status == SyncStatus.error ||
+                          sync.status == SyncStatus.sessionExpired ||
+                          sync.syncWarnings.isNotEmpty;
+                      return SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: AppEmptyState(
+                          icon: Icons.assignment_outlined,
+                          title: semester == null
+                              ? '尚未选择学期'
+                              : syncing
+                              ? '正在同步作业'
+                              : failed
+                              ? '暂未取得作业'
+                              : '这个学期暂无作业',
+                          action: failed
+                              ? TextButton(
+                                  onPressed: _refresh,
+                                  child: const Text('重试'),
+                                )
+                              : null,
                         ),
-                        const SizedBox(width: 5),
-                      ],
-                      Expanded(
-                        child: Text(
-                          hw.title,
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: c.text,
-                            decoration: null,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                      );
+                    }
+                    final presentation = buildAssignmentsPresentation(
+                      homeworks: all,
+                      filter: filter,
+                      noSubmissionNeededIds: noSubmission,
+                      now: now,
+                    );
+                    return SliverPadding(
+                      padding: EdgeInsets.fromLTRB(
+                        gutter,
+                        8,
+                        gutter,
+                        shellContentBottomInset(context),
                       ),
-                      const SizedBox(width: 12),
-                      if (isGraded && gradeDisplay.hasDisplayValue)
-                        Text(
-                          gradeDisplay.primaryLabel!,
-                          style: TextStyle(
-                            fontFamily: gradeDisplay.isNumeric
-                                ? 'JetBrains Mono'
-                                : null,
-                            fontFamilyFallback: gradeDisplay.isNumeric
-                                ? const ['monospace']
-                                : null,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF34C759),
-                          ),
-                        )
-                      else if (!isDone)
-                        Text(
-                          _formatDeadline(),
-                          style: TextStyle(
-                            fontFamily: useMonospaceDeadline
-                                ? 'JetBrains Mono'
-                                : null,
-                            fontFamilyFallback: useMonospaceDeadline
-                                ? const ['monospace']
-                                : null,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: useMonospaceDeadline ? -0.3 : 0,
-                            color: isNoSubmissionNeeded
-                                ? c.tertiary
-                                : _deadlineColor(),
-                          ),
-                        ),
-                      const SizedBox(width: 4),
-                      if (usesDesktopControls(context) && onLongPress != null)
-                        Builder(
-                          builder: (buttonContext) => IconButton(
-                            tooltip: '作业操作',
-                            visualDensity: VisualDensity.compact,
-                            constraints: const BoxConstraints.tightFor(
-                              width: 32,
-                              height: 32,
+                      sliver: SliverMainAxisGroup(
+                        slivers: [
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 24),
+                              child: _AssignmentFilters(
+                                current: filter,
+                                stats: presentation.stats,
+                                total: all.length,
+                                onChanged: (value) {
+                                  ref
+                                          .read(homeworkFilterProvider.notifier)
+                                          .state =
+                                      value;
+                                  if (_scroll.hasClients) _scroll.jumpTo(0);
+                                },
+                              ),
                             ),
-                            icon: const Icon(Icons.more_horiz, size: 20),
-                            onPressed: () {
-                              final box =
-                                  buttonContext.findRenderObject() as RenderBox;
-                              onLongPress!(
-                                box.localToGlobal(box.size.center(Offset.zero)),
-                              );
-                            },
                           ),
-                        )
-                      else
-                        Icon(
-                          Icons.chevron_right_rounded,
-                          size: 16,
-                          color: context.isDark
-                              ? const Color(0xFF48484A)
-                              : const Color(0xFFC7C7CC),
-                        ),
-                    ],
+                          if (presentation.isEmpty)
+                            SliverToBoxAdapter(
+                              child: AppEmptyState(
+                                icon: Icons.filter_list_off,
+                                title: '没有符合条件的作业',
+                                action: TextButton(
+                                  onPressed: () =>
+                                      ref
+                                          .read(homeworkFilterProvider.notifier)
+                                          .state = HomeworkFilter
+                                          .all,
+                                  child: const Text('查看全部作业'),
+                                ),
+                              ),
+                            )
+                          else
+                            for (final section in presentation.sections) ...[
+                              SliverToBoxAdapter(
+                                child: Padding(
+                                  padding: const EdgeInsets.only(
+                                    bottom: 12,
+                                    top: 4,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        _groupLabel(section.group),
+                                        style: AppTypography.titleMedium
+                                            .copyWith(
+                                              color:
+                                                  section.group ==
+                                                      AssignmentTimelineGroup
+                                                          .overdue
+                                                  ? Theme.of(
+                                                      context,
+                                                    ).colorScheme.error
+                                                  : context.colors.text,
+                                            ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        '${section.homeworks.length}',
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.bodySmall,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              SliverList.builder(
+                                itemCount: section.homeworks.length,
+                                itemBuilder: (context, index) {
+                                  final homework = section.homeworks[index];
+                                  final course =
+                                      courses[homework.courseId] ?? '';
+                                  final noSubmissionNeeded =
+                                      section.group ==
+                                      AssignmentTimelineGroup
+                                          .noSubmissionNeeded;
+                                  return Padding(
+                                    key: ValueKey(homework.id),
+                                    padding: EdgeInsets.only(
+                                      bottom:
+                                          index == section.homeworks.length - 1
+                                          ? 24
+                                          : 8,
+                                    ),
+                                    child: AssignmentListItem(
+                                      homework: homework,
+                                      courseName: course,
+                                      now: now,
+                                      noSubmissionNeeded: noSubmissionNeeded,
+                                      onTap: () => context.push(
+                                        Routes.homeworkDetail(
+                                          homeworkId: homework.id,
+                                          courseId: homework.courseId,
+                                          courseName: course,
+                                        ),
+                                      ),
+                                      onReminder: (anchor) => _reminder(
+                                        homework,
+                                        course,
+                                        noSubmissionNeeded,
+                                        anchor,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+String _groupLabel(AssignmentTimelineGroup group) => switch (group) {
+  AssignmentTimelineGroup.overdue => '已超期',
+  AssignmentTimelineGroup.thisWeek => '本周截止',
+  AssignmentTimelineGroup.nextWeek => '下周截止',
+  AssignmentTimelineGroup.later => '之后截止',
+  AssignmentTimelineGroup.done => '已完成',
+  AssignmentTimelineGroup.noSubmissionNeeded => '无需提交',
+};
+
+String _filterLabel(HomeworkFilter filter) => switch (filter) {
+  HomeworkFilter.all => '全部',
+  HomeworkFilter.pending => '待提交',
+  HomeworkFilter.submitted => '已提交',
+  HomeworkFilter.graded => '已批改',
+  HomeworkFilter.noSubmissionNeeded => '无需提交',
+};
+
+class _AssignmentFilters extends StatelessWidget {
+  const _AssignmentFilters({
+    required this.current,
+    required this.stats,
+    required this.total,
+    required this.onChanged,
+  });
+  final HomeworkFilter current;
+  final AssignmentStats stats;
+  final int total;
+  final ValueChanged<HomeworkFilter> onChanged;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final counts = <HomeworkFilter, int>{
+        HomeworkFilter.all: total,
+        HomeworkFilter.pending: stats.pending,
+        HomeworkFilter.submitted: stats.submitted,
+        HomeworkFilter.graded: stats.graded,
+        HomeworkFilter.noSubmissionNeeded:
+            total - stats.pending - stats.submitted - stats.graded,
+      };
+      if (constraints.maxWidth >= 760 &&
+          MediaQuery.textScalerOf(context).scale(14) < 18) {
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: SegmentedButton<HomeworkFilter>(
+            showSelectedIcon: false,
+            segments: [
+              for (final value in HomeworkFilter.values)
+                ButtonSegment(
+                  value: value,
+                  label: Text('${_filterLabel(value)} ${counts[value]}'),
+                ),
+            ],
+            selected: {current},
+            onSelectionChanged: (values) => onChanged(values.single),
+          ),
+        );
+      }
+      return Row(
+        children: [
+          Expanded(
+            child: Text(
+              stats.pending == 0 ? '待交作业已处理完' : '${stats.pending} 项待提交',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
+          const SizedBox(width: 12),
+          PopupMenuButton<HomeworkFilter>(
+            tooltip: '筛选作业',
+            initialValue: current,
+            onSelected: onChanged,
+            itemBuilder: (_) => [
+              for (final value in HomeworkFilter.values)
+                CheckedPopupMenuItem(
+                  value: value,
+                  checked: current == value,
+                  child: Text('${_filterLabel(value)}  ${counts[value]}'),
+                ),
+            ],
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _filterLabel(current),
+                    style: TextStyle(color: context.colors.infoAccent),
                   ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.expand_more, size: 18),
                 ],
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  // ── Deadline formatting ──
-
-  Color _deadlineColor() {
-    final deadline = tryParseEpochMillisToLocal(hw.deadline);
-    if (deadline == null) return const Color(0xFF007AFF);
-    final remaining = deadline.difference(now);
-    if (remaining.isNegative) return const Color(0xFFFF3B30);
-    if (remaining.inHours < 24) return const Color(0xFFFF3B30);
-    if (remaining.inHours < 72) return const Color(0xFFE8590C);
-    return const Color(0xFF007AFF);
-  }
-
-  String _formatDeadline() {
-    final d = tryParseEpochMillisToLocal(hw.deadline);
-    if (d == null) return hw.deadline;
-    final remaining = d.difference(now);
-
-    if (remaining.isNegative) {
-      final abs = remaining.abs();
-      if (abs.inDays > 0) return '${abs.inDays}天前';
-      if (abs.inHours > 0) return '${abs.inHours}小时前';
-      return '${abs.inMinutes}分钟前';
-    }
-
-    if (remaining.inHours < 24) {
-      return '还剩 ${remaining.inHours}h ${remaining.inMinutes.remainder(60)}m';
-    }
-
-    return formatRelativeDeadlineLabel(d, now: now);
-  }
-
-  bool _usesMonospaceDeadline() {
-    final d = tryParseEpochMillisToLocal(hw.deadline);
-    if (d == null) {
-      return true;
-    }
-    final remaining = d.difference(now);
-    return remaining.isNegative || remaining.inHours >= 24;
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  Status Badge — small pill showing submission state
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _StatusBadge extends StatelessWidget {
-  final Homework hw;
-  final DateTime now;
-  final bool isNoSubmissionNeeded;
-
-  const _StatusBadge({
-    required this.hw,
-    required this.now,
-    required this.isNoSubmissionNeeded,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final (text, color) = _data();
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withAlpha(context.isDark ? 30 : 20),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          color: color,
-        ),
-      ),
-    );
-  }
-
-  (String, Color) _data() {
-    if (isNoSubmissionNeeded) return ('无需提交', const Color(0xFF8E8E93));
-    if (hw.graded) return ('已批改', const Color(0xFF34C759));
-    if (hw.submitted) return ('已提交', const Color(0xFF007AFF));
-    final deadline = tryParseEpochMillisToLocal(hw.deadline);
-    if (deadline != null && deadline.isBefore(now)) {
-      return ('已超期', const Color(0xFFFF3B30));
-    }
-    return ('待提交', const Color(0xFFFF9500));
-  }
+        ],
+      );
+    },
+  );
 }

@@ -4,12 +4,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/providers.dart';
 import '../../../core/design/app_theme_colors.dart';
-import '../../../core/design/responsive.dart';
+import '../../../core/design/typography.dart';
+import '../../../core/design/app_toast.dart';
+import '../../../core/router/router.dart';
+import 'package:go_router/go_router.dart';
+import '../../assignments/providers/assignments_providers.dart';
 import '../../../core/providers/sync_provider.dart';
 import '../../../core/utils/deadline_time.dart';
 
-class UrgentDeadlineBanner extends ConsumerWidget {
-  const UrgentDeadlineBanner({
+class PendingAssignments extends ConsumerWidget {
+  const PendingAssignments({
     super.key,
     required this.assignments,
     required this.pendingAssignments,
@@ -30,18 +34,19 @@ class UrgentDeadlineBanner extends ConsumerWidget {
       ),
     );
     if (hours != null && context.mounted) {
-      await ref.read(deadlineThresholdHoursProvider.notifier).setHours(hours);
+      try {
+        await ref.read(deadlineThresholdHoursProvider.notifier).setHours(hours);
+      } catch (_) {
+        if (context.mounted) AppToast.showError(context, message: '提醒设置未能保存');
+      }
     }
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final mobile = !usesDesktopControls(context);
     final c = context.colors;
-    final titleColor = mobile
-        ? (c.isDark ? const Color(0xFFFFC56F) : const Color(0xFFB5710D))
-        : theme.colorScheme.onSurfaceVariant;
+    final titleColor = c.text;
     final threshold = ref.watch(deadlineThresholdHoursProvider);
     final content = Column(
       mainAxisSize: MainAxisSize.min,
@@ -49,22 +54,10 @@ class UrgentDeadlineBanner extends ConsumerWidget {
       children: [
         Row(
           children: [
-            Icon(
-              assignments.isEmpty
-                  ? Icons.assignment_turned_in_outlined
-                  : Icons.assignment_late_outlined,
-              size: 18,
-              color: titleColor,
-            ),
-            const SizedBox(width: 8),
             Expanded(
               child: Text(
-                assignments.isNotEmpty
-                    ? '${assignments.length} 项作业即将截止'
-                    : pendingAssignments == 0
-                    ? '暂无待交作业'
-                    : '$pendingAssignments 项待交作业，近期无截止',
-                style: theme.textTheme.titleSmall?.copyWith(color: titleColor),
+                '待办作业',
+                style: AppTypography.headlineSmall.copyWith(color: titleColor),
               ),
             ),
             IconButton(
@@ -74,7 +67,15 @@ class UrgentDeadlineBanner extends ConsumerWidget {
             ),
           ],
         ),
-        for (final (index, homework) in assignments.indexed)
+        if (assignments.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Text(
+              pendingAssignments == 0 ? '暂无待交作业' : '近期没有截止项',
+              style: theme.textTheme.bodyMedium,
+            ),
+          ),
+        for (final homework in assignments.take(4))
           GestureDetector(
             onLongPressStart: onLongPress == null
                 ? null
@@ -93,18 +94,8 @@ class UrgentDeadlineBanner extends ConsumerWidget {
                   ),
                   child: Row(
                     children: [
-                      if (mobile) ...[
-                        SizedBox(
-                          width: 18,
-                          child: Text(
-                            '${index + 1}',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 12, color: titleColor),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                      ],
                       Expanded(
+                        flex: 2,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -128,6 +119,7 @@ class UrgentDeadlineBanner extends ConsumerWidget {
                       ),
                       const SizedBox(width: 12),
                       Flexible(
+                        fit: FlexFit.tight,
                         child: Text(
                           _deadlineLabel(homework),
                           textAlign: TextAlign.right,
@@ -139,36 +131,41 @@ class UrgentDeadlineBanner extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(width: 4),
-                      const Icon(Icons.chevron_right, size: 16),
+                      if (onLongPress != null)
+                        Builder(
+                          builder: (buttonContext) => IconButton(
+                            tooltip: '作业提醒设置',
+                            icon: const Icon(Icons.more_horiz, size: 19),
+                            onPressed: () {
+                              final box =
+                                  buttonContext.findRenderObject()!
+                                      as RenderBox;
+                              onLongPress!(
+                                homework,
+                                box.localToGlobal(box.size.center(Offset.zero)),
+                              );
+                            },
+                          ),
+                        ),
                     ],
                   ),
                 ),
               ),
             ),
           ),
+        if (pendingAssignments > 0)
+          TextButton.icon(
+            onPressed: () {
+              ref.read(homeworkFilterProvider.notifier).state =
+                  HomeworkFilter.pending;
+              context.go(Routes.assignments);
+            },
+            icon: const Icon(Icons.arrow_forward, size: 16),
+            label: Text('查看待交作业 · $pendingAssignments'),
+          ),
       ],
     );
-    if (!mobile) return content;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 4, 8, 8),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: c.isDark
-              ? const [Color(0xFF1E2430), Color(0xFF1A1F28)]
-              : const [Color(0xFFFFF7EE), Color(0xFFFFF3E4)],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: c.isDark
-              ? const Color(0xFF3A4250)
-              : const Color(0xFFC8A064).withAlpha(30),
-          width: .5,
-        ),
-      ),
-      child: content,
-    );
+    return content;
   }
 
   String _deadlineLabel(HomeworkSummary homework) {

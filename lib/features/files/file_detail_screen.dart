@@ -4,13 +4,13 @@
 // and an optional info panel. The preview implementation is now delegated to the
 // preview subsystem so richer formats can be added without growing this screen.
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../app/app_orientation.dart';
 import '../../core/design/app_toast.dart';
 import '../../core/design/app_theme_colors.dart';
+import '../../core/design/app_surfaces.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/file_type_utils.dart';
 import '../../core/files/file_access_resolver.dart';
@@ -35,6 +35,9 @@ class FileDetailScreen extends ConsumerStatefulWidget {
 
 class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
   bool _showInfo = false;
+  bool _updatingRead = false;
+  bool _updatingFavorite = false;
+  String? _downloadRequestError;
 
   @override
   void initState() {
@@ -43,18 +46,63 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
   }
 
   Future<void> _startInitialDownload() async {
-    final file = await ref.read(
-      fileDetailItemProvider(widget.routeData).future,
-    );
-    if (!mounted || file == null) {
-      return;
+    try {
+      final file = await ref.read(
+        fileDetailItemProvider(widget.routeData).future,
+      );
+      if (!mounted || file == null) return;
+      await ref.read(fileAssetActionsProvider).ensureAvailable(file);
+    } catch (_) {
+      if (mounted) setState(() => _downloadRequestError = '文件下载无法启动');
     }
-
-    await ref.read(fileAssetActionsProvider).ensureAvailable(file);
   }
 
-  Future<void> _startDownload(FileDetailItem file) {
-    return ref.read(fileAssetActionsProvider).download(file);
+  Future<void> _startDownload(FileDetailItem file) async {
+    setState(() => _downloadRequestError = null);
+    try {
+      await ref.read(fileAssetActionsProvider).download(file);
+    } catch (_) {
+      if (mounted) setState(() => _downloadRequestError = '文件下载无法启动');
+    }
+  }
+
+  Future<void> _changeReadState(
+    FileDetailItem file, {
+    bool? isRead,
+    bool announce = true,
+  }) async {
+    if (_updatingRead) return;
+    setState(() => _updatingRead = true);
+    final target = isRead ?? file.isNew;
+    try {
+      await ref
+          .read(fileAssetActionsProvider)
+          .setReadState(file, isRead: target);
+      if (mounted && announce) {
+        AppToast.showSuccess(context, message: target ? '已标为已读' : '已标为未读');
+      }
+    } catch (_) {
+      if (mounted) AppToast.showError(context, message: '文件已读状态更新失败');
+    } finally {
+      if (mounted) setState(() => _updatingRead = false);
+    }
+  }
+
+  Future<void> _changeFavorite(FileDetailItem file, bool isFavorite) async {
+    if (_updatingFavorite) return;
+    setState(() => _updatingFavorite = true);
+    try {
+      await ref
+          .read(fileFavoriteActionsProvider)
+          .setFavorite(item: file, isFavorite: !isFavorite);
+      if (mounted) {
+        AppToast.showSuccess(context, message: isFavorite ? '已取消收藏' : '已加入收藏');
+      }
+    } catch (_) {
+      if (mounted) AppToast.showError(context, message: '收藏状态更新失败');
+    } finally {
+      if (mounted) setState(() => _updatingFavorite = false);
+    }
   }
 
   FilePreviewDescriptor _previewOf(FileDetailItem file) {
@@ -90,7 +138,7 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
         if (previousStatus != DownloadStatus.downloaded &&
             currentStatus == DownloadStatus.downloaded &&
             file.isNew) {
-          ref.read(fileAssetActionsProvider).setReadState(file, isRead: true);
+          _changeReadState(file, isRead: true, announce: false);
         }
       });
     }
@@ -99,9 +147,35 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
       child: Scaffold(
         backgroundColor: c.bg,
         appBar: AppBar(
-          title: Text(
-            widget.routeData.courseName,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          toolbarHeight:
+              (MediaQuery.textScalerOf(context).scale(16) * 1.4 +
+                      MediaQuery.textScalerOf(context).scale(12) * 1.4 +
+                      16)
+                  .clamp(68.0, double.infinity),
+          title: Tooltip(
+            message: file?.title ?? '文件',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  file?.title ?? '文件',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (widget.routeData.courseName.isNotEmpty)
+                  Text(
+                    widget.routeData.courseName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12, color: c.subtitle),
+                  ),
+              ],
+            ),
           ),
           actions: file == null || fileState == null
               ? const []
@@ -110,7 +184,11 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
         body: fileAsync.when(
           loading: () =>
               const Center(child: CircularProgressIndicator.adaptive()),
-          error: (error, _) => _ErrorView(message: '加载失败', onRetry: null),
+          error: (error, _) => _ErrorView(
+            message: '文件加载失败',
+            onRetry: () =>
+                ref.invalidate(fileDetailItemProvider(widget.routeData)),
+          ),
           data: (file) {
             if (file == null) {
               return _ErrorView(message: '文件不存在', onRetry: null);
@@ -123,7 +201,9 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
             return Stack(
               children: [
                 _buildBody(file, resolvedState),
-                if (resolvedState.status == DownloadStatus.downloading)
+                if (resolvedState.status == DownloadStatus.downloading &&
+                    resolvedState.localPath != null &&
+                    !_showInfo)
                   Positioned(
                     top: 0,
                     left: 0,
@@ -151,7 +231,37 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
     bool isFavorite,
   ) {
     final isReady = fs.isDownloaded;
+    final wide = MediaQuery.sizeOf(context).width >= 840;
+    final showingInfo = _showInfo || !_canPreview(file);
     return [
+      if (wide) ...[
+        IconButton(
+          tooltip: '外部打开',
+          icon: const Icon(Icons.open_in_new_rounded),
+          onPressed: isReady ? () => _openExternal(file) : null,
+        ),
+        if (supportsRevealInFileManager)
+          IconButton(
+            tooltip: '在文件夹中打开',
+            icon: const Icon(Icons.folder_open_rounded),
+            onPressed: isReady ? () => _openContainingFolder(file) : null,
+          ),
+        IconButton(
+          tooltip: '分享',
+          icon: const Icon(Icons.ios_share_rounded),
+          onPressed: isReady ? () => _shareFile(file, fs) : null,
+        ),
+        if (_canPreview(file))
+          IconButton(
+            tooltip: _showInfo ? '返回预览' : '文件信息',
+            isSelected: _showInfo,
+            icon: const Icon(Icons.info_outline_rounded),
+            selectedIcon: const Icon(Icons.info_rounded),
+            onPressed: isReady
+                ? () => setState(() => _showInfo = !_showInfo)
+                : null,
+          ),
+      ],
       if (file.supportsReadState && file.persistedFileId != null)
         IconButton(
           icon: Icon(
@@ -161,20 +271,7 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
             size: 22,
           ),
           tooltip: file.isNew ? '标为已读' : '标为未读',
-          onPressed: () async {
-            await ref
-                .read(fileAssetActionsProvider)
-                .setReadState(file, isRead: file.isNew);
-
-            if (!mounted) {
-              return;
-            }
-            AppToast.showSuccess(
-              context,
-              message: file.isNew ? '已标为已读' : '已标为未读',
-              duration: const Duration(milliseconds: 1800),
-            );
-          },
+          onPressed: _updatingRead ? null : () => _changeReadState(file),
         ),
       IconButton(
         icon: Icon(
@@ -183,23 +280,12 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
           color: isFavorite ? AppColors.warning : null,
         ),
         tooltip: isFavorite ? '取消收藏' : '收藏文件',
-        onPressed: !isReady
+        onPressed: !isReady || _updatingFavorite
             ? null
-            : () async {
-                await ref
-                    .read(fileFavoriteActionsProvider)
-                    .setFavorite(item: file, isFavorite: !isFavorite);
-                if (!mounted) {
-                  return;
-                }
-                AppToast.showSuccess(
-                  context,
-                  message: isFavorite ? '已取消收藏' : '已加入收藏',
-                  duration: const Duration(milliseconds: 1800),
-                );
-              },
+            : () => _changeFavorite(file, isFavorite),
       ),
       PopupMenuButton<_FileAction>(
+        tooltip: '更多文件操作',
         icon: const Icon(Icons.more_horiz_rounded, size: 22),
         onSelected: (action) async {
           switch (action) {
@@ -227,7 +313,7 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
               child: Text('重新下载'),
             ),
           ];
-          if (isReady) {
+          if (isReady && !wide && !showingInfo) {
             items.add(
               const PopupMenuItem<_FileAction>(
                 value: _FileAction.share,
@@ -240,16 +326,16 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
                 child: Text('外部打开'),
               ),
             );
-            if (supportsRevealInFileManager) {
-              items.add(
-                const PopupMenuItem<_FileAction>(
-                  value: _FileAction.openContainingFolder,
-                  child: Text('在文件夹中打开'),
-                ),
-              );
-            }
           }
-          if (_canPreview(file) && isReady) {
+          if (isReady && !wide && supportsRevealInFileManager) {
+            items.add(
+              const PopupMenuItem<_FileAction>(
+                value: _FileAction.openContainingFolder,
+                child: Text('在文件夹中打开'),
+              ),
+            );
+          }
+          if (!wide && _canPreview(file) && isReady) {
             items.add(
               PopupMenuItem<_FileAction>(
                 value: _FileAction.toggleInfo,
@@ -266,7 +352,21 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
   Widget _buildBody(FileDetailItem file, FileAssetRuntime fs) {
     switch (fs.status) {
       case DownloadStatus.downloading:
+        if (fs.localPath != null && !_showInfo && _canPreview(file)) {
+          return FilePreviewView(
+            item: file,
+            localPath: fs.localPath!,
+            onOpenExternal: () => _openExternal(file),
+          );
+        }
+        return _DownloadingView(progress: fs.progress);
       case DownloadStatus.none:
+        if (_downloadRequestError != null) {
+          return _ErrorView(
+            message: _downloadRequestError!,
+            onRetry: () => _startDownload(file),
+          );
+        }
         return _DownloadingView(progress: fs.progress);
       case DownloadStatus.failed:
         return _ErrorView(
@@ -284,7 +384,7 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
         return _FileInfoPanel(
           file: file,
           courseName: widget.routeData.courseName,
-          isDownloaded: true,
+          isDownloaded: MediaQuery.sizeOf(context).width < 840,
           onOpen: () => _openExternal(file),
           onShare: () => _shareFile(file, fs),
         );
@@ -356,8 +456,8 @@ class _DownloadingView extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
-            width: 56,
-            height: 56,
+            width: 32,
+            height: 32,
             child: CircularProgressIndicator.adaptive(
               value: progress > 0 ? progress : null,
               strokeWidth: 3,
@@ -367,7 +467,7 @@ class _DownloadingView extends StatelessWidget {
           Text('正在下载...', style: TextStyle(color: c.text, fontSize: 15)),
           const SizedBox(height: 4),
           Text(
-            '${(progress * 100).toInt()}%',
+            progress > 0 ? '${(progress * 100).toInt()}%' : '等待文件响应',
             style: TextStyle(
               color: c.subtitle,
               fontSize: 13,
@@ -389,22 +489,16 @@ class _ErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.error_outline_rounded, size: 48, color: Colors.grey),
-          const SizedBox(height: 12),
-          Text(
-            message,
-            style: const TextStyle(color: Colors.grey, fontSize: 15),
-          ),
-          if (onRetry != null) ...[
-            const SizedBox(height: 16),
-            FilledButton.tonal(onPressed: onRetry, child: const Text('重试')),
-          ],
-        ],
-      ),
+    return AppEmptyState(
+      icon: Icons.error_outline_rounded,
+      title: message,
+      action: onRetry == null
+          ? null
+          : FilledButton.tonalIcon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('重试'),
+            ),
     );
   }
 }
@@ -433,32 +527,30 @@ class _FileInfoPanel extends StatelessWidget {
       children: [
         Expanded(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+            padding: EdgeInsets.fromLTRB(
+              pageGutter(context, maxWidth: 720),
+              24,
+              pageGutter(context, maxWidth: 720),
+              32,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Center(
-                      child: Container(
-                        width: 72,
-                        height: 72,
-                        decoration: BoxDecoration(
-                          color: FileTypeUtils.color(ext).withAlpha(25),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Icon(
-                          FileTypeUtils.icon(ext),
-                          color: FileTypeUtils.color(ext),
-                          size: 36,
-                        ),
-                      ),
-                    )
-                    .animate()
-                    .fadeIn(duration: 300.ms)
-                    .scale(
-                      begin: const Offset(0.8, 0.8),
-                      end: const Offset(1, 1),
-                      duration: 300.ms,
+                  child: Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: FileTypeUtils.color(ext).withAlpha(25),
+                      borderRadius: BorderRadius.circular(8),
                     ),
+                    child: Icon(
+                      FileTypeUtils.icon(ext),
+                      color: FileTypeUtils.color(ext),
+                      size: 28,
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 16),
                 Center(
                   child: Text(
@@ -480,65 +572,58 @@ class _FileInfoPanel extends StatelessWidget {
                 ),
                 const SizedBox(height: 24),
                 Container(
-                      decoration: BoxDecoration(
-                        color: c.surface,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: c.border, width: 0.5),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      top: BorderSide(color: c.border),
+                      bottom: BorderSide(color: c.border),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      _MetaRow(
+                        icon: Icons.insert_drive_file_rounded,
+                        label: '类型',
+                        value: ext.toUpperCase(),
+                        textColor: c.text,
+                        sub: c.subtitle,
                       ),
-                      child: Column(
-                        children: [
-                          _MetaRow(
-                            icon: Icons.insert_drive_file_rounded,
-                            label: '类型',
-                            value: ext.toUpperCase(),
-                            textColor: c.text,
-                            sub: c.subtitle,
-                          ),
-                          Divider(height: 1, color: c.border),
-                          _MetaRow(
-                            icon: Icons.file_download_rounded,
-                            label: '大小',
-                            value: file.size.isNotEmpty
-                                ? file.size
-                                : '${file.rawSize} B',
-                            textColor: c.text,
-                            sub: c.subtitle,
-                          ),
-                          Divider(height: 1, color: c.border),
-                          _MetaRow(
-                            icon: Icons.access_time_rounded,
-                            label: '上传时间',
-                            value: _formatUploadTime(file.uploadTime),
-                            textColor: c.text,
-                            sub: c.subtitle,
-                          ),
-                          if (file.markedImportant) ...[
-                            Divider(height: 1, color: c.border),
-                            _MetaRow(
-                              icon: Icons.star_rounded,
-                              label: '标记',
-                              value: '重要文件',
-                              textColor: c.text,
-                              sub: c.subtitle,
-                              valueColor: AppColors.warning,
-                            ),
-                          ],
-                        ],
+                      Divider(height: 1, color: c.border),
+                      _MetaRow(
+                        icon: Icons.file_download_rounded,
+                        label: '大小',
+                        value: file.size.isNotEmpty
+                            ? file.size
+                            : '${file.rawSize} B',
+                        textColor: c.text,
+                        sub: c.subtitle,
                       ),
-                    )
-                    .animate()
-                    .fadeIn(delay: 100.ms, duration: 300.ms)
-                    .slideY(begin: 0.1, end: 0, duration: 300.ms),
+                      Divider(height: 1, color: c.border),
+                      _MetaRow(
+                        icon: Icons.access_time_rounded,
+                        label: '上传时间',
+                        value: _formatUploadTime(file.uploadTime),
+                        textColor: c.text,
+                        sub: c.subtitle,
+                      ),
+                      if (file.markedImportant) ...[
+                        Divider(height: 1, color: c.border),
+                        _MetaRow(
+                          icon: Icons.star_rounded,
+                          label: '标记',
+                          value: '重要文件',
+                          textColor: c.text,
+                          sub: c.subtitle,
+                          valueColor: AppColors.warning,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
                 if (file.description.isNotEmpty) ...[
                   const SizedBox(height: 16),
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: c.surface,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: c.border, width: 0.5),
-                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -548,7 +633,6 @@ class _FileInfoPanel extends StatelessWidget {
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                             color: c.subtitle,
-                            letterSpacing: 0.5,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -562,7 +646,7 @@ class _FileInfoPanel extends StatelessWidget {
                         ),
                       ],
                     ),
-                  ).animate().fadeIn(delay: 200.ms, duration: 300.ms),
+                  ),
                 ],
               ],
             ),
@@ -570,41 +654,30 @@ class _FileInfoPanel extends StatelessWidget {
         ),
         if (isDownloaded)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            padding: EdgeInsets.symmetric(
+              horizontal: pageGutter(context, maxWidth: 720),
+              vertical: 12,
+            ),
             decoration: BoxDecoration(
               color: c.surface,
               border: Border(top: BorderSide(color: c.border, width: 0.5)),
             ),
             child: SafeArea(
               top: false,
-              child: Row(
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                alignment: WrapAlignment.center,
                 children: [
-                  Expanded(
-                    child: FilledButton.tonal(
-                      onPressed: onOpen,
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.open_in_new_rounded, size: 18),
-                          SizedBox(width: 8),
-                          Text('外部打开'),
-                        ],
-                      ),
-                    ),
+                  FilledButton.tonalIcon(
+                    onPressed: onOpen,
+                    icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                    label: const Text('外部打开'),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton.tonal(
-                      onPressed: onShare,
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.ios_share_rounded, size: 18),
-                          SizedBox(width: 8),
-                          Text('分享'),
-                        ],
-                      ),
-                    ),
+                  FilledButton.tonalIcon(
+                    onPressed: onShare,
+                    icon: const Icon(Icons.ios_share_rounded, size: 18),
+                    label: const Text('分享'),
                   ),
                 ],
               ),
@@ -655,13 +728,16 @@ class _MetaRow extends StatelessWidget {
           Icon(icon, size: 18, color: sub),
           const SizedBox(width: 10),
           Text(label, style: TextStyle(fontSize: 14, color: sub)),
-          const Spacer(),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: valueColor ?? textColor,
+          const SizedBox(width: 20),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: valueColor ?? textColor,
+              ),
             ),
           ),
         ],

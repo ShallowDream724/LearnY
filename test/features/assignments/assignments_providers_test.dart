@@ -45,6 +45,7 @@ void main() {
         ['overdue', 'soon'],
       );
       expect(presentation.sections.map((section) => section.group).toList(), [
+        AssignmentTimelineGroup.overdue,
         AssignmentTimelineGroup.thisWeek,
       ]);
     });

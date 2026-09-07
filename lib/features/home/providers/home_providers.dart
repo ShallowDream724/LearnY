@@ -74,7 +74,8 @@ HomeData _buildHomeData({
       final remaining = deadlineTime?.difference(now) ?? Duration.zero;
       final isOverdue = remaining.isNegative;
 
-      if (remaining.inHours <= thresholdHours || isOverdue) {
+      if (deadlineTime != null &&
+          (remaining.inHours <= thresholdHours || isOverdue)) {
         urgentAssignments.add(
           HomeworkSummary(
             id: homework.id,

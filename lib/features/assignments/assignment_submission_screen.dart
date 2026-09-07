@@ -1,35 +1,31 @@
-// Assignment submission screen — Apple-level modal for submitting homework.
-//
-// Design philosophy:
-//   - Clean, focused interface: only what you need to submit
-//   - Generous multiline text area with live character count
-//   - Attachment: tap to add, shows file preview card, tap × to remove
-//   - Submit confirmation with Apple-style action sheet
-//   - Upload progress overlay with smooth animation
-//   - Success → haptic + checkmark → auto-dismiss
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as p;
+import 'package:go_router/go_router.dart';
 
+import '../../core/api/urls.dart' as urls;
+import '../../core/database/database.dart' as db;
+import '../../core/design/action_sheet.dart';
+import '../../core/design/app_surfaces.dart';
 import '../../core/design/app_theme_colors.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/typography.dart';
-import '../../core/database/database.dart' as db;
+import '../../core/files/file_models.dart';
+import '../../core/files/widgets/file_attachment_card.dart';
+import '../../core/router/router.dart';
 import 'submission/homework_submission_controller.dart';
 import 'submission/homework_submission_models.dart';
+import 'widgets/homework_detail_sections.dart';
 
 class AssignmentSubmissionScreen extends ConsumerStatefulWidget {
-  final db.Homework homework;
-  final String courseName;
-
   const AssignmentSubmissionScreen({
     super.key,
     required this.homework,
     required this.courseName,
   });
+  final db.Homework homework;
+  final String courseName;
 
   @override
   ConsumerState<AssignmentSubmissionScreen> createState() =>
@@ -41,6 +37,8 @@ class _AssignmentSubmissionScreenState
   final _contentController = TextEditingController();
   final _contentFocus = FocusNode();
   late final HomeworkSubmissionSeed _submissionSeed;
+  bool _allowPop = false;
+  bool _confirmationOpen = false;
 
   @override
   void initState() {
@@ -65,25 +63,19 @@ class _AssignmentSubmissionScreenState
   get _submissionProvider =>
       homeworkSubmissionControllerProvider(_submissionSeed);
 
-  void _handleContentChanged() {
-    ref
-        .read(_submissionProvider.notifier)
-        .updateContent(_contentController.text);
-  }
+  void _handleContentChanged() => ref
+      .read(_submissionProvider.notifier)
+      .updateContent(_contentController.text);
 
   Future<void> _pickFile() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.any,
       allowMultiple: false,
     );
-    if (result == null || result.files.isEmpty) {
-      return;
-    }
+    if (!mounted || result == null || result.files.isEmpty) return;
     final file = result.files.first;
     final path = file.path;
-    if (path == null || path.isEmpty) {
-      return;
-    }
+    if (path == null || path.isEmpty) return;
     ref
         .read(_submissionProvider.notifier)
         .selectAttachment(
@@ -96,381 +88,122 @@ class _AssignmentSubmissionScreenState
   }
 
   Future<void> _submit() async {
-    // Confirmation dialog
-    final confirmed = await showModalBottomSheet<bool>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => _ConfirmSheet(isResubmit: widget.homework.submitted),
+    if (_confirmationOpen || ref.read(_submissionProvider).isSubmitting) return;
+    setState(() => _confirmationOpen = true);
+    final confirmed = await AppActionSheet.show(
+      context,
+      title: widget.homework.submitted ? '确认重新提交？' : '确认提交？',
+      subtitle: widget.homework.submitted ? '将覆盖上次提交的内容' : '提交后仍可重新提交',
+      confirmLabel: widget.homework.submitted ? '重新提交' : '提交',
     );
-    if (confirmed != true || !mounted) return;
+    if (!mounted) return;
+    setState(() => _confirmationOpen = false);
+    if (confirmed != true) return;
+    _contentFocus.unfocus();
     final success = await ref.read(_submissionProvider.notifier).submit();
-    if (!mounted || !success) return;
-
-    HapticFeedback.mediumImpact();
-    await _showSuccess();
+    if (mounted && success) HapticFeedback.mediumImpact();
   }
 
-  Future<void> _showSuccess() async {
-    // Brief success overlay, then pop
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => const _SuccessOverlay(),
+  void _leave([bool? result]) {
+    if (_allowPop) return;
+    setState(() => _allowPop = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.of(context).pop(result);
+    });
+  }
+
+  Future<void> _confirmDiscard() async {
+    final state = ref.read(_submissionProvider);
+    if (state.isSubmitting || _confirmationOpen) return;
+    if (state.status == HomeworkSubmissionStatus.success) {
+      _leave(true);
+      return;
+    }
+    if (!state.hasUnsavedChanges) {
+      _leave();
+      return;
+    }
+    setState(() => _confirmationOpen = true);
+    final discard = await AppActionSheet.show(
+      context,
+      title: '放弃本次修改？',
+      subtitle: '本次输入的内容与附件选择将不会保存。',
+      confirmLabel: '放弃修改',
+      confirmColor: AppColors.error,
+      cancelLabel: '继续编辑',
     );
-    if (mounted) Navigator.of(context).pop(true);
+    if (!mounted) return;
+    setState(() => _confirmationOpen = false);
+    if (discard == true) _leave();
   }
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final submissionState = ref.watch(_submissionProvider);
-    final attachment = submissionState.attachment;
-
-    return Scaffold(
-      backgroundColor: c.bg,
-      appBar: AppBar(
+    final state = ref.watch(_submissionProvider);
+    final complete = state.status == HomeworkSubmissionStatus.success;
+    return PopScope(
+      canPop: _allowPop,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _confirmDiscard();
+      },
+      child: Scaffold(
         backgroundColor: c.bg,
-        surfaceTintColor: Colors.transparent,
-        leading: IconButton(
-          icon: const Icon(Icons.close_rounded),
-          onPressed: () => _confirmDiscard(),
-        ),
-        title: Text(
-          widget.homework.submitted ? '重新提交' : '提交作业',
-          style: AppTypography.titleMedium.copyWith(color: c.text),
-        ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: FilledButton(
-              onPressed: submissionState.isSubmitting ? null : _submit,
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                disabledBackgroundColor: AppColors.primary.withAlpha(100),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 8,
-                ),
-              ),
-              child: Text(
-                submissionState.isSubmitting ? '提交中…' : '提交',
-                style: AppTypography.labelMedium.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
+        appBar: AppBar(
+          leading: IconButton(
+            tooltip: complete ? '返回作业' : '关闭',
+            icon: const Icon(Icons.close_rounded),
+            onPressed: state.isSubmitting ? null : _confirmDiscard,
           ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          GestureDetector(
-            onTap: () => FocusScope.of(context).unfocus(),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // ── Assignment info ──
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: c.surface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: c.border, width: 0.5),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withAlpha(20),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(
-                            Icons.assignment_rounded,
-                            size: 18,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                widget.homework.title,
-                                style: AppTypography.titleSmall.copyWith(
-                                  color: c.text,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                widget.courseName,
-                                style: AppTypography.bodySmall.copyWith(
-                                  color: c.subtitle,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ).animate().fadeIn(duration: 200.ms),
-
-                  const SizedBox(height: 20),
-
-                  // ── Text input ──
-                  Text(
-                    '作业内容',
-                    style: AppTypography.labelMedium.copyWith(
-                      color: c.subtitle,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: c.surface,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: c.border, width: 0.5),
-                    ),
-                    child: Column(
-                      children: [
-                        TextField(
-                          controller: _contentController,
-                          focusNode: _contentFocus,
-                          maxLines: 10,
-                          minLines: 6,
-                          style: AppTypography.bodyLarge.copyWith(
-                            color: c.text,
-                            height: 1.6,
-                          ),
-                          decoration: InputDecoration(
-                            hintText: '输入作业内容…',
-                            hintStyle: AppTypography.bodyLarge.copyWith(
-                              color: c.tertiary,
-                            ),
-                            border: InputBorder.none,
-                            contentPadding: const EdgeInsets.all(16),
-                          ),
-                        ),
-                        // Character count
-                        Container(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                          alignment: Alignment.centerRight,
-                          child: Text(
-                            '${submissionState.characterCount} 字',
-                            style: AppTypography.bodySmall.copyWith(
-                              color: c.tertiary,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ).animate(delay: 100.ms).fadeIn(duration: 200.ms),
-
-                  const SizedBox(height: 24),
-
-                  // ── Attachment section ──
-                  Text(
-                    '附件',
-                    style: AppTypography.labelMedium.copyWith(
-                      color: c.subtitle,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-
-                  if (attachment != null)
-                    _FileCard(
-                          name: attachment.name,
-                          size: attachment.sizeBytes,
-                          onRemove: () => ref
-                              .read(_submissionProvider.notifier)
-                              .removeAttachment(),
-                        )
-                        .animate()
-                        .fadeIn(duration: 200.ms)
-                        .slideY(begin: 0.05, end: 0)
-                  else if (submissionState.hasExistingAttachment)
-                    _ExistingAttachmentCard(
-                      onRemove: () => ref
-                          .read(_submissionProvider.notifier)
-                          .removeAttachment(),
-                    ).animate().fadeIn(duration: 200.ms)
-                  else
-                    _AddFileButton(
-                      onTap: _pickFile,
-                    ).animate(delay: 150.ms).fadeIn(duration: 200.ms),
-
-                  // Error message
-                  if (submissionState.errorMessage != null) ...[
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppColors.error.withAlpha(15),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: AppColors.error.withAlpha(40),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.error_outline_rounded,
-                            size: 18,
-                            color: AppColors.error,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              submissionState.errorMessage!,
-                              style: AppTypography.bodySmall.copyWith(
-                                color: AppColors.error,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
+          title: Text(
+            complete
+                ? '提交成功'
+                : widget.homework.submitted
+                ? '重新提交'
+                : '提交作业',
           ),
-
-          // ── Submitting overlay ──
-          if (submissionState.isSubmitting)
-            Container(
-              color: Colors.black.withAlpha(80),
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.all(32),
-                  decoration: BoxDecoration(
-                    color: c.surface,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withAlpha(30),
-                        blurRadius: 30,
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(
-                        width: 36,
-                        height: 36,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 3,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        '正在提交…',
-                        style: AppTypography.titleSmall.copyWith(color: c.text),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ).animate().fadeIn(duration: 150.ms),
-        ],
-      ),
-    );
-  }
-
-  void _confirmDiscard() {
-    final submissionState = ref.read(_submissionProvider);
-    if (!submissionState.hasUnsavedChanges) {
-      Navigator.of(context).pop();
-      return;
-    }
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        final c = ctx.colors;
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        ),
+        bottomNavigationBar: Material(
+          color: c.surface,
+          child: SafeArea(
+            top: false,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  decoration: BoxDecoration(
-                    color: c.surface,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Column(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                        child: Text(
-                          '确定放弃编辑？',
-                          style: AppTypography.titleSmall.copyWith(
-                            color: c.text,
-                          ),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                        child: Text(
-                          '已输入的内容将不会保存',
-                          style: AppTypography.bodySmall.copyWith(
-                            color: c.subtitle,
-                          ),
-                        ),
-                      ),
-                      const Divider(height: 1),
-                      InkWell(
-                        onTap: () {
-                          Navigator.of(ctx).pop();
-                          Navigator.of(context).pop();
-                        },
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          child: Text(
-                            '放弃',
-                            textAlign: TextAlign.center,
-                            style: AppTypography.titleSmall.copyWith(
-                              color: AppColors.error,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  decoration: BoxDecoration(
-                    color: c.surface,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: InkWell(
-                    onTap: () => Navigator.of(ctx).pop(),
-                    borderRadius: BorderRadius.circular(14),
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      child: Text(
-                        '继续编辑',
-                        textAlign: TextAlign.center,
-                        style: AppTypography.titleSmall.copyWith(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w600,
+                ReadingWidth(
+                  maxWidth: 1120,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      heightFactor: 1,
+                      child: FilledButton.icon(
+                        onPressed: complete
+                            ? () => _leave(true)
+                            : state.isSubmitting || _confirmationOpen
+                            ? null
+                            : _submit,
+                        icon: state.isSubmitting
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Icon(
+                                complete
+                                    ? Icons.arrow_back_rounded
+                                    : Icons.upload_rounded,
+                              ),
+                        label: Text(
+                          complete
+                              ? '返回作业'
+                              : state.isSubmitting
+                              ? '正在提交'
+                              : '提交',
                         ),
                       ),
                     ),
@@ -479,88 +212,197 @@ class _AssignmentSubmissionScreenState
               ],
             ),
           ),
-        );
-      },
-    );
-  }
-}
-
-// ─────────────────────────────────────────────
-//  File card (selected attachment)
-// ─────────────────────────────────────────────
-
-class _FileCard extends StatelessWidget {
-  final String name;
-  final int size;
-  final VoidCallback onRemove;
-
-  const _FileCard({
-    required this.name,
-    required this.size,
-    required this.onRemove,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-
-    final ext = p.extension(name).replaceAll('.', '').toUpperCase();
-    final sizeStr = _formatSize(size);
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: c.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: c.border, width: 0.5),
-      ),
-      child: Row(
-        children: [
-          // File type icon
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: AppColors.primary.withAlpha(15),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Center(
-              child: Text(
-                ext.isNotEmpty ? ext : 'FILE',
-                style: AppTypography.labelSmall.copyWith(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.w700,
-                  fontSize: ext.length > 3 ? 8 : 10,
+        ),
+        body: complete
+            ? AppEmptyState(
+                icon: Icons.check_circle_outline_rounded,
+                title: '提交成功',
+                message: widget.homework.title,
+              )
+            : SingleChildScrollView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                child: ReadingWidth(
+                  maxWidth: 1120,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        widget.homework.title,
+                        style: AppTypography.headlineSmall.copyWith(
+                          color: c.text,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        widget.courseName,
+                        style: AppTypography.bodyMedium.copyWith(
+                          color: c.subtitle,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      HomeworkDeadlineCard(homework: widget.homework),
+                      const SizedBox(height: 24),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final editor = _buildEditor(state);
+                          final requirements = _buildRequirements();
+                          if (constraints.maxWidth >= 880) {
+                            return Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(flex: 2, child: requirements),
+                                const SizedBox(width: 40),
+                                Expanded(flex: 3, child: editor),
+                              ],
+                            );
+                          }
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              ExpansionTile(
+                                tilePadding: EdgeInsets.zero,
+                                childrenPadding: const EdgeInsets.only(
+                                  bottom: 20,
+                                ),
+                                title: const Text('作业要求'),
+                                children: [requirements],
+                              ),
+                              const SizedBox(height: 20),
+                              editor,
+                            ],
+                          );
+                        },
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: AppTypography.titleSmall.copyWith(color: c.text),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  sizeStr,
-                  style: AppTypography.bodySmall.copyWith(color: c.subtitle),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            icon: Icon(Icons.close_rounded, size: 20, color: c.subtitle),
-            onPressed: onRemove,
-            visualDensity: VisualDensity.compact,
+      ),
+    );
+  }
+
+  Widget _buildRequirements() {
+    final hw = widget.homework;
+    final baseUri = Uri.parse(urls.learnHomeworkPage(hw.courseId, hw.id));
+    final entry = FileAttachmentEntry.fromJson(
+      label: '作业附件',
+      rawJson: hw.attachmentJson,
+      courseId: hw.courseId,
+      courseName: widget.courseName,
+      fallbackKind: FileAttachmentKind.homeworkAttachment,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (hasMeaningfulHomeworkHtml(hw.description)) ...[
+          HomeworkHtmlText(html: hw.description!, baseUri: baseUri),
+        ],
+        if (hw.attachmentJson?.isNotEmpty == true) ...[
+          const SizedBox(height: 16),
+          FileAttachmentCard(
+            entry: entry,
+            onTap: () {
+              final routeData = entry.routeData;
+              if (routeData != null) {
+                context.push(Routes.fileDetailFromData(routeData));
+              }
+            },
           ),
         ],
-      ),
+      ],
+    );
+  }
+
+  Widget _buildEditor(HomeworkSubmissionState state) {
+    final c = context.colors;
+    final attachment = state.attachment;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('提交内容', style: AppTypography.titleMedium.copyWith(color: c.text)),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _contentController,
+          focusNode: _contentFocus,
+          readOnly: state.isSubmitting,
+          minLines: 8,
+          maxLines: 16,
+          style: AppTypography.bodyLarge.copyWith(color: c.text, height: 1.6),
+          decoration: InputDecoration(
+            hintText: '输入作业内容',
+            counterText: '${state.characterCount} 字',
+            filled: true,
+            fillColor: c.surface,
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 24),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                '提交附件',
+                style: AppTypography.titleMedium.copyWith(color: c.text),
+              ),
+            ),
+            if (attachment != null || state.hasExistingAttachment)
+              TextButton.icon(
+                onPressed: state.isSubmitting ? null : _pickFile,
+                icon: const Icon(Icons.swap_horiz_rounded),
+                label: const Text('更换'),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (attachment != null || state.hasExistingAttachment)
+          ListTile(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 4,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+              side: BorderSide(color: c.border),
+            ),
+            leading: const Icon(Icons.attach_file_rounded),
+            title: Text(attachment?.name ?? '已提交的附件'),
+            subtitle: Text(
+              attachment != null
+                  ? _formatSize(attachment.sizeBytes)
+                  : '保留上次提交的附件',
+            ),
+            trailing: IconButton(
+              tooltip: '移除附件',
+              onPressed: state.isSubmitting
+                  ? null
+                  : () => ref
+                        .read(_submissionProvider.notifier)
+                        .removeAttachment(),
+              icon: const Icon(Icons.close_rounded),
+            ),
+          )
+        else
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: state.isSubmitting ? null : _pickFile,
+              icon: const Icon(Icons.attach_file_rounded),
+              label: const Text('选择文件'),
+            ),
+          ),
+        if (state.errorMessage != null) ...[
+          const SizedBox(height: 20),
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              state.errorMessage!,
+              style: AppTypography.bodyMedium.copyWith(color: AppColors.error),
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -568,282 +410,5 @@ class _FileCard extends StatelessWidget {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-  }
-}
-
-// ─────────────────────────────────────────────
-//  Existing attachment indicator
-// ─────────────────────────────────────────────
-
-class _ExistingAttachmentCard extends StatelessWidget {
-  final VoidCallback onRemove;
-
-  const _ExistingAttachmentCard({required this.onRemove});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: c.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: c.border, width: 0.5),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: AppColors.success.withAlpha(15),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(
-              Icons.check_circle_rounded,
-              size: 20,
-              color: AppColors.success,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '已有附件',
-                  style: AppTypography.titleSmall.copyWith(color: c.text),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '上次提交的附件将保留',
-                  style: AppTypography.bodySmall.copyWith(color: c.subtitle),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            icon: Icon(
-              Icons.delete_outline_rounded,
-              size: 20,
-              color: AppColors.error.withAlpha(180),
-            ),
-            onPressed: onRemove,
-            tooltip: '删除附件',
-            visualDensity: VisualDensity.compact,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────
-//  Add file button
-// ─────────────────────────────────────────────
-
-class _AddFileButton extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _AddFileButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 24),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: c.border,
-            width: 1,
-            strokeAlign: BorderSide.strokeAlignInside,
-          ),
-        ),
-        child: Column(
-          children: [
-            Icon(Icons.add_circle_outline_rounded, size: 28, color: c.subtitle),
-            const SizedBox(height: 6),
-            Text(
-              '选择文件',
-              style: AppTypography.labelMedium.copyWith(color: c.subtitle),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────
-//  Confirm sheet
-// ─────────────────────────────────────────────
-
-class _ConfirmSheet extends StatelessWidget {
-  final bool isResubmit;
-
-  const _ConfirmSheet({required this.isResubmit});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                color: c.surface,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                    child: Text(
-                      isResubmit ? '确认重新提交？' : '确认提交？',
-                      style: AppTypography.titleSmall.copyWith(color: c.text),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                    child: Text(
-                      isResubmit ? '将覆盖上次提交的内容' : '提交后仍可重新提交',
-                      style: AppTypography.bodySmall.copyWith(
-                        color: c.subtitle,
-                      ),
-                    ),
-                  ),
-                  const Divider(height: 1),
-                  InkWell(
-                    onTap: () => Navigator.of(context).pop(true),
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      child: Text(
-                        isResubmit ? '重新提交' : '提交',
-                        textAlign: TextAlign.center,
-                        style: AppTypography.titleSmall.copyWith(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Container(
-              decoration: BoxDecoration(
-                color: c.surface,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: InkWell(
-                onTap: () => Navigator.of(context).pop(false),
-                borderRadius: BorderRadius.circular(14),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  child: Text(
-                    '取消',
-                    textAlign: TextAlign.center,
-                    style: AppTypography.titleSmall.copyWith(color: c.text),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────
-//  Success overlay
-// ─────────────────────────────────────────────
-
-class _SuccessOverlay extends StatefulWidget {
-  const _SuccessOverlay();
-
-  @override
-  State<_SuccessOverlay> createState() => _SuccessOverlayState();
-}
-
-class _SuccessOverlayState extends State<_SuccessOverlay> {
-  @override
-  void initState() {
-    super.initState();
-    Future.delayed(const Duration(milliseconds: 1200), () {
-      if (mounted) Navigator.of(context).pop();
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-
-    return Center(
-      child:
-          Container(
-                padding: const EdgeInsets.all(36),
-                decoration: BoxDecoration(
-                  color: c.surface,
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withAlpha(30),
-                      blurRadius: 40,
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 56,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        color: AppColors.success.withAlpha(20),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.check_rounded,
-                        color: AppColors.success,
-                        size: 32,
-                      ),
-                    ).animate().scale(
-                      begin: const Offset(0.5, 0.5),
-                      end: const Offset(1, 1),
-                      curve: Curves.elasticOut,
-                      duration: 600.ms,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      '提交成功',
-                      style: AppTypography.titleMedium.copyWith(color: c.text),
-                    ),
-                  ],
-                ),
-              )
-              .animate()
-              .fadeIn(duration: 200.ms)
-              .scale(
-                begin: const Offset(0.85, 0.85),
-                end: const Offset(1, 1),
-                curve: Curves.easeOutBack,
-                duration: 300.ms,
-              ),
-    );
   }
 }

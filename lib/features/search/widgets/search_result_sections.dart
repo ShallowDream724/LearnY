@@ -27,12 +27,12 @@ class SearchSectionHeader extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.symmetric(vertical: 12),
           child: Row(
             children: [
-              Icon(section.icon, size: 16, color: section.accentColor),
+              Icon(section.icon, size: 18, color: c.subtitle),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
@@ -46,14 +46,14 @@ class SearchSectionHeader extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                 decoration: BoxDecoration(
-                  color: section.accentColor.withAlpha(15),
+                  color: c.surfaceHigh,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   '$count',
                   style: AppTypography.labelSmall.copyWith(
-                    color: section.accentColor,
-                    fontSize: 10,
+                    color: c.subtitle,
+                    fontSize: 12,
                   ),
                 ),
               ),
@@ -74,7 +74,11 @@ class SearchSectionHeader extends StatelessWidget {
 }
 
 class SearchResultTile extends StatelessWidget {
-  const SearchResultTile({super.key, required this.result, required this.onTap});
+  const SearchResultTile({
+    super.key,
+    required this.result,
+    required this.onTap,
+  });
 
   final SearchResult result;
   final VoidCallback onTap;
@@ -85,14 +89,14 @@ class SearchResultTile extends StatelessWidget {
 
     return Material(
       color: c.surface,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(8),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(color: c.border, width: 0.5),
           ),
           child: Row(
@@ -113,8 +117,8 @@ class SearchResultTile extends StatelessWidget {
                   children: [
                     Text(
                       result.title,
-                      style: AppTypography.titleSmall.copyWith(color: c.text),
-                      maxLines: 1,
+                      style: AppTypography.titleMedium.copyWith(color: c.text),
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                     if (result.isFavorite || result.isDownloaded) ...[
@@ -141,18 +145,16 @@ class SearchResultTile extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       result.subtitle,
-                      style: AppTypography.bodySmall.copyWith(color: c.tertiary),
-                      maxLines: 1,
+                      style: AppTypography.bodySmall.copyWith(
+                        color: c.subtitle,
+                      ),
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
-              Icon(
-                Icons.chevron_right_rounded,
-                size: 18,
-                color: c.tertiary,
-              ),
+              Icon(Icons.chevron_right_rounded, size: 18, color: c.tertiary),
             ],
           ),
         ),
@@ -178,7 +180,7 @@ class _ResultTag extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: color.withAlpha(14),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(4),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

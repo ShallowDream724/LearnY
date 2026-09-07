@@ -1,361 +1,189 @@
-// Global files screen — all files across courses with timeline groups.
-//
-// Features:
-// - Time groups: 今天新增 / 本周 / 更早
-// - Filter pills: 全部 / 未读(新) / 收藏 / 已下载
-// - Search bar (title + course name fuzzy match)
-// - Tap → FileDetailScreen
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/design/app_surfaces.dart';
 import '../../core/design/app_theme_colors.dart';
 import '../../core/design/shimmer.dart';
+import '../../core/providers/app_providers.dart';
 import '../../core/router/router.dart';
+import '../../core/semester/semester_models.dart';
 import 'providers/file_queries.dart';
 import 'widgets/file_card.dart';
-
-// ---------------------------------------------------------------------------
-//  Filter
-// ---------------------------------------------------------------------------
-
-String _timeGroupLabel(FileFeedTimeGroup group) {
-  switch (group) {
-    case FileFeedTimeGroup.today:
-      return '今日新增';
-    case FileFeedTimeGroup.thisWeek:
-      return '本周';
-    case FileFeedTimeGroup.earlier:
-      return '更早';
-  }
-}
-
-IconData _timeGroupIcon(FileFeedTimeGroup group) {
-  switch (group) {
-    case FileFeedTimeGroup.today:
-      return Icons.today_rounded;
-    case FileFeedTimeGroup.thisWeek:
-      return Icons.date_range_rounded;
-    case FileFeedTimeGroup.earlier:
-      return Icons.history_rounded;
-  }
-}
-
-// ---------------------------------------------------------------------------
-//  Screen
-// ---------------------------------------------------------------------------
+import 'widgets/file_search_field.dart';
 
 class FilesScreen extends ConsumerStatefulWidget {
   const FilesScreen({super.key});
-
   @override
   ConsumerState<FilesScreen> createState() => _FilesScreenState();
 }
 
 class _FilesScreenState extends ConsumerState<FilesScreen> {
   FileFeedFilter _filter = FileFeedFilter.all;
-  String _searchQuery = '';
+  String _query = '';
   final _searchController = TextEditingController();
-  final _searchFocusNode = FocusNode();
 
   @override
   void dispose() {
     _searchController.dispose();
-    _searchFocusNode.dispose();
     super.dispose();
   }
 
+  void _clearFilters() {
+    _searchController.clear();
+    setState(() {
+      _filter = FileFeedFilter.all;
+      _query = '';
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-
-    final filesAsync = ref.watch(allFileFeedEntriesProvider);
-
+    final files = ref.watch(allFileFeedEntriesProvider);
+    final semesterId = ref.watch(currentSemesterIdProvider);
     return Scaffold(
-      backgroundColor: c.bg,
-      body: CustomScrollView(
-        slivers: [
-          // App bar
-          SliverAppBar(
-            floating: true,
-            snap: true,
-            title: const Text(
-              '文件',
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
-            ),
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(100),
-              child: Column(
-                children: [
-                  // Search bar
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 6,
-                    ),
-                    child: Container(
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: c.surface,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: c.border, width: 0.5),
-                      ),
-                      child: TextField(
-                        controller: _searchController,
-                        focusNode: _searchFocusNode,
-                        style: TextStyle(fontSize: 14, color: c.text),
-                        decoration: InputDecoration(
-                          hintText: '搜索文件名或课程名...',
-                          hintStyle: TextStyle(
-                            fontSize: 14,
-                            color: c.subtitle.withAlpha(150),
-                          ),
-                          prefixIcon: Icon(
-                            Icons.search_rounded,
-                            size: 20,
-                            color: c.subtitle,
-                          ),
-                          suffixIcon: _searchQuery.isNotEmpty
-                              ? IconButton(
-                                  icon: Icon(
-                                    Icons.close_rounded,
-                                    size: 18,
-                                    color: c.subtitle,
-                                  ),
-                                  onPressed: () {
-                                    _searchController.clear();
-                                    setState(() => _searchQuery = '');
-                                  },
-                                )
-                              : null,
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(
-                            vertical: 10,
-                          ),
-                        ),
-                        onChanged: (v) => setState(() => _searchQuery = v),
-                      ),
-                    ),
-                  ),
-
-                  // Filter pills
-                  SizedBox(
-                    height: 40,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      children: FileFeedFilter.values.map((f) {
-                        final isActive = _filter == f;
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: FilterChip(
-                            label: Text(_filterLabel(f)),
-                            selected: isActive,
-                            onSelected: (_) => setState(() => _filter = f),
-                            showCheckmark: false,
-                            labelStyle: TextStyle(
-                              fontSize: 12,
-                              fontWeight: isActive
-                                  ? FontWeight.w600
-                                  : FontWeight.w500,
-                              color: isActive ? Colors.white : c.subtitle,
-                            ),
-                            backgroundColor: c.surface,
-                            selectedColor: c.infoAccent,
-                            side: BorderSide(
-                              color: isActive ? Colors.transparent : c.border,
-                              width: 0.5,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                ],
+      appBar: AppBar(title: const Text('文件')),
+      body: ReadingWidth(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Text(
+                semesterId == null ? '尚未选择学习学期' : semesterLabel(semesterId),
+                style: TextStyle(color: context.colors.subtitle),
               ),
             ),
-          ),
-
-          // Content
-          filesAsync.when(
-            loading: () => const SliverFillRemaining(child: ListSkeleton()),
-            error: (e, _) => SliverFillRemaining(
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: FileSearchField(
+                controller: _searchController,
+                onChanged: (value) => setState(() => _query = value),
+              ),
+            ),
+            if (files.valueOrNull?.isNotEmpty == true ||
+                _filter != FileFeedFilter.all)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
                   children: [
-                    Icon(
-                      Icons.error_outline_rounded,
-                      size: 40,
-                      color: c.subtitle,
-                    ),
-                    const SizedBox(height: 10),
-                    Text('加载失败', style: TextStyle(color: c.text, fontSize: 15)),
+                    for (final filter in FileFeedFilter.values)
+                      FilterChip(
+                        label: Text(_filterLabel(filter)),
+                        selected: _filter == filter,
+                        showCheckmark: false,
+                        onSelected: (_) => setState(() => _filter = filter),
+                      ),
                   ],
                 ),
               ),
-            ),
-            data: (allFiles) {
-              final presentation = buildFilesPresentation(
-                entries: allFiles,
-                filter: _filter,
-                searchQuery: _searchQuery,
-              );
-              final filtered = presentation.filteredEntries;
-
-              if (filtered.isEmpty) {
-                return SliverFillRemaining(
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.folder_open_rounded,
-                          size: 48,
-                          color: c.subtitle.withAlpha(100),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          _searchQuery.isNotEmpty
-                              ? '没有匹配的文件'
-                              : _filter != FileFeedFilter.all
-                              ? '暂无${_filterLabel(_filter)}文件'
-                              : '暂无文件',
-                          style: TextStyle(color: c.subtitle, fontSize: 15),
-                        ),
-                      ],
-                    ),
+            Expanded(
+              child: files.when(
+                loading: () => const ListSkeleton(),
+                error: (_, _) => AppEmptyState(
+                  icon: Icons.error_outline_rounded,
+                  title: '文件加载失败',
+                  action: FilledButton.tonalIcon(
+                    onPressed: () => ref.invalidate(allFileFeedEntriesProvider),
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('重试'),
                   ),
-                );
-              }
-
-              final sections = presentation.sections;
-
-              return SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    int cursor = 0;
-                    for (final section in sections) {
-                      final items = section.entries;
-                      if (index == cursor) {
-                        return _SectionHeader(
-                          group: section.group,
-                          count: items.length,
-                        );
-                      }
-                      cursor++;
-                      if (index < cursor + items.length) {
-                        final itemIndex = index - cursor;
-                        final item = items[itemIndex];
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 4,
-                          ),
-                          child:
-                              FileCard(
-                                item: item.item,
-                                isFavorite: item.isFavorite,
-                                onTap: () => _navigateToDetail(item),
-                              ).animate().fadeIn(
-                                delay: Duration(milliseconds: itemIndex * 30),
-                                duration: 200.ms,
-                              ),
-                        );
-                      }
-                      cursor += items.length;
-                    }
-                    return const SizedBox(height: 32);
-                  },
-                  childCount:
-                      sections.fold<int>(
-                        0,
-                        (sum, section) => sum + section.entries.length + 1,
-                      ) +
-                      1,
                 ),
-              );
-            },
-          ),
-        ],
+                data: (entries) {
+                  final presentation = buildFilesPresentation(
+                    entries: entries,
+                    filter: _filter,
+                    searchQuery: _query,
+                  );
+                  if (presentation.filteredEntries.isEmpty) {
+                    final filtered =
+                        _query.isNotEmpty || _filter != FileFeedFilter.all;
+                    return AppEmptyState(
+                      icon: filtered
+                          ? Icons.search_off_rounded
+                          : Icons.folder_open_rounded,
+                      title: filtered
+                          ? '没有符合条件的文件'
+                          : semesterId == null
+                          ? '暂无学习学期'
+                          : '本学期暂无文件',
+                      action: filtered
+                          ? TextButton(
+                              onPressed: _clearFilters,
+                              child: const Text('清除筛选'),
+                            )
+                          : null,
+                    );
+                  }
+                  final rows = <Object>[
+                    for (final section in presentation.sections) ...[
+                      section,
+                      ...section.entries,
+                    ],
+                  ];
+                  return ListView.builder(
+                    key: PageStorageKey(
+                      'files-${_filter.name}-${_query.trim()}',
+                    ),
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+                    itemCount: rows.length,
+                    itemBuilder: (context, index) {
+                      final row = rows[index];
+                      if (row is FileFeedSection) {
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 16, bottom: 8),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  _sectionLabel(row.group),
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                ),
+                              ),
+                              Text(
+                                '${row.entries.length}',
+                                style: TextStyle(
+                                  color: context.colors.subtitle,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      final entry = row as FileFeedEntry;
+                      return Padding(
+                        key: ValueKey(entry.item.cacheKey),
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: FileCard(
+                          item: entry.item,
+                          isFavorite: entry.isFavorite,
+                          onTap: () => context.push(
+                            Routes.fileDetailFromData(entry.item.routeData),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  void _navigateToDetail(FileFeedEntry entry) {
-    context.push(Routes.fileDetailFromData(entry.item.routeData));
-  }
-
-  String _filterLabel(FileFeedFilter f) {
-    switch (f) {
-      case FileFeedFilter.all:
-        return '全部';
-      case FileFeedFilter.unread:
-        return '未读';
-      case FileFeedFilter.favorite:
-        return '收藏';
-      case FileFeedFilter.downloaded:
-        return '已下载';
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-//  Section header
-// ---------------------------------------------------------------------------
-
-class _SectionHeader extends StatelessWidget {
-  final FileFeedTimeGroup group;
-  final int count;
-
-  const _SectionHeader({required this.group, required this.count});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-      child: Row(
-        children: [
-          Icon(_timeGroupIcon(group), size: 18, color: c.subtitle),
-          const SizedBox(width: 8),
-          Text(
-            _timeGroupLabel(group),
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: c.text,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
-            decoration: BoxDecoration(
-              color: (context.isDark ? Colors.white : Colors.black).withAlpha(
-                15,
-              ),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              '$count',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: c.subtitle,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  String _filterLabel(FileFeedFilter filter) => switch (filter) {
+    FileFeedFilter.all => '全部',
+    FileFeedFilter.unread => '未读',
+    FileFeedFilter.favorite => '收藏',
+    FileFeedFilter.downloaded => '已下载',
+  };
+  String _sectionLabel(FileFeedTimeGroup group) => switch (group) {
+    FileFeedTimeGroup.today => '今日新增',
+    FileFeedTimeGroup.thisWeek => '本周',
+    FileFeedTimeGroup.earlier => '更早',
+  };
 }

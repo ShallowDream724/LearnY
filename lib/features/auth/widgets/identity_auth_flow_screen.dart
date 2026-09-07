@@ -1204,21 +1204,11 @@ class _IdentityAuthFlowScreenState
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
+          tooltip: '关闭认证',
           icon: const Icon(Icons.close_rounded),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(_appBarTitle),
-            Text(
-              _appBarSubtitle,
-              style: AppTypography.bodySmall.copyWith(
-                color: _isProcessing ? AppColors.primary : c.subtitle,
-              ),
-            ),
-          ],
-        ),
+        title: Text(_appBarTitle),
         bottom: _isPageLoading
             ? const PreferredSize(
                 preferredSize: Size.fromHeight(2),
@@ -1231,6 +1221,14 @@ class _IdentityAuthFlowScreenState
       ),
       body: Column(
         children: [
+          if (_isTrustedBrowserRefreshPass && !_isProcessing)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Text(
+                _appBarSubtitle,
+                style: AppTypography.bodyMedium.copyWith(color: c.subtitle),
+              ),
+            ),
           if (_errorMessage != null)
             Container(
               width: double.infinity,
@@ -1238,7 +1236,7 @@ class _IdentityAuthFlowScreenState
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
                 color: AppColors.error.withAlpha(18),
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: AppColors.error.withAlpha(48)),
               ),
               child: Text(

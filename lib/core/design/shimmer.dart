@@ -43,10 +43,20 @@ class _ShimmerBoxState extends State<ShimmerBox>
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
-    )..repeat();
+    );
     _animation = Tween(begin: -1.0, end: 2.0).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeInOutSine),
     );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _controller.stop();
+    } else if (!_controller.isAnimating) {
+      _controller.repeat();
+    }
   }
 
   @override
@@ -58,6 +68,17 @@ class _ShimmerBoxState extends State<ShimmerBox>
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+
+    if (MediaQuery.disableAnimationsOf(context)) {
+      return Container(
+        width: widget.width,
+        height: widget.height,
+        decoration: BoxDecoration(
+          color: c.border,
+          borderRadius: BorderRadius.circular(widget.borderRadius),
+        ),
+      );
+    }
 
     return AnimatedBuilder(
       animation: _animation,
@@ -100,7 +121,7 @@ class ListItemSkeleton extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: c.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: c.border, width: 0.5),
       ),
       child: Row(
@@ -136,6 +157,7 @@ class ListSkeleton extends StatelessWidget {
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
       physics: const NeverScrollableScrollPhysics(),
+      shrinkWrap: true,
       itemCount: itemCount,
       itemBuilder: (context, index) {
         return Padding(
@@ -159,7 +181,7 @@ class StatCardSkeleton extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: c.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: c.border, width: 0.5),
       ),
       child: Column(

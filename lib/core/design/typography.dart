@@ -34,7 +34,7 @@ abstract final class Spacing {
   static const double sectionGap = xl;
 
   /// Standard card border radius.
-  static const double cardRadius = 16;
+  static const double cardRadius = 8;
 
   /// Small chip / badge radius.
   static const double chipRadius = 8;
@@ -139,7 +139,7 @@ abstract final class AppTypography {
     fontSize: 14,
     fontWeight: FontWeight.w600,
     height: 1.2,
-    letterSpacing: 0.3,
+    letterSpacing: 0,
   );
 
   /// Tab labels / category headers.
@@ -148,16 +148,16 @@ abstract final class AppTypography {
     fontSize: 12,
     fontWeight: FontWeight.w500,
     height: 1.2,
-    letterSpacing: 0.4,
+    letterSpacing: 0,
   );
 
   /// Badge / chip labels.
   static TextStyle get labelSmall => TextStyle(
     fontFamily: _fontFamily,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: FontWeight.w600,
     height: 1.2,
-    letterSpacing: 0.5,
+    letterSpacing: 0,
   );
 
   // ─────────── Stat numbers ───────────
@@ -168,7 +168,8 @@ abstract final class AppTypography {
     fontSize: 36,
     fontWeight: FontWeight.w800,
     height: 1.1,
-    letterSpacing: -1.0,
+    letterSpacing: 0,
+    fontFeatures: const [FontFeature.tabularFigures()],
   );
 
   /// Medium stat number.
@@ -177,6 +178,7 @@ abstract final class AppTypography {
     fontSize: 24,
     fontWeight: FontWeight.w700,
     height: 1.2,
-    letterSpacing: -0.5,
+    letterSpacing: 0,
+    fontFeatures: const [FontFeature.tabularFigures()],
   );
 }

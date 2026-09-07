@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -78,6 +77,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         AppToast.showWarning(context, message: result.noticeMessage!);
       }
       _navigateAfterAuthSuccess();
+    } catch (_) {
+      if (mounted) setState(() => _errorMessage = '登录暂时无法启动，请重试');
     } finally {
       if (mounted) {
         setState(() {
@@ -120,42 +121,39 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _showAutoReloginDetails() async {
     final c = context.colors;
-    await showModalBottomSheet<void>(
+    await showDialog<void>(
       context: context,
-      showDragHandle: true,
-      backgroundColor: c.surface,
       builder: (context) {
-        return SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '自动重新登录说明',
-                  style: AppTypography.titleLarge.copyWith(color: c.text),
+        return AlertDialog(
+          scrollable: true,
+          title: const Text('自动重新登录'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '开启后，会话过期时 LearnY 会自动尝试恢复登录。账号密码只保存在系统安全存储中，不会上传到我们的服务器。',
+                style: AppTypography.bodyMedium.copyWith(
+                  color: c.subtitle,
+                  height: 1.5,
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  '开启后，LearnY 会在首次登录时顺带验证静默恢复能力。账号密码只保存在系统安全存储中，不会写入本地数据库，也不会上传到我们的服务器。',
-                  style: AppTypography.bodyMedium.copyWith(
-                    color: c.subtitle,
-                    height: 1.5,
-                  ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                '如果学校提示“信任当前设备”，请确认后继续。学校要求验证码或人工验证时，仍需你完成登录。',
+                style: AppTypography.bodyMedium.copyWith(
+                  color: c.subtitle,
+                  height: 1.5,
                 ),
-                const SizedBox(height: 10),
-                Text(
-                  '如果统一身份页面出现“信任当前设备 / 180天”等提示，建议勾选。这样后续会话过期时，应用才有机会自动恢复，而不是再次打断你手动登录。',
-                  style: AppTypography.bodyMedium.copyWith(
-                    color: c.subtitle,
-                    height: 1.5,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
         );
       },
     );
@@ -236,69 +234,62 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     return Scaffold(
       backgroundColor: c.bg,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
-          child: Column(
-            children: [
-              const Spacer(flex: 3),
-              _buildLogo()
-                  .animate()
-                  .fadeIn(duration: 600.ms, curve: Curves.easeOut)
-                  .slideY(begin: -0.1, end: 0),
-              const SizedBox(height: 28),
-              Text(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildLogo(),
+                  const SizedBox(height: 20),
+                  Text(
                     'LearnY',
-                    style: AppTypography.statLarge.copyWith(
-                      color: c.text,
-                      letterSpacing: -1.5,
-                    ),
-                  )
-                  .animate(delay: 200.ms)
-                  .fadeIn(duration: 500.ms)
-                  .slideY(begin: 0.1, end: 0),
-              const SizedBox(height: 8),
-              Text(
-                '清华大学网络学堂',
-                style: AppTypography.bodyLarge.copyWith(
-                  color: c.subtitle,
-                  letterSpacing: 2,
-                ),
-              ).animate(delay: 400.ms).fadeIn(duration: 500.ms),
-              const Spacer(flex: 2),
-              if (_errorMessage != null) ...[
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
+                    style: AppTypography.headlineLarge.copyWith(color: c.text),
                   ),
-                  decoration: BoxDecoration(
-                    color: AppColors.error.withAlpha(20),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.error.withAlpha(60)),
+                  const SizedBox(height: 8),
+                  Text(
+                    '清华大学网络学堂',
+                    style: AppTypography.bodyLarge.copyWith(color: c.subtitle),
                   ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.error_outline_rounded,
-                        color: AppColors.error,
-                        size: 20,
+                  const SizedBox(height: 40),
+                  if (_errorMessage != null) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          _errorMessage!,
-                          style: AppTypography.bodySmall.copyWith(
-                            color: AppColors.error,
-                          ),
+                      decoration: BoxDecoration(
+                        color: AppColors.error.withAlpha(20),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: AppColors.error.withAlpha(60),
                         ),
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-              LoginAutoReloginCard(
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.error_outline_rounded,
+                            color: AppColors.error,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _errorMessage!,
+                              style: AppTypography.bodySmall.copyWith(
+                                color: AppColors.error,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  LoginAutoReloginCard(
                     enabled: _enableAutoReloginOnLogin,
                     showGuideBody: showGuideBody,
                     onChanged: (value) {
@@ -308,22 +299,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     },
                     onLearnMore: _showAutoReloginDetails,
                     onDismissGuide: _dismissGuide,
-                  )
-                  .animate(delay: 540.ms)
-                  .fadeIn(duration: 450.ms)
-                  .slideY(begin: 0.1, end: 0),
-              const SizedBox(height: 18),
-              SizedBox(
+                  ),
+                  const SizedBox(height: 18),
+                  SizedBox(
                     width: double.infinity,
-                    height: 52,
                     child: ElevatedButton(
                       onPressed: _isLaunchingFlow ? null : _startLogin,
                       style: ElevatedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(52),
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
                         elevation: 0,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                       ),
                       child: _isLaunchingFlow
@@ -343,19 +331,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               ),
                             ),
                     ),
-                  )
-                  .animate(delay: 620.ms)
-                  .fadeIn(duration: 500.ms)
-                  .slideY(begin: 0.15, end: 0),
-              const SizedBox(height: 16),
-              Text(
-                buildInfo?.shortLabel ?? '读取版本中...',
-                style: AppTypography.bodySmall.copyWith(
-                  color: c.subtitle.withAlpha(120),
-                ),
-              ).animate(delay: 780.ms).fadeIn(duration: 400.ms),
-              const Spacer(flex: 1),
-            ],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    buildInfo?.shortLabel ?? '读取版本中...',
+                    style: AppTypography.bodySmall.copyWith(color: c.subtitle),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -364,25 +348,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Widget _buildLogo() {
     return Container(
-      width: 88,
-      height: 88,
+      width: 64,
+      height: 64,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.primary, AppColors.primaryDark],
-        ),
-        borderRadius: BorderRadius.circular(22),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withAlpha(context.isDark ? 60 : 40),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(8),
       ),
       child: const Center(
-        child: Icon(Icons.school_rounded, size: 42, color: Colors.white),
+        child: Icon(Icons.school_rounded, size: 32, color: Colors.white),
       ),
     );
   }

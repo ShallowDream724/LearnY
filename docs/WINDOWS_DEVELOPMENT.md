@@ -61,3 +61,7 @@ flutter analyze --no-pub lib test
 已收到的人工结果：Windows 自动重新登录成功，恢复方式为 SSO 漫游。新的课表导航等待下一轮人工反馈。
 
 课表和首页的离线截图检查见 `tool/ui_preview/README.md`，不连接真实账户、不启动桌面窗口。它补充布局检查，不替代真实学校数据和鼠标手感验收。
+
+2026-09-07 UI 整合检查：应用自有 `lib test tool` 静态分析通过；作业分组与提交、搜索竞态与恢复、学期边界、已读输入、提醒设置、课程拖动和学期同步的 41 项针对性检查通过。应用预览覆盖手机、平板和桌面主要页面，以及手机大字号、深色首页和提交编辑页。Windows release 与 Android debug 均构建成功，尚未发布。
+
+本机 Android 调试包可用 `GRADLE_USER_HOME` 指向项目 `.gradle-user` 缓存后执行 `flutter build apk --debug --no-pub`，产物为 `build/app/outputs/flutter-apk/app-debug.apk`。真机安装可直接打开 APK；需要热重载时启用 USB 或无线调试，连接设备后用 `flutter run -d <设备ID>`，无需先启动模拟器。

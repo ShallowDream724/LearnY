@@ -2,13 +2,13 @@
 //
 // Shows user info, app preferences, and logout.
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/design/app_toast.dart';
 import '../../core/design/app_theme_colors.dart';
+import '../../core/design/app_surfaces.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/typography.dart';
 import '../../core/providers/providers.dart';
@@ -20,11 +20,20 @@ import 'providers/profile_identity_provider.dart';
 import 'widgets/auto_relogin_enrollment_screen.dart';
 import 'widgets/auto_relogin_setup_dialog.dart';
 
-class ProfileScreen extends ConsumerWidget {
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  bool _updatingAutoRelogin = false;
+  bool _checkingUpdates = false;
+  bool _loggingOut = false;
+
+  @override
+  Widget build(BuildContext context) {
     final c = context.colors;
     final authState = ref.watch(authProvider);
     final themeMode = ref.watch(themeModeProvider);
@@ -41,89 +50,68 @@ class ProfileScreen extends ConsumerWidget {
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            floating: true,
-            snap: true,
+            pinned: true,
             title: Text(
-              '我的',
+              '设置',
               style: AppTypography.headlineMedium.copyWith(color: c.text),
             ),
           ),
           SliverPadding(
             padding: EdgeInsets.fromLTRB(
-              16,
+              pageGutter(context, maxWidth: 760),
               8,
-              16,
+              pageGutter(context, maxWidth: 760),
               shellContentBottomInset(context),
             ),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
                 // ── User Card ──
                 Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [AppColors.primaryDark, AppColors.primary],
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Row(
+                    children: [
+                      // Avatar
+                      Container(
+                        width: 52,
+                        height: 52,
+                        decoration: BoxDecoration(
+                          color: c.surfaceHigh,
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withAlpha(
-                              c.isDark ? 40 : 30,
+                        child: Center(
+                          child: Text(
+                            _initials(authState.username ?? ''),
+                            style: AppTypography.titleLarge.copyWith(
+                              color: c.text,
+                              fontWeight: FontWeight.w700,
                             ),
-                            blurRadius: 20,
-                            offset: const Offset(0, 6),
                           ),
-                        ],
+                        ),
                       ),
-                      child: Row(
-                        children: [
-                          // Avatar
-                          Container(
-                            width: 52,
-                            height: 52,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withAlpha(30),
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: Center(
-                              child: Text(
-                                _initials(authState.username ?? ''),
-                                style: AppTypography.titleLarge.copyWith(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              authState.username ?? '未登录',
+                              style: AppTypography.titleLarge.copyWith(
+                                color: c.text,
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  authState.username ?? '未登录',
-                                  style: AppTypography.titleLarge.copyWith(
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  _buildHeaderSubtitle(profileIdentity),
-                                  style: AppTypography.bodySmall.copyWith(
-                                    color: Colors.white.withAlpha(180),
-                                  ),
-                                ),
-                              ],
+                            const SizedBox(height: 2),
+                            Text(
+                              _buildHeaderSubtitle(profileIdentity),
+                              style: AppTypography.bodySmall.copyWith(
+                                color: c.subtitle,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    )
-                    .animate()
-                    .fadeIn(duration: 400.ms)
-                    .slideY(begin: 0.05, end: 0),
+                    ],
+                  ),
+                ),
 
                 const SizedBox(height: 24),
 
@@ -132,9 +120,7 @@ class ProfileScreen extends ConsumerWidget {
                 const SizedBox(height: 8),
 
                 // Theme setting
-                _SettingsCard(
-                  surface: c.surface,
-                  border: c.border,
+                _SettingsGroup(
                   children: [
                     _SettingsTile(
                       icon: Icons.palette_outlined,
@@ -146,27 +132,44 @@ class ProfileScreen extends ConsumerWidget {
                       },
                       textColor: c.text,
                       subColor: c.subtitle,
-                      onTap: () {
-                        // Cycle: system → light → dark
-                        final next = switch (themeMode) {
-                          'system' => 'light',
-                          'light' => 'dark',
-                          _ => 'system',
-                        };
-                        ref.read(themeModeProvider.notifier).setTheme(next);
-                      },
+                      trailing: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value:
+                              const [
+                                'system',
+                                'light',
+                                'dark',
+                              ].contains(themeMode)
+                              ? themeMode
+                              : 'system',
+                          borderRadius: BorderRadius.circular(8),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'system',
+                              child: Text('跟随系统'),
+                            ),
+                            DropdownMenuItem(value: 'light', child: Text('浅色')),
+                            DropdownMenuItem(value: 'dark', child: Text('深色')),
+                          ],
+                          onChanged: (value) {
+                            if (value != null) {
+                              ref
+                                  .read(themeModeProvider.notifier)
+                                  .setTheme(value);
+                            }
+                          },
+                        ),
+                      ),
                     ),
                   ],
-                ).animate(delay: 100.ms).fadeIn(duration: 300.ms),
+                ),
 
                 const SizedBox(height: 24),
 
                 _SectionLabel(label: '登录与安全', textColor: c.subtitle),
                 const SizedBox(height: 8),
 
-                _SettingsCard(
-                  surface: c.surface,
-                  border: c.border,
+                _SettingsGroup(
                   children: [
                     _SettingsSwitchTile(
                       icon: Icons.lock_clock_outlined,
@@ -179,14 +182,12 @@ class ProfileScreen extends ConsumerWidget {
                       value: autoReloginEnabled,
                       textColor: c.text,
                       subColor: c.subtitle,
-                      onChanged: (value) => _handleAutoReloginToggle(
-                        context,
-                        ref,
-                        enabled: value,
-                      ),
+                      onChanged: _updatingAutoRelogin
+                          ? null
+                          : _changeAutoRelogin,
                     ),
                   ],
-                ).animate(delay: 125.ms).fadeIn(duration: 300.ms),
+                ),
 
                 const SizedBox(height: 24),
 
@@ -194,10 +195,17 @@ class ProfileScreen extends ConsumerWidget {
                 _SectionLabel(label: '数据管理', textColor: c.subtitle),
                 const SizedBox(height: 8),
 
-                _SettingsCard(
-                  surface: c.surface,
-                  border: c.border,
+                _SettingsGroup(
                   children: [
+                    _SettingsTile(
+                      icon: Icons.folder_copy_outlined,
+                      title: '课程文件',
+                      subtitle: '当前学习学期的文件与附件',
+                      textColor: c.text,
+                      subColor: c.subtitle,
+                      onTap: () => context.push(Routes.files),
+                    ),
+                    Divider(color: c.border, height: 0),
                     _SettingsTile(
                       icon: Icons.bookmark_outline_rounded,
                       title: '收藏文件',
@@ -218,7 +226,7 @@ class ProfileScreen extends ConsumerWidget {
                       onTap: () => context.push(Routes.fileManager),
                     ),
                   ],
-                ).animate(delay: 150.ms).fadeIn(duration: 300.ms),
+                ),
 
                 const SizedBox(height: 24),
 
@@ -226,9 +234,7 @@ class ProfileScreen extends ConsumerWidget {
                 _SectionLabel(label: '关于', textColor: c.subtitle),
                 const SizedBox(height: 8),
 
-                _SettingsCard(
-                  surface: c.surface,
-                  border: c.border,
+                _SettingsGroup(
                   children: [
                     _SettingsTile(
                       icon: Icons.info_outlined,
@@ -242,14 +248,14 @@ class ProfileScreen extends ConsumerWidget {
                       icon: updateInfo?.hasUpdate == true
                           ? Icons.system_update_rounded
                           : Icons.update_rounded,
-                      title: '检查更新',
+                      title: _checkingUpdates ? '正在检查更新' : '检查更新',
                       subtitle: _buildUpdateSubtitle(updateInfo),
                       textColor: c.text,
                       subColor: c.subtitle,
                       trailingColor: updateInfo?.hasUpdate == true
                           ? AppColors.warning
                           : null,
-                      onTap: () => _handleUpdateTap(context, ref),
+                      onTap: _checkingUpdates ? null : _checkForUpdate,
                     ),
                     Divider(color: c.border, height: 0),
                     _SettingsTile(
@@ -267,33 +273,31 @@ class ProfileScreen extends ConsumerWidget {
                       },
                     ),
                   ],
-                ).animate(delay: 200.ms).fadeIn(duration: 300.ms),
+                ),
 
                 const SizedBox(height: 32),
 
                 // ── Logout ──
                 SizedBox(
                   width: double.infinity,
-                  height: 48,
                   child: OutlinedButton(
-                    onPressed: () async {
-                      await ref.read(authProvider.notifier).logout();
-                    },
+                    onPressed: _loggingOut ? null : _logout,
                     style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48),
                       foregroundColor: AppColors.error,
                       side: BorderSide(color: AppColors.error.withAlpha(60)),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                     ),
                     child: Text(
-                      '退出登录',
+                      _loggingOut ? '正在退出' : '退出登录',
                       style: AppTypography.labelLarge.copyWith(
                         color: AppColors.error,
                       ),
                     ),
                   ),
-                ).animate(delay: 300.ms).fadeIn(duration: 300.ms),
+                ),
               ]),
             ),
           ),
@@ -309,6 +313,39 @@ class ProfileScreen extends ConsumerWidget {
       return String.fromCharCode(chars[0]);
     }
     return name.substring(0, name.length >= 2 ? 2 : 1).toUpperCase();
+  }
+
+  Future<void> _changeAutoRelogin(bool enabled) async {
+    setState(() => _updatingAutoRelogin = true);
+    try {
+      await _handleAutoReloginToggle(context, ref, enabled: enabled);
+    } catch (_) {
+      if (mounted) AppToast.showError(context, message: '自动重新登录设置失败，请重试');
+    } finally {
+      if (mounted) setState(() => _updatingAutoRelogin = false);
+    }
+  }
+
+  Future<void> _checkForUpdate() async {
+    setState(() => _checkingUpdates = true);
+    try {
+      await _handleUpdateTap(context, ref);
+    } catch (_) {
+      if (mounted) AppToast.showError(context, message: '检查更新失败');
+    } finally {
+      if (mounted) setState(() => _checkingUpdates = false);
+    }
+  }
+
+  Future<void> _logout() async {
+    setState(() => _loggingOut = true);
+    try {
+      await ref.read(authProvider.notifier).logout();
+    } catch (_) {
+      if (mounted) AppToast.showError(context, message: '退出登录失败，请重试');
+    } finally {
+      if (mounted) setState(() => _loggingOut = false);
+    }
   }
 
   String _buildHeaderSubtitle(ProfileIdentity? identity) {
@@ -491,31 +528,21 @@ class _SectionLabel extends StatelessWidget {
       label,
       style: AppTypography.labelSmall.copyWith(
         color: textColor,
-        letterSpacing: 1,
+        fontWeight: FontWeight.w600,
       ),
     );
   }
 }
 
-class _SettingsCard extends StatelessWidget {
-  final Color surface;
-  final Color border;
+class _SettingsGroup extends StatelessWidget {
   final List<Widget> children;
 
-  const _SettingsCard({
-    required this.surface,
-    required this.border,
-    required this.children,
-  });
+  const _SettingsGroup({required this.children});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: border, width: 0.5),
-      ),
+    return Material(
+      color: Colors.transparent,
       child: Column(children: children),
     );
   }
@@ -529,6 +556,7 @@ class _SettingsTile extends StatelessWidget {
   final Color subColor;
   final Color? trailingColor;
   final VoidCallback? onTap;
+  final Widget? trailing;
 
   const _SettingsTile({
     required this.icon,
@@ -538,29 +566,40 @@ class _SettingsTile extends StatelessWidget {
     required this.subColor,
     this.trailingColor,
     this.onTap,
+    this.trailing,
   });
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(8),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.symmetric(vertical: 14),
         child: Row(
           children: [
             Icon(icon, size: 22, color: subColor),
             const SizedBox(width: 14),
             Expanded(
-              child: Text(
-                title,
-                style: AppTypography.titleMedium.copyWith(color: textColor),
-              ),
-            ),
-            Text(
-              subtitle,
-              style: AppTypography.bodySmall.copyWith(
-                color: trailingColor ?? subColor,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: AppTypography.titleMedium.copyWith(color: textColor),
+                  ),
+                  if (trailing != null)
+                    trailing!
+                  else ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: AppTypography.bodySmall.copyWith(
+                        color: trailingColor ?? subColor,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
             if (onTap != null) ...[
@@ -595,12 +634,12 @@ class _SettingsSwitchTile extends StatelessWidget {
   final bool value;
   final Color textColor;
   final Color subColor;
-  final ValueChanged<bool> onChanged;
+  final ValueChanged<bool>? onChanged;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
           Icon(icon, size: 22, color: subColor),
@@ -617,8 +656,6 @@ class _SettingsSwitchTile extends StatelessWidget {
                 Text(
                   subtitle,
                   style: AppTypography.bodySmall.copyWith(color: subColor),
-                  maxLines: 4,
-                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
