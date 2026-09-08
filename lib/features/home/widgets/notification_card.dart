@@ -41,6 +41,15 @@ class NotificationCard extends StatelessWidget {
                       ),
                     ),
                   ),
+                  if (published != null) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      '${published.month}/${published.day}',
+                      style: AppTypography.bodySmall.copyWith(
+                        color: c.subtitle,
+                      ),
+                    ),
+                  ],
                   if (notification.markedImportant) ...[
                     const SizedBox(width: 8),
                     Tooltip(
@@ -50,15 +59,6 @@ class NotificationCard extends StatelessWidget {
                         style: AppTypography.labelMedium.copyWith(
                           color: c.infoAccent,
                         ),
-                      ),
-                    ),
-                  ],
-                  if (published != null) ...[
-                    const SizedBox(width: 8),
-                    Text(
-                      '${published.month}/${published.day}',
-                      style: AppTypography.bodySmall.copyWith(
-                        color: c.subtitle,
                       ),
                     ),
                   ],

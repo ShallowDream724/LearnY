@@ -40,21 +40,25 @@ class _SwipeToReadState extends State<SwipeToRead> {
   @override
   Widget build(BuildContext context) {
     final label = widget.isRead ? '标为未读' : '标为已读';
-    final icon = widget.isRead ? Icons.mark_email_unread_outlined : Icons.done;
+    final icon = widget.isRead
+        ? Icons.mark_email_unread_outlined
+        : Icons.drafts_outlined;
     if (usesDesktopControls(context)) {
       return Row(
         children: [
-          Expanded(child: widget.child),
           IconButton(
             tooltip: label,
+            color: context.colors.subtitle,
             onPressed: _busy ? null : _apply,
             icon: _busy
                 ? const SizedBox.square(
                     dimension: 16,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : Icon(icon, size: 19),
+                : Icon(icon, size: 18),
           ),
+          const SizedBox(width: 4),
+          Expanded(child: widget.child),
         ],
       );
     }

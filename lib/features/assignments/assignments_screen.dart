@@ -204,7 +204,7 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
                         slivers: [
                           SliverToBoxAdapter(
                             child: Padding(
-                              padding: const EdgeInsets.only(bottom: 28),
+                              padding: const EdgeInsets.only(bottom: 8),
                               child: _AssignmentFilters(
                                 current: filter,
                                 stats: presentation.stats,
