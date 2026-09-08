@@ -44,6 +44,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('文件')),
       body: ReadingWidth(
+        maxWidth: 960,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -136,17 +137,20 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                           padding: const EdgeInsets.only(top: 16, bottom: 8),
                           child: Row(
                             children: [
-                              Expanded(
-                                child: Text(
-                                  _sectionLabel(row.group),
-                                  style: Theme.of(context).textTheme.titleSmall,
-                                ),
+                              Text(
+                                _sectionLabel(row.group),
+                                style: Theme.of(context).textTheme.titleSmall,
                               ),
+                              const SizedBox(width: 8),
                               Text(
                                 '${row.entries.length}',
                                 style: TextStyle(
                                   color: context.colors.subtitle,
                                 ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Divider(color: context.colors.border),
                               ),
                             ],
                           ),
@@ -155,7 +159,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                       final entry = row as FileFeedEntry;
                       return Padding(
                         key: ValueKey(entry.item.cacheKey),
-                        padding: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.only(bottom: 3),
                         child: FileCard(
                           item: entry.item,
                           isFavorite: entry.isFavorite,

@@ -596,7 +596,7 @@ class _ArchivePreviewState extends ConsumerState<_ArchivePreview> {
                   style: TextStyle(
                     color: c.text,
                     fontSize: 17,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -920,7 +920,7 @@ class _ArchiveEntryTile extends StatelessWidget {
                     style: TextStyle(
                       color: c.infoAccent,
                       fontSize: 11,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 )
@@ -940,7 +940,7 @@ class _ArchiveEntryTile extends StatelessWidget {
                     style: TextStyle(
                       color: c.success,
                       fontSize: 11,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),
@@ -960,7 +960,7 @@ class _ArchiveEntryTile extends StatelessWidget {
                     style: TextStyle(
                       color: c.success,
                       fontSize: 11,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/design/app_materials.dart';
 import '../../../core/design/app_theme_colors.dart';
-import '../../../core/design/colors.dart';
 import '../../../core/design/typography.dart';
 
 class LoginAutoReloginCard extends StatelessWidget {
@@ -24,9 +24,10 @@ class LoginAutoReloginCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 8),
+    return StudySurface(
+      tone: StudyTone.jade,
+      radius: 14,
+      padding: const EdgeInsets.fromLTRB(18, 16, 14, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -55,10 +56,9 @@ class LoginAutoReloginCard extends StatelessWidget {
           ),
           if (showGuideBody) ...[
             const SizedBox(height: 10),
-            _GuideLine(
-              icon: Icons.security_rounded,
-              text: '账号密码只保存在系统安全存储中',
-              color: c.subtitle,
+            Text(
+              '账号密码只保存在系统安全存储中',
+              style: AppTypography.bodySmall.copyWith(color: c.subtitle),
             ),
             const SizedBox(height: 10),
           ] else
@@ -68,7 +68,7 @@ class LoginAutoReloginCard extends StatelessWidget {
               TextButton(
                 onPressed: onLearnMore,
                 style: TextButton.styleFrom(
-                  foregroundColor: AppColors.primary,
+                  foregroundColor: c.infoAccent,
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                 ),
                 child: const Text('了解详情'),
@@ -86,38 +86,6 @@ class LoginAutoReloginCard extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _GuideLine extends StatelessWidget {
-  const _GuideLine({
-    required this.icon,
-    required this.text,
-    required this.color,
-  });
-
-  final IconData icon;
-  final String text;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 1),
-          child: Icon(icon, size: 14, color: AppColors.primary),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            text,
-            style: AppTypography.bodySmall.copyWith(color: color, height: 1.35),
-          ),
-        ),
-      ],
     );
   }
 }

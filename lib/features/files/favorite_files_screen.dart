@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/design/app_surfaces.dart';
+import '../../core/design/app_materials.dart';
+import '../../core/design/app_theme_colors.dart';
 import '../../core/design/shimmer.dart';
 import '../../core/router/router.dart';
 import 'providers/file_bookmark_providers.dart';
@@ -31,6 +33,7 @@ class _FavoriteFilesScreenState extends ConsumerState<FavoriteFilesScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('收藏文件')),
       body: ReadingWidth(
+        maxWidth: 960,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -93,7 +96,9 @@ class _FavoriteFilesScreenState extends ConsumerState<FavoriteFilesScreen> {
                           padding: const EdgeInsets.only(top: 16, bottom: 8),
                           child: Row(
                             children: [
-                              Expanded(
+                              CourseSeal(courseId: row.courseId, size: 24),
+                              const SizedBox(width: 8),
+                              Flexible(
                                 child: Text(
                                   row.courseName.isEmpty
                                       ? '未知课程'
@@ -103,6 +108,10 @@ class _FavoriteFilesScreenState extends ConsumerState<FavoriteFilesScreen> {
                               ),
                               const SizedBox(width: 12),
                               Text('${row.entries.length}'),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Divider(color: context.colors.border),
+                              ),
                             ],
                           ),
                         );
@@ -110,7 +119,7 @@ class _FavoriteFilesScreenState extends ConsumerState<FavoriteFilesScreen> {
                       final entry = row as FavoriteFileEntry;
                       return Padding(
                         key: ValueKey(entry.assetKey),
-                        padding: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.only(bottom: 3),
                         child: FileCard(
                           item: entry.item,
                           hideCourseName: true,

@@ -12,6 +12,7 @@ import '../../../core/auth/auth.dart';
 import '../../../core/auth/campus_cookie_bridge.dart';
 import '../../../core/providers/api_client_provider.dart';
 import '../../../core/design/app_theme_colors.dart';
+import '../../../core/design/app_materials.dart';
 import '../../../core/design/colors.dart';
 import '../../../core/design/typography.dart';
 import 'identity_auth_web_surface.dart';
@@ -1121,7 +1122,7 @@ class _IdentityAuthFlowScreenState
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const CircularProgressIndicator(color: AppColors.primary),
+            CircularProgressIndicator(color: c.infoAccent),
             const SizedBox(height: 16),
             Text(
               _processingLabel,
@@ -1189,9 +1190,7 @@ class _IdentityAuthFlowScreenState
         );
       }
 
-      return const Center(
-        child: CircularProgressIndicator(color: AppColors.primary),
-      );
+      return Center(child: CircularProgressIndicator(color: c.infoAccent));
     }
 
     return _webSurfaceController.buildView();
@@ -1210,11 +1209,11 @@ class _IdentityAuthFlowScreenState
         ),
         title: Text(_appBarTitle),
         bottom: _isPageLoading
-            ? const PreferredSize(
-                preferredSize: Size.fromHeight(2),
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(2),
                 child: LinearProgressIndicator(
                   minHeight: 2,
-                  color: AppColors.primary,
+                  color: c.infoAccent,
                 ),
               )
             : null,
@@ -1230,18 +1229,24 @@ class _IdentityAuthFlowScreenState
               ),
             ),
           if (_errorMessage != null)
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: AppColors.error.withAlpha(18),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.error.withAlpha(48)),
-              ),
-              child: Text(
-                _errorMessage!,
-                style: AppTypography.bodySmall.copyWith(color: AppColors.error),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: StudySurface(
+                tone: StudyTone.rose,
+                radius: 14,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: Text(
+                    _errorMessage!,
+                    style: AppTypography.bodySmall.copyWith(
+                      color: AppColors.error,
+                    ),
+                  ),
+                ),
               ),
             ),
           Expanded(child: _buildWebSurfaceBody(context)),

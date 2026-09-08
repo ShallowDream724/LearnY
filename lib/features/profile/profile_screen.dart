@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/design/app_toast.dart';
+import '../../core/design/app_materials.dart';
 import '../../core/design/app_theme_colors.dart';
 import '../../core/design/app_surfaces.dart';
 import '../../core/design/colors.dart';
@@ -53,7 +54,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         slivers: [
           SliverAppBar(
             pinned: true,
-            titleSpacing: pageGutter(context, maxWidth: 760),
+            titleSpacing: pageGutter(context, maxWidth: 880),
             title: Text(
               '设置',
               style: AppTypography.headlineMedium.copyWith(color: c.text),
@@ -61,51 +62,62 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ),
           SliverPadding(
             padding: EdgeInsets.fromLTRB(
-              pageGutter(context, maxWidth: 760),
-              8,
-              pageGutter(context, maxWidth: 760),
+              pageGutter(context, maxWidth: 880),
+              16,
+              pageGutter(context, maxWidth: 880),
               shellContentBottomInset(context),
             ),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                // ── User Card ──
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                StudySurface(
+                  tone: StudyTone.jade,
+                  padding: const EdgeInsets.all(24),
                   child: Row(
                     children: [
-                      // Avatar
                       Container(
-                        width: 52,
-                        height: 52,
+                        width: 60,
+                        height: 60,
                         decoration: BoxDecoration(
-                          color: c.surfaceHigh,
-                          borderRadius: BorderRadius.circular(8),
+                          color: StudyPalette.of(
+                            context,
+                            StudyTone.jade,
+                          ).accent.withAlpha(18),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: StudyPalette.of(
+                              context,
+                              StudyTone.jade,
+                            ).accent.withAlpha(28),
+                          ),
                         ),
                         child: Center(
                           child: Text(
                             _initials(authState.username ?? ''),
-                            style: AppTypography.titleLarge.copyWith(
-                              color: c.text,
-                              fontWeight: FontWeight.w700,
+                            style: AppTypography.headlineMedium.copyWith(
+                              color: StudyPalette.of(
+                                context,
+                                StudyTone.jade,
+                              ).accent,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 18),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               authState.username ?? '未登录',
-                              style: AppTypography.titleLarge.copyWith(
+                              style: AppTypography.headlineSmall.copyWith(
                                 color: c.text,
                               ),
                             ),
-                            const SizedBox(height: 2),
+                            const SizedBox(height: 6),
                             Text(
                               _buildHeaderSubtitle(profileIdentity),
-                              style: AppTypography.bodySmall.copyWith(
+                              style: AppTypography.bodyMedium.copyWith(
                                 color: c.subtitle,
                               ),
                             ),
@@ -116,133 +128,154 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 24),
-
-                // ── Settings Section ──
-                SettingsSectionLabel(label: '偏好设置'),
-                const SizedBox(height: 8),
-
-                // Theme setting
-                SettingsGroup(
-                  children: [
-                    SettingsRow(
-                      icon: Icons.palette_outlined,
-                      title: '外观',
-                      trailing: AppearanceMenu(
-                        value: themeMode,
-                        onChanged: _changeTheme,
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 28),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final preferences = Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const SettingsSectionLabel(label: '使用偏好'),
+                        SettingsGroup(
+                          tone: StudyTone.ink,
+                          children: [
+                            SettingsRow(
+                              title: '外观',
+                              subtitle: '选择适合你的阅读环境',
+                              trailing: AppearanceMenu(
+                                value: themeMode,
+                                onChanged: _changeTheme,
+                              ),
+                            ),
+                            SettingsSwitchRow(
+                              title: '自动重新登录',
+                              subtitle: _buildAutoReloginSummary(
+                                enabled: autoReloginEnabled,
+                                hasStoredCredential:
+                                    hasStoredCredential.valueOrNull,
+                                status: autoReloginStatus,
+                              ),
+                              onDetails: () => _showAutoReloginStatus(
+                                enabled: autoReloginEnabled,
+                                hasStoredCredential:
+                                    hasStoredCredential.valueOrNull,
+                                status: autoReloginStatus,
+                              ),
+                              value: autoReloginEnabled,
+                              onChanged: _updatingAutoRelogin
+                                  ? null
+                                  : _changeAutoRelogin,
+                            ),
+                          ],
+                        ),
+                      ],
+                    );
+                    final about = Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const SettingsSectionLabel(label: '关于 LearnY'),
+                        SettingsGroup(
+                          children: [
+                            SettingsRow(
+                              title: '版本',
+                              subtitle: buildInfo?.shortLabel ?? '读取中...',
+                            ),
+                            SettingsRow(
+                              title: _checkingUpdates ? '正在检查更新' : '检查更新',
+                              subtitle: _buildUpdateSubtitle(updateInfo),
+                              trailingColor: updateInfo?.hasUpdate == true
+                                  ? AppColors.warning
+                                  : null,
+                              onTap: _checkingUpdates ? null : _checkForUpdate,
+                            ),
+                            SettingsRow(
+                              title: '源代码',
+                              subtitle: '在 GitHub 查看 LearnY',
+                              onTap: () => launchUrl(
+                                Uri.parse(appRepositoryUrl),
+                                mode: LaunchMode.externalApplication,
+                              ),
+                            ),
+                            SettingsRow(
+                              title: '开源许可',
+                              onTap: () => showLicensePage(
+                                context: context,
+                                applicationName: 'LearnY',
+                                applicationVersion: buildInfo?.shortLabel,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    );
+                    final files = Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const SettingsSectionLabel(label: '学习资料'),
+                        SettingsGroup(
+                          tone: StudyTone.ochre,
+                          children: [
+                            SettingsRow(
+                              title: '课程文件',
+                              subtitle: '当前学期的文件与附件',
+                              onTap: () => context.push(Routes.files),
+                            ),
+                            SettingsRow(
+                              title: '收藏文件',
+                              subtitle: favoriteCount == 0
+                                  ? '随时回到收藏的资料'
+                                  : '$favoriteCount 个收藏文件',
+                              onTap: () => context.push(Routes.favoriteFiles),
+                            ),
+                            SettingsRow(
+                              title: '文件管理',
+                              subtitle: '管理已下载的文件',
+                              onTap: () => context.push(Routes.fileManager),
+                            ),
+                          ],
+                        ),
+                      ],
+                    );
+                    if (constraints.maxWidth >= 720) {
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 5,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                preferences,
+                                const SizedBox(height: 26),
+                                about,
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 24),
+                          Expanded(flex: 4, child: files),
+                        ],
+                      );
+                    }
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        preferences,
+                        const SizedBox(height: 26),
+                        files,
+                        const SizedBox(height: 26),
+                        about,
+                      ],
+                    );
+                  },
                 ),
-
-                const SizedBox(height: 24),
-
-                SettingsSectionLabel(label: '登录与安全'),
-                const SizedBox(height: 8),
-
-                SettingsGroup(
-                  children: [
-                    SettingsSwitchRow(
-                      icon: Icons.lock_clock_outlined,
-                      title: '自动重新登录',
-                      subtitle: _buildAutoReloginSubtitle(
-                        enabled: autoReloginEnabled,
-                        hasStoredCredential: hasStoredCredential.valueOrNull,
-                        status: autoReloginStatus,
-                      ),
-                      value: autoReloginEnabled,
-                      onChanged: _updatingAutoRelogin
-                          ? null
-                          : _changeAutoRelogin,
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 24),
-
-                // ── Data Management Section ──
-                SettingsSectionLabel(label: '数据管理'),
-                const SizedBox(height: 8),
-
-                SettingsGroup(
-                  children: [
-                    SettingsRow(
-                      icon: Icons.folder_copy_outlined,
-                      title: '课程文件',
-                      subtitle: '当前学习学期的文件与附件',
-                      onTap: () => context.push(Routes.files),
-                    ),
-                    SettingsRow(
-                      icon: Icons.bookmark_outline_rounded,
-                      title: '收藏文件',
-                      subtitle: favoriteCount == 0
-                          ? '查看你收藏的文件'
-                          : '$favoriteCount 个收藏文件',
-                      onTap: () => context.push(Routes.favoriteFiles),
-                    ),
-                    SettingsRow(
-                      icon: Icons.folder_rounded,
-                      title: '文件管理',
-                      subtitle: '管理已下载的文件',
-                      onTap: () => context.push(Routes.fileManager),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 24),
-
-                // ── About Section ──
-                SettingsSectionLabel(label: '关于'),
-                const SizedBox(height: 8),
-
-                SettingsGroup(
-                  children: [
-                    SettingsRow(
-                      icon: Icons.info_outlined,
-                      title: '版本',
-                      subtitle: buildInfo?.shortLabel ?? '读取中...',
-                    ),
-                    SettingsRow(
-                      icon: updateInfo?.hasUpdate == true
-                          ? Icons.system_update_rounded
-                          : Icons.update_rounded,
-                      title: _checkingUpdates ? '正在检查更新' : '检查更新',
-                      subtitle: _buildUpdateSubtitle(updateInfo),
-                      trailingColor: updateInfo?.hasUpdate == true
-                          ? AppColors.warning
-                          : null,
-                      onTap: _checkingUpdates ? null : _checkForUpdate,
-                    ),
-                    SettingsRow(
-                      icon: Icons.code_rounded,
-                      title: '源代码',
-                      subtitle: 'GitHub',
-                      onTap: () {
-                        // Open GitHub repo
-                        launchUrl(
-                          Uri.parse(appRepositoryUrl),
-                          mode: LaunchMode.externalApplication,
-                        );
-                      },
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 32),
-
-                // ── Logout ──
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
+                const SizedBox(height: 28),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
                     onPressed: _loggingOut ? null : _logout,
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(48),
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(120, 48),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
                       foregroundColor: AppColors.error,
-                      side: BorderSide(color: AppColors.error.withAlpha(60)),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
                     ),
                     child: Text(
                       _loggingOut ? '正在退出' : '退出登录',
@@ -334,7 +367,75 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     return '当前 ${updateInfo.currentBuild.shortLabel}';
   }
 
-  String _buildAutoReloginSubtitle({
+  String _buildAutoReloginSummary({
+    required bool enabled,
+    required bool? hasStoredCredential,
+    required AutoReloginStatusSnapshot status,
+  }) {
+    if (!enabled) return '已关闭';
+    if (hasStoredCredential == null || !status.isLoaded) return '正在读取状态';
+    if (status.phase == AutoReloginStatusPhase.probing) return '正在验证登录';
+    if (!hasStoredCredential ||
+        status.phase == AutoReloginStatusPhase.needsSetup) {
+      return '需要重新配置';
+    }
+    if (status.phase == AutoReloginStatusPhase.degraded) return '登录恢复需要关注';
+    return status.lastProbeAt == null ? '已开启，等待验证' : '已就绪 · 会话过期后自动恢复';
+  }
+
+  Future<void> _showAutoReloginStatus({
+    required bool enabled,
+    required bool? hasStoredCredential,
+    required AutoReloginStatusSnapshot status,
+  }) => showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      scrollable: true,
+      title: const Text('自动重新登录'),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '会话过期后自动尝试恢复登录。学校要求验证码或人工验证时，仍需你完成登录。',
+              style: AppTypography.bodyMedium.copyWith(
+                color: context.colors.subtitle,
+              ),
+            ),
+            const SizedBox(height: 20),
+            StudySurface(
+              tone: StudyTone.jade,
+              padding: const EdgeInsets.all(16),
+              child: SizedBox(
+                width: double.infinity,
+                child: Text(
+                  _buildAutoReloginDetails(
+                    enabled: enabled,
+                    hasStoredCredential: hasStoredCredential,
+                    status: status,
+                  ),
+                  style: AppTypography.bodyMedium.copyWith(
+                    color: context.colors.text,
+                    height: 1.8,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('关闭'),
+        ),
+      ],
+    ),
+  );
+
+  String _buildAutoReloginDetails({
     required bool enabled,
     required bool? hasStoredCredential,
     required AutoReloginStatusSnapshot status,

@@ -1,11 +1,12 @@
 /// LearnY Design System — Typography
 ///
-/// Uses platform fonts without a runtime network dependency.
+/// Bundled screen-reading type; no runtime network dependency.
 /// No emoji — all visual elements use Material Symbols or custom SVGs.
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'app_font.dart';
 
 /// 4dp base spacing unit.
 abstract final class Spacing {
@@ -34,10 +35,10 @@ abstract final class Spacing {
   static const double sectionGap = xl;
 
   /// Standard card border radius.
-  static const double cardRadius = 8;
+  static const double cardRadius = 18;
 
   /// Small chip / badge radius.
-  static const double chipRadius = 8;
+  static const double chipRadius = 10;
 
   /// Bottom nav bar height.
   static const double bottomNavHeight = 64;
@@ -45,12 +46,7 @@ abstract final class Spacing {
 
 /// Shared type scale using the host platform's installed font.
 abstract final class AppTypography {
-  static String get fontFamily => switch (defaultTargetPlatform) {
-    TargetPlatform.windows => 'Microsoft YaHei UI',
-    TargetPlatform.macOS => '.AppleSystemUIFont',
-    TargetPlatform.iOS => 'CupertinoSystemText',
-    _ => 'Roboto',
-  };
+  static String get fontFamily => AppFont.family;
 
   static List<String>? get fontFamilyFallback =>
       switch (defaultTargetPlatform) {
@@ -65,7 +61,7 @@ abstract final class AppTypography {
     fontFamily: fontFamily,
     fontFamilyFallback: fontFamilyFallback,
     fontSize: 28,
-    fontWeight: FontWeight.w700,
+    fontWeight: FontWeight.w400,
     height: 1.3,
     letterSpacing: 0,
   );
@@ -74,8 +70,8 @@ abstract final class AppTypography {
   static TextStyle get headlineMedium => TextStyle(
     fontFamily: fontFamily,
     fontFamilyFallback: fontFamilyFallback,
-    fontSize: 22,
-    fontWeight: FontWeight.w700,
+    fontSize: 24,
+    fontWeight: FontWeight.w400,
     height: 1.3,
     letterSpacing: 0,
   );
@@ -85,7 +81,7 @@ abstract final class AppTypography {
     fontFamily: fontFamily,
     fontFamilyFallback: fontFamilyFallback,
     fontSize: 18,
-    fontWeight: FontWeight.w600,
+    fontWeight: FontWeight.w400,
     height: 1.4,
     letterSpacing: 0,
   );
@@ -97,7 +93,7 @@ abstract final class AppTypography {
     fontFamily: fontFamily,
     fontFamilyFallback: fontFamilyFallback,
     fontSize: 16,
-    fontWeight: FontWeight.w600,
+    fontWeight: FontWeight.w400,
     height: 1.4,
   );
 
@@ -105,8 +101,8 @@ abstract final class AppTypography {
   static TextStyle get titleMedium => TextStyle(
     fontFamily: fontFamily,
     fontFamilyFallback: fontFamilyFallback,
-    fontSize: 14,
-    fontWeight: FontWeight.w600,
+    fontSize: 15,
+    fontWeight: FontWeight.w400,
     height: 1.4,
   );
 
@@ -114,7 +110,7 @@ abstract final class AppTypography {
     fontFamily: fontFamily,
     fontFamilyFallback: fontFamilyFallback,
     fontSize: 13,
-    fontWeight: FontWeight.w600,
+    fontWeight: FontWeight.w400,
     height: 1.4,
   );
 
@@ -142,7 +138,7 @@ abstract final class AppTypography {
   static TextStyle get bodySmall => TextStyle(
     fontFamily: fontFamily,
     fontFamilyFallback: fontFamilyFallback,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: FontWeight.w400,
     height: 1.5,
   );
@@ -154,7 +150,7 @@ abstract final class AppTypography {
     fontFamily: fontFamily,
     fontFamilyFallback: fontFamilyFallback,
     fontSize: 14,
-    fontWeight: FontWeight.w600,
+    fontWeight: FontWeight.w400,
     height: 1.2,
     letterSpacing: 0,
   );
@@ -164,7 +160,7 @@ abstract final class AppTypography {
     fontFamily: fontFamily,
     fontFamilyFallback: fontFamilyFallback,
     fontSize: 12,
-    fontWeight: FontWeight.w500,
+    fontWeight: FontWeight.w400,
     height: 1.2,
     letterSpacing: 0,
   );
@@ -174,7 +170,7 @@ abstract final class AppTypography {
     fontFamily: fontFamily,
     fontFamilyFallback: fontFamilyFallback,
     fontSize: 12,
-    fontWeight: FontWeight.w600,
+    fontWeight: FontWeight.w400,
     height: 1.2,
     letterSpacing: 0,
   );
@@ -186,7 +182,7 @@ abstract final class AppTypography {
     fontFamily: fontFamily,
     fontFamilyFallback: fontFamilyFallback,
     fontSize: 36,
-    fontWeight: FontWeight.w800,
+    fontWeight: FontWeight.w400,
     height: 1.1,
     letterSpacing: 0,
     fontFeatures: const [FontFeature.tabularFigures()],
@@ -197,7 +193,7 @@ abstract final class AppTypography {
     fontFamily: fontFamily,
     fontFamilyFallback: fontFamilyFallback,
     fontSize: 24,
-    fontWeight: FontWeight.w700,
+    fontWeight: FontWeight.w400,
     height: 1.2,
     letterSpacing: 0,
     fontFeatures: const [FontFeature.tabularFigures()],

@@ -8,6 +8,8 @@ import '../providers/providers.dart';
 import '../providers/sync_provider.dart';
 import '../router/router.dart';
 import '../design/responsive.dart';
+import '../design/app_materials.dart';
+import '../utils/china_time.dart';
 import '../sync/sync_operation.dart';
 import 'semester_models.dart';
 import 'semester_repository.dart';
@@ -49,10 +51,10 @@ Future<void> _selectLearningSemester(
 
 /// The learning scope occupies the existing title area on compact screens.
 double semesterToolbarHeight(BuildContext context) {
-  if (shouldShowRail(context)) return kToolbarHeight;
+  if (shouldShowRail(context)) return 64;
   final scaler = MediaQuery.textScalerOf(context);
-  return (scaler.scale(16) * 1.4 + scaler.scale(12) * 1.5 + 8).clamp(
-    kToolbarHeight,
+  return (scaler.scale(20) * 1.4 + scaler.scale(12) * 1.5 + 8).clamp(
+    64,
     double.infinity,
   );
 }
@@ -80,7 +82,7 @@ class SemesterPageTitle extends ConsumerWidget {
                 title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleLarge,
+                style: Theme.of(context).textTheme.headlineSmall,
               ),
               Row(
                 mainAxisSize: MainAxisSize.min,
@@ -159,18 +161,66 @@ class SemesterSyncControl extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sync = ref.watch(syncStateProvider);
     final busy = sync.status == SyncStatus.syncing;
-    final message =
-        sync.errorMessage ?? (sync.syncWarnings.isNotEmpty ? '部分内容未能更新' : null);
+    final failed =
+        sync.status == SyncStatus.error ||
+        sync.status == SyncStatus.sessionExpired;
+    final partial = !failed && sync.syncWarnings.isNotEmpty;
+    final hasIssue = failed || partial;
+    final label = busy
+        ? '正在更新'
+        : failed
+        ? '更新失败'
+        : partial
+        ? '部分内容待更新'
+        : sync.lastSynced == null
+        ? '尚未更新'
+        : '已更新';
     void showStatus() => showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('同步状态'),
-        content: SingleChildScrollView(
-          child: Text(
-            [
-              if (sync.errorMessage != null) sync.errorMessage!,
-              ...sync.syncWarnings,
-            ].join('\n'),
+        title: Text(label),
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (sync.lastSynced != null)
+                  Text(
+                    '最近更新 ${formatMonthDayHourMinuteInChina(sync.lastSynced!)}',
+                  ),
+                if (partial)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 12),
+                    child: Text('可用内容已更新，以下项目仍保留上次的数据。'),
+                  ),
+                if (sync.errorMessage != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Text(sync.errorMessage!),
+                  ),
+                for (final warning
+                    in sync.syncWarnings
+                        .map((warning) => warning.split(' (').first)
+                        .toSet())
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Text(warning),
+                  ),
+                if (sync.syncWarnings.any((warning) => warning.contains(' (')))
+                  ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    title: const Text('错误详情'),
+                    children: [
+                      SelectableText(
+                        sync.syncWarnings.join('\n\n'),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+              ],
+            ),
           ),
         ),
         actions: [
@@ -194,11 +244,7 @@ class SemesterSyncControl extends ConsumerWidget {
         if (showLabel)
           Expanded(
             child: Text(
-              busy
-                  ? '正在更新'
-                  : message != null
-                  ? '更新未完成'
-                  : '已同步',
+              label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.bodySmall,
@@ -207,12 +253,12 @@ class SemesterSyncControl extends ConsumerWidget {
         IconButton(
           tooltip: busy
               ? '正在刷新'
-              : message != null
+              : hasIssue
               ? '查看同步问题'
               : '刷新当前学期',
           onPressed: busy
               ? null
-              : message != null
+              : hasIssue
               ? showStatus
               : () => ref.read(syncStateProvider.notifier).syncAll(force: true),
           icon: busy
@@ -221,9 +267,15 @@ class SemesterSyncControl extends ConsumerWidget {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : Icon(
-                  message != null ? Icons.error_outline : Icons.refresh,
-                  color: message != null
+                  failed
+                      ? Icons.error_outline
+                      : partial
+                      ? Icons.sync_problem_outlined
+                      : Icons.refresh,
+                  color: failed
                       ? Theme.of(context).colorScheme.error
+                      : partial
+                      ? StudyPalette.of(context, StudyTone.ochre).accent
                       : null,
                   size: 19,
                 ),

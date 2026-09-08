@@ -232,7 +232,7 @@ class _ScheduleDialogState extends ConsumerState<ScheduleDialog> {
             constraints: const BoxConstraints(maxWidth: 1440),
             backgroundColor: context.colors.surface,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(20),
             ),
             clipBehavior: Clip.antiAlias,
             child: Column(

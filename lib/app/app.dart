@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import '../core/design/theme.dart';
+import '../core/design/app_font.dart';
 import '../core/providers/providers.dart';
 import '../core/router/router.dart';
 import 'app_orientation.dart';
@@ -23,6 +24,7 @@ class _LearnYAppState extends ConsumerState<LearnYApp>
   @override
   void initState() {
     super.initState();
+    AppFont.registerLicense();
     WidgetsBinding.instance.addObserver(this);
     ref.read(appSessionCoordinatorProvider);
     unawaited(ref.read(appUpdateInfoProvider.future));

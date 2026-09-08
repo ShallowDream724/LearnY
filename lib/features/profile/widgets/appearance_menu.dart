@@ -68,12 +68,12 @@ class _AppearanceMenuState extends State<AppearanceMenu> {
               onPressed: () =>
                   controller.isOpen ? controller.close() : controller.open(),
               style: TextButton.styleFrom(
-                backgroundColor: c.surfaceHigh,
+                backgroundColor: c.surface.withAlpha(190),
                 foregroundColor: c.text,
                 overlayColor: c.text,
                 side: BorderSide(color: c.border, width: 0.5),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
                 minimumSize: const Size(112, 40),

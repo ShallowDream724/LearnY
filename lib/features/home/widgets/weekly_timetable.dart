@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import '../../../core/design/app_materials.dart';
 
 import '../../../core/design/app_theme_colors.dart';
 import '../../../core/schedule/schedule_models.dart';
@@ -309,24 +310,12 @@ class _TimetableEvent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = context.isDark;
-    const palette = [
-      Color(0xFF3478A5),
-      Color(0xFF28816C),
-      Color(0xFF9A6842),
-      Color(0xFF825C91),
-      Color(0xFFAF526C),
-      Color(0xFF637A31),
-    ];
-    final hash = item.courseName.codeUnits.fold<int>(
-      0,
-      (a, b) => (a * 31 + b) & 0x7fffffff,
+    final colors = StudyPalette.of(
+      context,
+      StudyPalette.course(item.courseId ?? item.courseName),
     );
-    final color = palette[hash % palette.length];
-    final foreground = Color.lerp(
-      color,
-      dark ? Colors.white : Colors.black,
-      dark ? .65 : .22,
-    )!;
+    final color = colors.accent;
+    final foreground = colors.accent;
     final label = '${item.courseName}\n${item.timeLabel}\n${item.location}';
     return Semantics(
       label: label,

@@ -1,25 +1,16 @@
-// Reusable file card widget — used in global files list and course detail.
-//
-// Shows: file type icon, course name, title, size/time, download state,
-// importance badge, new badge.
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/design/app_materials.dart';
 import '../../../core/design/app_theme_colors.dart';
-import '../../../core/design/colors.dart';
 import '../../../core/design/file_type_utils.dart';
+import '../../../core/design/typography.dart';
 import '../../../core/files/file_asset_runtime.dart';
 import '../../../core/files/file_models.dart';
 import '../../../core/services/file_download_service.dart';
+import 'file_type_mark.dart';
 
 class FileCard extends ConsumerWidget {
-  final FileDetailItem item;
-  final bool hideCourseName;
-  final bool isFavorite;
-  final bool forceDownloaded;
-  final VoidCallback? onTap;
-  final Widget? trailing;
-
   const FileCard({
     super.key,
     required this.item,
@@ -30,207 +21,155 @@ class FileCard extends ConsumerWidget {
     this.trailing,
   });
 
+  final FileDetailItem item;
+  final bool hideCourseName;
+  final bool isFavorite;
+  final bool forceDownloaded;
+  final VoidCallback? onTap;
+  final Widget? trailing;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.colors;
-
     final ext = FileTypeUtils.extractExt(item.title, item.fileType);
-    final color = FileTypeUtils.color(ext);
-
+    final course = StudyPalette.of(context, StudyPalette.course(item.courseId));
+    final jade = StudyPalette.of(context, StudyTone.jade);
+    final ochre = StudyPalette.of(context, StudyTone.ochre);
     final downloadStates = ref.watch(fileDownloadProvider);
     final runtime = ref
         .read(fileAssetRuntimeResolverProvider)
         .resolveDetailItem(item, downloadStates);
     final isDownloaded = forceDownloaded || runtime.isDownloaded;
-    final isDownloading = runtime.isDownloading;
+    final time = _formatTimeAgo(item.uploadTime);
 
     return Material(
-      color: c.surface,
-      borderRadius: BorderRadius.circular(8),
+      color: c.surface.withValues(alpha: 0.75),
+      borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: c.border, width: 0.5),
-          ),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // File type icon
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: color.withAlpha(20),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Stack(
-                  children: [
-                    Center(
-                      child: Icon(
-                        FileTypeUtils.icon(ext),
-                        color: color,
-                        size: 21,
-                      ),
-                    ),
-                    // Download status indicator
-                    if (isDownloaded)
-                      Positioned(
-                        right: 2,
-                        bottom: 2,
-                        child: Container(
-                          width: 12,
-                          height: 12,
-                          decoration: BoxDecoration(
-                            color: AppColors.success,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: c.surface, width: 1.5),
-                          ),
-                          child: const Icon(
-                            Icons.check,
-                            size: 7,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    if (isDownloading)
-                      Positioned(
-                        right: 1,
-                        bottom: 1,
-                        child: SizedBox(
-                          width: 12,
-                          height: 12,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 1.5,
-                            value: runtime.progress,
-                            color: color,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-
-              // File info
+              FileTypeMark(extension: ext),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Course name (if shown)
-                    if (!hideCourseName)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 2),
-                        child: Text(
-                          item.courseName,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: c.subtitle,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                    if (!hideCourseName && item.courseName.isNotEmpty) ...[
+                      Text(
+                        item.courseName,
+                        style: AppTypography.bodySmall.copyWith(
+                          color: course.accent,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-
-                    // Title row + badges
+                      const SizedBox(height: 4),
+                    ],
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
                           child: Text(
                             item.title,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
+                            style: AppTypography.titleMedium.copyWith(
                               color: c.text,
+                              fontSize: 14,
+                              height: 1.45,
                             ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (item.isNew)
-                          Container(
-                            margin: const EdgeInsets.only(left: 6),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 5,
-                              vertical: 1,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.info.withAlpha(20),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Text(
-                              '新',
-                              style: TextStyle(
-                                color: AppColors.info,
-                                fontSize: 9,
-                                fontWeight: FontWeight.w700,
+                        if (item.markedImportant)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 6, top: 2),
+                            child: Tooltip(
+                              message: '教师标记为重要',
+                              child: Icon(
+                                Icons.star_rounded,
+                                size: 16,
+                                color: ochre.accent,
                               ),
                             ),
                           ),
-                        if (item.markedImportant)
-                          const Padding(
-                            padding: EdgeInsets.only(left: 4),
-                            child: Icon(
-                              Icons.star_rounded,
-                              size: 14,
-                              color: AppColors.warning,
-                            ),
-                          ),
                         if (isFavorite)
-                          const Padding(
-                            padding: EdgeInsets.only(left: 4),
-                            child: Icon(
-                              Icons.bookmark_rounded,
-                              size: 14,
-                              color: AppColors.warning,
+                          Padding(
+                            padding: const EdgeInsets.only(left: 6, top: 2),
+                            child: Tooltip(
+                              message: '已收藏',
+                              child: Icon(
+                                Icons.bookmark_rounded,
+                                size: 16,
+                                color: ochre.accent,
+                              ),
                             ),
                           ),
                       ],
                     ),
-                    const SizedBox(height: 3),
-
-                    // Metadata row
+                    const SizedBox(height: 6),
                     Wrap(
-                      spacing: 8,
+                      spacing: 10,
                       runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        Text(
-                          ext.toUpperCase(),
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: color,
-                            fontWeight: FontWeight.w600,
+                        if (item.isNew)
+                          Text(
+                            '未读',
+                            style: AppTypography.labelSmall.copyWith(
+                              color: c.infoAccent,
+                            ),
                           ),
-                        ),
                         Text(
                           item.size.isNotEmpty
                               ? item.size
                               : '${item.rawSize} B',
-                          style: TextStyle(fontSize: 11, color: c.tertiary),
+                          style: AppTypography.bodySmall.copyWith(
+                            color: c.subtitle,
+                          ),
                         ),
-                        Text(
-                          _formatTimeAgo(item.uploadTime),
-                          style: TextStyle(fontSize: 11, color: c.tertiary),
-                        ),
+                        if (time.isNotEmpty)
+                          Text(
+                            time,
+                            style: AppTypography.bodySmall.copyWith(
+                              color: c.tertiary,
+                            ),
+                          ),
+                        if (isDownloaded)
+                          Text(
+                            '已下载',
+                            style: AppTypography.labelSmall.copyWith(
+                              color: jade.accent,
+                            ),
+                          ),
+                        if (runtime.isDownloading)
+                          Text(
+                            '下载中 ${(runtime.progress * 100).toInt()}%',
+                            style: AppTypography.labelSmall.copyWith(
+                              color: c.infoAccent,
+                            ),
+                          ),
                       ],
                     ),
+                    if (runtime.isDownloading) ...[
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(2),
+                        child: LinearProgressIndicator(
+                          value: runtime.progress > 0 ? runtime.progress : null,
+                          minHeight: 3,
+                          backgroundColor: c.surfaceHigh,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
-
-              // Chevron
-              trailing ??
-                  Padding(
-                    padding: const EdgeInsets.only(left: 6),
-                    child: Icon(
-                      Icons.chevron_right_rounded,
-                      size: 18,
-                      color: c.tertiary,
-                    ),
-                  ),
+              if (trailing != null) ...[const SizedBox(width: 8), trailing!],
             ],
           ),
         ),

@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/design/app_materials.dart';
 import '../../core/design/app_theme_colors.dart';
 import '../../core/design/app_surfaces.dart';
 import '../../core/design/shimmer.dart';
 import '../../core/design/typography.dart';
 import '../../core/router/router.dart';
 import 'providers/course_queries.dart';
+import 'providers/course_workbench_models.dart';
+import 'providers/course_workbench_repository.dart';
 import 'widgets/course_detail_tabs.dart';
 
 class CourseDetailScreen extends ConsumerStatefulWidget {
@@ -38,6 +41,10 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
   Widget build(BuildContext context) {
     final c = context.colors;
     final courseAsync = ref.watch(courseDetailProvider(widget.courseId));
+    final preferences = ref.watch(courseDisplayPrefsProvider).valueOrNull;
+    final preference = preferences
+        ?.where((item) => item.courseId == widget.courseId)
+        .firstOrNull;
     return Scaffold(
       appBar: AppBar(
         title: const Text('课程详情'),
@@ -74,7 +81,10 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
               title: '课程未找到',
             );
           }
-          final tabHeight = MediaQuery.textScalerOf(context).scale(16) + 28;
+          final alias = preference?.alias?.trim();
+          final title = alias?.isNotEmpty == true ? alias! : course.name;
+          final tabHeight =
+              MediaQuery.textScalerOf(context).scale(14) * 1.2 + 24;
           final tabs = TabBar(
             controller: _tabController,
             onTap: (index) => _tabController.animateTo(
@@ -84,7 +94,13 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
             labelColor: c.infoAccent,
             unselectedLabelColor: c.subtitle,
             indicatorColor: c.infoAccent,
-            indicatorSize: TabBarIndicatorSize.label,
+            indicatorSize: TabBarIndicatorSize.tab,
+            dividerColor: Colors.transparent,
+            indicator: BoxDecoration(
+              color: c.infoAccent.withAlpha(context.isDark ? 36 : 19),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            indicatorPadding: const EdgeInsets.all(4),
             labelStyle: AppTypography.labelLarge,
             unselectedLabelStyle: AppTypography.labelMedium,
             tabs: [
@@ -98,26 +114,57 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
               SliverToBoxAdapter(
                 child: ReadingWidth(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          course.name,
-                          style: AppTypography.headlineSmall.copyWith(
-                            color: c.text,
-                          ),
-                        ),
-                        if (course.teacherName.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Text(
-                            course.teacherName,
-                            style: AppTypography.bodyMedium.copyWith(
-                              color: c.subtitle,
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                    child: StudySurface(
+                      tone: StudyPalette.course(widget.courseId),
+                      radius: 22,
+                      padding: const EdgeInsets.all(20),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  title,
+                                  style: AppTypography.headlineMedium.copyWith(
+                                    color: c.text,
+                                    fontSize: 24,
+                                    height: 1.35,
+                                  ),
+                                ),
+                                if (title != course.name) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    course.name,
+                                    style: AppTypography.bodyMedium.copyWith(
+                                      color: c.subtitle,
+                                    ),
+                                  ),
+                                ],
+                                if (course.teacherName.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    course.teacherName,
+                                    style: AppTypography.bodyMedium.copyWith(
+                                      color: c.subtitle,
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
+                          const SizedBox(width: 20),
+                          CourseSeal(
+                            courseId: widget.courseId,
+                            size: 44,
+                            icon: resolveCourseIconOption(
+                              preference?.iconKey,
+                            )?.icon,
+                          ),
                         ],
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -156,7 +203,7 @@ class _CourseTabsHeader extends SliverPersistentHeaderDelegate {
   final TabBar tabs;
 
   @override
-  double get minExtent => tabs.preferredSize.height;
+  double get minExtent => tabs.preferredSize.height + 12;
   @override
   double get maxExtent => minExtent;
   @override
@@ -167,7 +214,22 @@ class _CourseTabsHeader extends SliverPersistentHeaderDelegate {
   ) => SizedBox.expand(
     child: Material(
       color: context.colors.bg,
-      child: ReadingWidth(child: tabs),
+      child: ReadingWidth(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: context.colors.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: context.colors.border.withAlpha(130),
+                width: .7,
+              ),
+            ),
+            child: tabs,
+          ),
+        ),
+      ),
     ),
   );
   @override

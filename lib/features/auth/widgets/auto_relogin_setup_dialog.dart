@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/auth/auth_entry_models.dart';
+import '../../../core/design/app_materials.dart';
 import '../../../core/design/app_theme_colors.dart';
 import '../../../core/design/colors.dart';
 import '../../../core/design/typography.dart';
@@ -57,9 +58,10 @@ class _AutoReloginSetupDialogState extends State<AutoReloginSetupDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       scrollable: true,
-      titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
-      contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-      actionsPadding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+      backgroundColor: StudyPalette.of(context, StudyTone.slate).fill,
+      titlePadding: const EdgeInsets.fromLTRB(28, 26, 28, 0),
+      contentPadding: const EdgeInsets.fromLTRB(28, 16, 28, 0),
+      actionsPadding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
       title: Text(
         '启用自动重新登录',
         style: AppTypography.titleLarge.copyWith(color: context.colors.text),
@@ -77,7 +79,7 @@ class _AutoReloginSetupDialogState extends State<AutoReloginSetupDialog> {
                 height: 1.45,
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             TextField(
               controller: _usernameController,
               autofocus: widget.initialUsername.isEmpty,

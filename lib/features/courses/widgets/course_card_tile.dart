@@ -2,27 +2,15 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../core/design/app_materials.dart';
 import '../../../core/design/app_theme_colors.dart';
-import '../../../core/design/colors.dart';
 import '../../../core/design/typography.dart';
 import '../providers/course_workbench_models.dart';
-
-const _cardColors = [
-  AppColors.primary,
-  Color(0xFF06B6D4),
-  Color(0xFF8B5CF6),
-  Color(0xFFEC4899),
-  Color(0xFFF97316),
-  Color(0xFF14B8A6),
-  Color(0xFF6366F1),
-  Color(0xFFEAB308),
-];
 
 class CourseCardTile extends StatelessWidget {
   const CourseCardTile({
     super.key,
     required this.card,
-    required this.colorIndex,
     required this.isEditing,
     required this.onTap,
     this.onLongPress,
@@ -30,201 +18,222 @@ class CourseCardTile extends StatelessWidget {
   });
 
   final ResolvedCourseCardModel card;
-  final int colorIndex;
   final bool isEditing;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
   final ValueChanged<Rect>? onMenu;
 
-  /// Fixed grid tracks retain two title lines and room for wrapped counters.
-  static double gridExtent(BuildContext context, {required bool isEditing}) {
-    final scaler = MediaQuery.textScalerOf(context);
-    final header = math.max(
-      36.0,
-      isEditing ? 44.0 : scaler.scale(10) * 1.2 + 4,
+  static TextStyle get _titleStyle => AppTypography.titleLarge.copyWith(
+    fontSize: 16,
+    height: 1.4,
+    fontWeight: FontWeight.w500,
+  );
+
+  static TextStyle get _statStyle => AppTypography.bodySmall.copyWith(
+    fontWeight: FontWeight.w500,
+    fontFeatures: const [FontFeature.tabularFigures()],
+  );
+
+  static List<String> _statLabels(ResolvedCourseCardModel card) => [
+    if (card.pendingHomeworks > 0) '${card.pendingHomeworks} 待交',
+    if (card.unreadNotifications > 0) '${card.unreadNotifications} 未读',
+    '${card.totalFiles} 文件',
+  ];
+
+  /// Measures the same text and wrapping used by the tile. The grid takes the
+  /// tallest card in each row, so sparse rows do not inherit empty title tracks.
+  static double gridExtent(
+    BuildContext context, {
+    required ResolvedCourseCardModel card,
+    required double width,
+    required bool isEditing,
+  }) {
+    final textScaler = MediaQuery.textScalerOf(context);
+    final textDirection = Directionality.of(context);
+    final contentWidth = math.max(1.0, width - 32);
+    Size measure(String text, TextStyle style, double maxWidth, int maxLines) {
+      final painter = TextPainter(
+        text: TextSpan(text: text, style: style),
+        textScaler: textScaler,
+        textDirection: textDirection,
+        maxLines: maxLines,
+        ellipsis: '…',
+      )..layout(maxWidth: math.max(1, maxWidth));
+      final size = painter.size;
+      painter.dispose();
+      return size;
+    }
+
+    final title = measure(
+      card.displayTitle,
+      _titleStyle,
+      contentWidth - (resolveCourseIconOption(card.iconKey) == null ? 0 : 44),
+      2,
     );
-    final title = scaler.scale(14) * 1.4 * 2;
-    final subtitle = scaler.scale(12) * 1.5;
-    final counters = math.max(13.0, scaler.scale(11) * 1.5) * 2;
-    return (28 + header + 12 + title + 4 + subtitle + 8 + counters + 6)
+    final teacher = card.secondaryLabel.isEmpty
+        ? 0.0
+        : 6 +
+              measure(
+                card.secondaryLabel,
+                AppTypography.bodySmall,
+                contentWidth,
+                1,
+              ).height;
+    final statWidth = math.max(1.0, contentWidth - (isEditing ? 48 : 0));
+    var lineWidth = 0.0;
+    var lines = 1;
+    var lineHeight = 0.0;
+    final labels = _statLabels(card);
+    for (var index = 0; index < labels.length; index++) {
+      final size = measure(
+        labels[index],
+        _statStyle.copyWith(
+          fontWeight: index == labels.length - 1
+              ? FontWeight.w400
+              : FontWeight.w500,
+        ),
+        statWidth,
+        1,
+      );
+      lineHeight = math.max(lineHeight, size.height);
+      if (lineWidth > 0 && lineWidth + 10 + size.width > statWidth) {
+        lines++;
+        lineWidth = size.width;
+      } else {
+        lineWidth += (lineWidth == 0 ? 0 : 10) + size.width;
+      }
+    }
+    final footerHeight = math.max(
+      isEditing ? 44.0 : 0.0,
+      lines * lineHeight + (lines - 1) * 4,
+    );
+    return (32 +
+            math.max(32, title.height) +
+            teacher +
+            14 +
+            1 +
+            10 +
+            footerHeight +
+            2)
         .ceilToDouble();
   }
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final accent = _cardColors[colorIndex % _cardColors.length];
-    final iconOption = resolveCourseIconOption(card.iconKey);
+    final tone = StudyPalette.course(card.course.id);
+    final palette = StudyPalette.of(context, tone);
+    final teacher = card.secondaryLabel;
+    final labels = _statLabels(card);
 
-    return Material(
-      color: c.surface,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        onTap: onTap,
-        onLongPress: onLongPress,
-        mouseCursor: isEditing
-            ? SystemMouseCursors.grab
-            : SystemMouseCursors.click,
-        onSecondaryTapDown: isEditing && onMenu != null
-            ? (details) => onMenu!(details.globalPosition & Size.zero)
-            : null,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: isEditing
-                  ? accent.withAlpha(context.isDark ? 78 : 96)
-                  : c.border,
-              width: isEditing ? 0.9 : 0.5,
-            ),
-          ),
-          child: Column(
+    return StudySurface(
+      tone: tone,
+      radius: 18,
+      padding: const EdgeInsets.all(16),
+      onTap: onTap,
+      onLongPress: onLongPress,
+      mouseCursor: isEditing
+          ? SystemMouseCursors.grab
+          : SystemMouseCursors.click,
+      onSecondaryTapDown: isEditing && onMenu != null
+          ? (details) => onMenu!(details.globalPosition & Size.zero)
+          : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: accent.withAlpha(context.isDark ? 40 : 20),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Center(
-                      child: iconOption != null
-                          ? Icon(iconOption.icon, color: accent, size: 18)
-                          : Text(
-                              _initials(card.course.name),
-                              style: AppTypography.labelSmall.copyWith(
-                                color: accent,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 12,
-                              ),
-                            ),
-                    ),
+              Expanded(
+                child: Tooltip(
+                  triggerMode: TooltipTriggerMode.manual,
+                  message: card.hasCustomAlias
+                      ? '${card.displayTitle}\n${card.course.name}'
+                      : card.course.name,
+                  child: Text(
+                    card.displayTitle,
+                    style: _titleStyle.copyWith(color: c.text),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  const Spacer(),
-                  if (isEditing)
-                    Builder(
-                      builder: (context) => IconButton(
-                        tooltip: '编辑课程',
-                        onPressed: () {
-                          final box = context.findRenderObject()! as RenderBox;
-                          if (onMenu != null) {
-                            onMenu!(box.localToGlobal(Offset.zero) & box.size);
-                          } else {
-                            onTap();
-                          }
-                        },
-                        icon: Icon(Icons.more_horiz_rounded, color: c.subtitle),
-                      ),
-                    )
-                  else if (card.aggregateBadgeCount > 0)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.unreadBadge,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        '${card.aggregateBadgeCount}',
-                        style: AppTypography.labelSmall.copyWith(
-                          color: Colors.white,
-                          fontSize: 10,
-                        ),
-                      ),
-                    ),
-                ],
+                ),
               ),
-              const SizedBox(height: 12),
-              Text(
-                card.displayTitle,
-                style: AppTypography.titleMedium.copyWith(color: c.text),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                card.secondaryLabel,
+              if (resolveCourseIconOption(card.iconKey) != null) ...[
+                const SizedBox(width: 12),
+                CourseSeal(
+                  courseId: card.course.id,
+                  size: 32,
+                  icon: resolveCourseIconOption(card.iconKey)?.icon,
+                ),
+              ],
+            ],
+          ),
+          if (teacher.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Tooltip(
+              triggerMode: TooltipTriggerMode.manual,
+              message: teacher,
+              child: Text(
+                teacher,
                 style: AppTypography.bodySmall.copyWith(color: c.subtitle),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 12,
-                runSpacing: 6,
-                children: [
-                  _MicroStat(
-                    icon: Icons.notifications_none_rounded,
-                    count: card.unreadNotifications,
-                    color: card.unreadNotifications > 0
-                        ? AppColors.info
-                        : c.tertiary,
-                  ),
-                  _MicroStat(
-                    icon: Icons.assignment_outlined,
-                    count: card.pendingHomeworks,
-                    color: card.pendingHomeworks > 0
-                        ? AppColors.warning
-                        : c.tertiary,
-                  ),
-                  _MicroStat(
-                    icon: Icons.folder_outlined,
-                    count: card.totalFiles,
-                    color: c.tertiary,
-                  ),
-                ],
+            ),
+          ],
+          const Spacer(),
+          const SizedBox(height: 14),
+          Divider(height: 1, thickness: 1, color: palette.edge.withAlpha(110)),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: Wrap(
+                  spacing: 10,
+                  runSpacing: 4,
+                  children: [
+                    for (var index = 0; index < labels.length; index++)
+                      Text(
+                        labels[index],
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: _statStyle.copyWith(
+                          color: index == labels.length - 1
+                              ? c.subtitle
+                              : palette.accent,
+                          fontWeight: index == labels.length - 1
+                              ? FontWeight.w400
+                              : FontWeight.w500,
+                        ),
+                      ),
+                  ],
+                ),
               ),
+              if (isEditing) ...[
+                const SizedBox(width: 4),
+                Builder(
+                  builder: (context) => IconButton(
+                    tooltip: '编辑课程',
+                    constraints: const BoxConstraints.tightFor(
+                      width: 44,
+                      height: 44,
+                    ),
+                    onPressed: () {
+                      final box = context.findRenderObject()! as RenderBox;
+                      if (onMenu != null) {
+                        onMenu!(box.localToGlobal(Offset.zero) & box.size);
+                      } else {
+                        onTap();
+                      }
+                    },
+                    icon: Icon(Icons.more_horiz_rounded, color: palette.accent),
+                  ),
+                ),
+              ],
             ],
           ),
-        ),
+        ],
       ),
-    );
-  }
-
-  String _initials(String name) {
-    if (name.isEmpty) return '';
-    final chars = name.runes.toList();
-    if (chars.isNotEmpty && chars[0] > 127) {
-      return String.fromCharCode(chars[0]);
-    }
-    return name.substring(0, name.length >= 2 ? 2 : 1).toUpperCase();
-  }
-}
-
-class _MicroStat extends StatelessWidget {
-  const _MicroStat({
-    required this.icon,
-    required this.count,
-    required this.color,
-  });
-
-  final IconData icon;
-  final int count;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 13, color: color),
-        const SizedBox(width: 3),
-        Text(
-          count.toString(),
-          style: AppTypography.bodySmall.copyWith(
-            color: color,
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
     );
   }
 }

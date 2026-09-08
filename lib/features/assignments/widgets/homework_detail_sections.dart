@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/design/app_theme_colors.dart';
+import '../../../core/design/app_materials.dart';
 import '../../../core/design/colors.dart';
 import '../../../core/design/typography.dart';
 import '../../../core/database/database.dart' as db;
@@ -23,62 +24,71 @@ class HomeworkStatusHeader extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.colors;
     final now = ref.watch(minuteTickProvider).valueOrNull ?? nowInShanghai();
-    final (statusText, statusColor, statusIcon) = _statusInfo(now);
+    final (statusText, statusTone) = _statusInfo(now);
+    final status = StudyPalette.of(context, statusTone);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: statusColor.withAlpha(20),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: statusColor.withAlpha(60)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(statusIcon, size: 14, color: statusColor),
-                  const SizedBox(width: 5),
-                  Text(
-                    statusText,
-                    style: AppTypography.labelMedium.copyWith(
-                      color: statusColor,
-                      fontWeight: FontWeight.w600,
+    return StudySurface(
+      tone: StudyPalette.course(homework.courseId),
+      padding: const EdgeInsets.all(22),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: status.fill,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      statusText,
+                      style: AppTypography.labelMedium.copyWith(
+                        color: status.accent,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            if (homework.isFavorite) ...[
-              const SizedBox(width: 8),
-              Icon(Icons.bookmark_rounded, size: 18, color: AppColors.warning),
+              if (homework.isFavorite) ...[
+                const SizedBox(width: 8),
+                Icon(
+                  Icons.bookmark_rounded,
+                  size: 18,
+                  color: AppColors.warning,
+                ),
+              ],
             ],
-          ],
-        ),
-        const SizedBox(height: 12),
-        Text(
-          homework.title,
-          style: AppTypography.headlineSmall.copyWith(color: c.text),
-        ),
-      ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            homework.title,
+            style: AppTypography.headlineSmall.copyWith(color: c.text),
+          ),
+        ],
+      ),
     );
   }
 
-  (String, Color, IconData) _statusInfo(DateTime now) {
+  (String, StudyTone) _statusInfo(DateTime now) {
     if (homework.graded) {
-      return ('已批改', AppColors.success, Icons.check_circle_rounded);
+      return ('已批改', StudyTone.jade);
     }
     if (homework.submitted) {
-      return ('已提交', AppColors.info, Icons.cloud_done_rounded);
+      return ('已提交', StudyTone.jade);
     }
     final deadline = tryParseEpochMillisToLocal(homework.deadline);
     if (deadline != null && deadline.isBefore(now)) {
-      return ('已超期', AppColors.error, Icons.error_rounded);
+      return ('已超期', StudyTone.rose);
     }
-    return ('待提交', AppColors.warning, Icons.pending_rounded);
+    return ('待提交', StudyTone.ochre);
   }
 }
 
@@ -97,77 +107,84 @@ class HomeworkDeadlineCard extends ConsumerWidget {
     final isPending = !homework.submitted && !homework.graded;
 
     String? countdown;
-    var countdownColor = AppColors.success;
+    var countdownColor = StudyPalette.of(context, StudyTone.jade).accent;
     if (deadline != null && isPending && !isOverdue) {
       final diff = deadline.difference(now);
       if (diff.inDays > 3) {
         countdown = '剩余 ${diff.inDays} 天';
-        countdownColor = AppColors.success;
+        countdownColor = StudyPalette.of(context, StudyTone.jade).accent;
       } else if (diff.inDays > 1) {
         countdown = '剩余 ${diff.inDays} 天 ${diff.inHours % 24} 小时';
-        countdownColor = AppColors.warning;
+        countdownColor = StudyPalette.of(context, StudyTone.ochre).accent;
       } else if (diff.inHours > 0) {
         countdown = '剩余 ${diff.inHours} 小时 ${diff.inMinutes % 60} 分';
-        countdownColor = AppColors.error;
+        countdownColor = StudyPalette.of(context, StudyTone.rose).accent;
       } else {
         countdown = '剩余 ${diff.inMinutes} 分钟';
-        countdownColor = AppColors.error;
+        countdownColor = StudyPalette.of(context, StudyTone.rose).accent;
       }
     } else if (deadline != null && isOverdue && isPending) {
       final diff = now.difference(deadline);
       countdown =
           '已超期 ${diff.inDays > 0 ? '${diff.inDays} 天' : '${diff.inHours} 小时'}';
-      countdownColor = AppColors.error;
+      countdownColor = StudyPalette.of(context, StudyTone.rose).accent;
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Wrap(
-          spacing: 12,
-          runSpacing: 6,
-          children: [
-            Text(
-              '截止时间',
-              style: AppTypography.labelMedium.copyWith(color: c.subtitle),
-            ),
-            Text(
-              deadline != null
-                  ? '${deadline.year}/${deadline.month}/${deadline.day} '
-                        '${formatHourMinuteLabel(deadline)}'
-                  : '未知',
-              style: AppTypography.titleSmall.copyWith(color: c.text),
-            ),
-          ],
-        ),
-        if (homework.lateSubmissionDeadline != null) ...[
-          const SizedBox(height: 8),
+    return StudySurface(
+      tone: isPending
+          ? (isOverdue ? StudyTone.rose : StudyTone.ochre)
+          : StudyTone.slate,
+      radius: 14,
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Wrap(
             spacing: 12,
             runSpacing: 6,
             children: [
               Text(
-                '补交截止',
+                '截止时间',
                 style: AppTypography.labelMedium.copyWith(color: c.subtitle),
               ),
               Text(
-                formatHomeworkFullTime(homework.lateSubmissionDeadline!),
-                style: AppTypography.bodySmall.copyWith(color: c.subtitle),
+                deadline != null
+                    ? '${deadline.year}/${deadline.month}/${deadline.day} '
+                          '${formatHourMinuteLabel(deadline)}'
+                    : '未知',
+                style: AppTypography.titleSmall.copyWith(color: c.text),
               ),
             ],
           ),
-        ],
-        if (countdown != null) ...[
-          const SizedBox(height: 12),
-          Text(
-            countdown,
-            style: AppTypography.titleSmall.copyWith(
-              color: countdownColor,
-              fontWeight: FontWeight.w700,
+          if (homework.lateSubmissionDeadline != null) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 12,
+              runSpacing: 6,
+              children: [
+                Text(
+                  '补交截止',
+                  style: AppTypography.labelMedium.copyWith(color: c.subtitle),
+                ),
+                Text(
+                  formatHomeworkFullTime(homework.lateSubmissionDeadline!),
+                  style: AppTypography.bodySmall.copyWith(color: c.subtitle),
+                ),
+              ],
             ),
-          ),
+          ],
+          if (countdown != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              countdown,
+              style: AppTypography.titleSmall.copyWith(
+                color: countdownColor,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
@@ -206,8 +223,6 @@ class HomeworkGradeSection extends StatelessWidget {
 
     return HomeworkSectionCard(
       title: '批改结果',
-      icon: Icons.grading_rounded,
-      iconColor: AppColors.success,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -358,14 +373,10 @@ class HomeworkSectionCard extends StatelessWidget {
   const HomeworkSectionCard({
     super.key,
     required this.title,
-    required this.icon,
-    required this.iconColor,
     required this.child,
   });
 
   final String title;
-  final IconData icon;
-  final Color iconColor;
   final Widget child;
 
   @override
@@ -374,25 +385,16 @@ class HomeworkSectionCard extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: c.border)),
+        color: c.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: c.border.withValues(alpha: 0.5), width: 0.7),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(icon, size: 18, color: iconColor),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  style: AppTypography.titleMedium.copyWith(color: c.text),
-                ),
-              ),
-            ],
-          ),
+          Text(title, style: AppTypography.titleMedium.copyWith(color: c.text)),
           const SizedBox(height: 12),
           child,
         ],

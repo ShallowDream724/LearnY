@@ -13,10 +13,10 @@ abstract final class AppColors {
   // ─────────────────────────────────────────────
 
   /// Primary action colors, with a distinct light foreground for dark surfaces.
-  static const Color primary = Color(0xFF006BD6);
-  static const Color primaryLight = Color(0xFF70B1FF);
-  static const Color primaryDark = Color(0xFF0754A7);
-  static const Color primaryContainer = Color(0xFF153B63);
+  static const Color primary = Color(0xFF5966A9);
+  static const Color primaryLight = Color(0xFFBCC7FF);
+  static const Color primaryDark = Color(0xFF3D4984);
+  static const Color primaryContainer = Color(0xFF343C60);
 
   /// Secondary — a warm amber for accents, badges, and highlights.
   static const Color secondary = Color(0xFFF59E0B);
@@ -66,10 +66,10 @@ abstract final class AppColors {
   //  Dark theme surfaces
   // ─────────────────────────────────────────────
 
-  static const Color darkBackground = Color(0xFF18191C);
-  static const Color darkSurface = Color(0xFF222326);
-  static const Color darkSurfaceHigh = Color(0xFF2D2F33);
-  static const Color darkBorder = Color(0xFF3B3D42);
+  static const Color darkBackground = Color(0xFF181A24);
+  static const Color darkSurface = Color(0xFF242735);
+  static const Color darkSurfaceHigh = Color(0xFF303545);
+  static const Color darkBorder = Color(0xFF424758);
 
   static const Color darkTextPrimary = Color(0xFFF3F4F6);
   static const Color darkTextSecondary = Color(0xFFBABEC6);
@@ -79,14 +79,14 @@ abstract final class AppColors {
   //  Light theme surfaces
   // ─────────────────────────────────────────────
 
-  static const Color lightBackground = Color(0xFFF7F8FA);
+  static const Color lightBackground = Color(0xFFF5F5FA);
   static const Color lightSurface = Color(0xFFFFFFFF);
-  static const Color lightSurfaceHigh = Color(0xFFF0F2F5);
-  static const Color lightBorder = Color(0xFFE0E3E8);
+  static const Color lightSurfaceHigh = Color(0xFFEEEFF6);
+  static const Color lightBorder = Color(0xFFE1E3EE);
 
-  static const Color lightTextPrimary = Color(0xFF1D2026);
-  static const Color lightTextSecondary = Color(0xFF5D636C);
-  static const Color lightTextTertiary = Color(0xFF707780);
+  static const Color lightTextPrimary = Color(0xFF2D3348);
+  static const Color lightTextSecondary = Color(0xFF626B82);
+  static const Color lightTextTertiary = Color(0xFF777F94);
 
   // ─────────────────────────────────────────────
   //  Unread / notification badge

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth.dart';
 import '../../core/design/app_toast.dart';
+import '../../core/design/app_materials.dart';
 import '../../core/design/app_theme_colors.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/typography.dart';
@@ -238,45 +239,62 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildLogo(),
-                  const SizedBox(height: 20),
-                  Text(
-                    'LearnY',
-                    style: AppTypography.headlineLarge.copyWith(color: c.text),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '清华大学网络学堂',
-                    style: AppTypography.bodyLarge.copyWith(color: c.subtitle),
-                  ),
-                  const SizedBox(height: 40),
-                  if (_errorMessage != null) ...[
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.error.withAlpha(20),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: AppColors.error.withAlpha(60),
+              constraints: const BoxConstraints(maxWidth: 920),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final wide = constraints.maxWidth >= 760;
+                  final identity = Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: wide
+                        ? CrossAxisAlignment.start
+                        : CrossAxisAlignment.center,
+                    children: [
+                      const StudyMark(size: 64),
+                      const SizedBox(height: 24),
+                      Text(
+                        'LearnY',
+                        style: AppTypography.headlineLarge.copyWith(
+                          color: c.text,
+                          fontSize: wide ? 42 : 34,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.error_outline_rounded,
-                            color: AppColors.error,
-                            size: 20,
+                      const SizedBox(height: 12),
+                      Text(
+                        '清华大学网络学堂',
+                        style: AppTypography.bodyLarge.copyWith(
+                          color: c.subtitle,
+                        ),
+                      ),
+                    ],
+                  );
+                  final signIn = StudySurface(
+                    tone: StudyTone.slate,
+                    radius: 24,
+                    padding: EdgeInsets.all(wide ? 32 : 22),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          '登录',
+                          style: AppTypography.headlineMedium.copyWith(
+                            color: c.text,
                           ),
-                          const SizedBox(width: 10),
-                          Expanded(
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '使用清华大学统一身份账号',
+                          style: AppTypography.bodyMedium.copyWith(
+                            color: c.subtitle,
+                          ),
+                        ),
+                        const SizedBox(height: 28),
+                        if (_errorMessage != null) ...[
+                          StudySurface(
+                            tone: StudyTone.rose,
+                            radius: 12,
+                            padding: const EdgeInsets.all(14),
                             child: Text(
                               _errorMessage!,
                               style: AppTypography.bodySmall.copyWith(
@@ -284,78 +302,76 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               ),
                             ),
                           ),
+                          const SizedBox(height: 16),
                         ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                  LoginAutoReloginCard(
-                    enabled: _enableAutoReloginOnLogin,
-                    showGuideBody: showGuideBody,
-                    onChanged: (value) {
-                      setState(() {
-                        _enableAutoReloginOnLogin = value;
-                      });
-                    },
-                    onLearnMore: _showAutoReloginDetails,
-                    onDismissGuide: _dismissGuide,
-                  ),
-                  const SizedBox(height: 18),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _isLaunchingFlow ? null : _startLogin,
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(52),
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                        LoginAutoReloginCard(
+                          enabled: _enableAutoReloginOnLogin,
+                          showGuideBody: showGuideBody,
+                          onChanged: (value) =>
+                              setState(() => _enableAutoReloginOnLogin = value),
+                          onLearnMore: _showAutoReloginDetails,
+                          onDismissGuide: _dismissGuide,
                         ),
-                      ),
-                      child: _isLaunchingFlow
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.5,
-                                color: Colors.white,
-                              ),
-                            )
-                          : Text(
-                              '统一身份认证登录',
-                              style: AppTypography.labelLarge.copyWith(
-                                color: Colors.white,
-                                fontSize: 15,
-                              ),
+                        const SizedBox(height: 22),
+                        FilledButton(
+                          onPressed: _isLaunchingFlow ? null : _startLogin,
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size.fromHeight(52),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
                             ),
+                          ),
+                          child: _isLaunchingFlow
+                              ? SizedBox.square(
+                                  dimension: 22,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onPrimary,
+                                  ),
+                                )
+                              : const Text('统一身份认证登录'),
+                        ),
+                        const SizedBox(height: 18),
+                        Text(
+                          buildInfo?.shortLabel ?? '读取版本中...',
+                          textAlign: TextAlign.center,
+                          style: AppTypography.bodySmall.copyWith(
+                            color: c.tertiary,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    buildInfo?.shortLabel ?? '读取版本中...',
-                    style: AppTypography.bodySmall.copyWith(color: c.subtitle),
-                  ),
-                ],
+                  );
+                  if (wide) {
+                    return Row(
+                      children: [
+                        Expanded(child: identity),
+                        const SizedBox(width: 48),
+                        SizedBox(
+                          width: constraints.maxWidth >= 840 ? 480 : 440,
+                          child: signIn,
+                        ),
+                      ],
+                    );
+                  }
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      identity,
+                      const SizedBox(height: 32),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 460),
+                        child: signIn,
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildLogo() {
-    return Container(
-      width: 64,
-      height: 64,
-      decoration: BoxDecoration(
-        color: AppColors.primary,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: const Center(
-        child: Icon(Icons.school_rounded, size: 32, color: Colors.white),
       ),
     );
   }

@@ -25,16 +25,17 @@ class ScheduleNotes extends StatelessWidget {
   final ValueChanged<String> onOpenCourse;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
+  Widget build(BuildContext context) => Wrap(
+    spacing: 8,
+    crossAxisAlignment: WrapCrossAlignment.center,
     children: [
       if (snapshot.hasLegacyItems)
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+          padding: const EdgeInsets.fromLTRB(4, 2, 4, 0),
           child: Text(
-            '历史课表缓存，调课信息尚未核验。',
+            '历史缓存 · 调课信息尚未核验',
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               height: 1.4,
               color: context.colors.tertiary,
             ),
@@ -42,24 +43,23 @@ class ScheduleNotes extends StatelessWidget {
         ),
       if (snapshot.hasEstimatedItems)
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+          padding: const EdgeInsets.fromLTRB(4, 2, 4, 0),
           child: Text(
             snapshot.itemsByDateKey.values
                     .expand((items) => items)
                     .any((item) => item.source == ScheduleItemSource.registrar)
-                ? '部分课程按排课推算，未包含节假日调课。'
-                : '按课程排课推算，未包含节假日调课。',
+                ? '部分课程按排课推算 · 未含节假日调课'
+                : '按排课推算 · 未含节假日调课',
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               height: 1.4,
               color: context.colors.tertiary,
             ),
           ),
         ),
       if (snapshot.unscheduledCourses.isNotEmpty)
-        TextButton.icon(
-          icon: const Icon(Icons.event_note_outlined, size: 16),
-          label: Text('${snapshot.unscheduledCourses.length} 门课程有待安排的上课时间'),
+        TextButton(
+          child: Text('${snapshot.unscheduledCourses.length} 门课程时间待安排'),
           onPressed: () async {
             final courseId = await showDialog<String>(
               context: context,

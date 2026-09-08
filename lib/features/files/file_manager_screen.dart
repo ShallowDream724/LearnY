@@ -11,6 +11,7 @@ import '../../core/files/file_models.dart';
 import '../../core/providers/preferences_providers.dart';
 import '../../core/router/router.dart';
 import '../../core/services/file_cache_service.dart';
+import 'widgets/file_type_mark.dart';
 
 class FileManagerScreen extends ConsumerStatefulWidget {
   const FileManagerScreen({super.key});
@@ -92,6 +93,7 @@ class _FileManagerScreenState extends ConsumerState<FileManagerScreen> {
         ],
       ),
       body: ReadingWidth(
+        maxWidth: 960,
         child: _cachedFiles == null && _loading
             ? const Center(child: CircularProgressIndicator.adaptive())
             : _cachedFiles == null && _loadError != null
@@ -133,8 +135,6 @@ class _FileManagerScreenState extends ConsumerState<FileManagerScreen> {
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Icon(Icons.storage_rounded, color: c.subtitle),
-                              const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -220,21 +220,20 @@ class _FileManagerScreenState extends ConsumerState<FileManagerScreen> {
                               _deletingAssets.contains(file.assetKey);
                           return Padding(
                             key: ValueKey(file.assetKey),
-                            padding: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.only(bottom: 3),
                             child: Material(
-                              color: c.surface,
+                              color: c.surface.withValues(alpha: 0.75),
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                side: BorderSide(color: c.border),
+                                borderRadius: BorderRadius.circular(12),
                               ),
                               child: ListTile(
                                 contentPadding: const EdgeInsets.only(
                                   left: 14,
                                   right: 4,
                                 ),
-                                leading: Icon(
-                                  FileTypeUtils.icon(type),
-                                  color: FileTypeUtils.color(type),
+                                leading: FileTypeMark(
+                                  extension: type,
+                                  width: 38,
                                 ),
                                 title: Text(
                                   file.title,

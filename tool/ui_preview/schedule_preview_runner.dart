@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:learn_y/app/app.dart';
 import 'package:learn_y/core/design/theme.dart';
+import 'package:learn_y/core/design/app_font.dart';
 import 'package:learn_y/core/providers/providers.dart';
 import 'package:learn_y/core/providers/connectivity_provider.dart';
 import 'package:learn_y/demo/demo_environment.dart';
@@ -27,13 +28,12 @@ void main() {
   final captureRoutes = Platform.environment['LEARNY_PREVIEW_ROUTES']
       ?.split(',')
       .toSet();
-  if (fontPath == null) {
-    throw StateError('Set LEARNY_PREVIEW_FONT to a local CJK font file.');
-  }
 
   late DemoEnvironment demo;
   setUpAll(() async {
-    final bytes = await File(fontPath).readAsBytes();
+    final bytes = fontPath == null
+        ? (await rootBundle.load(AppFont.asset)).buffer.asUint8List()
+        : await File(fontPath).readAsBytes();
     for (final name in [
       'Roboto',
       'Segoe UI',
@@ -48,6 +48,13 @@ void main() {
     await (FontLoader(
       'MaterialIcons',
     )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
+    await (FontLoader('packages/cupertino_icons/CupertinoIcons')..addFont(
+          rootBundle.load('packages/cupertino_icons/assets/CupertinoIcons.ttf'),
+        ))
+        .load();
+    await (FontLoader(
+      AppFont.family,
+    )..addFont(rootBundle.load(AppFont.asset))).load();
     demo = await DemoEnvironment.create(now: scheduleToday);
   });
   tearDownAll(() => demo.dispose());
@@ -309,23 +316,23 @@ void main() {
         await capture(tester, key, '${entry.key}_390_large_text');
       }
       tester.platformDispatcher.clearTextScaleFactorTestValue();
-      if (captureRoutes == null || captureRoutes.contains('home')) {
-        await tester.runAsync(
-          () => container.read(themeModeProvider.notifier).setTheme('dark'),
-        );
-        router.go(Routes.home);
-        await settleData();
-        await capture(tester, key, 'home_390_dark');
-      }
-      if (captureRoutes == null || captureRoutes.contains('profile')) {
-        await tester.runAsync(
-          () => container.read(themeModeProvider.notifier).setTheme('dark'),
-        );
-        router.go(Routes.profile);
+      await tester.runAsync(
+        () => container.read(themeModeProvider.notifier).setTheme('dark'),
+      );
+      for (final entry in {
+        'home': Routes.home,
+        'courses': Routes.courses,
+        'assignments': Routes.assignments,
+        'profile': Routes.profile,
+      }.entries) {
+        if (captureRoutes != null && !captureRoutes.contains(entry.key)) {
+          continue;
+        }
+        router.go(entry.value);
         for (final size in [const Size(390, 844), const Size(1440, 900)]) {
           tester.view.physicalSize = size;
           await settleData();
-          await capture(tester, key, 'profile_${size.width.toInt()}_dark');
+          await capture(tester, key, '${entry.key}_${size.width.toInt()}_dark');
         }
       }
       await tester.pumpWidget(const SizedBox());

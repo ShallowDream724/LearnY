@@ -87,7 +87,7 @@ class HomeworkDetailScreen extends ConsumerWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     ReadingWidth(
-                      maxWidth: 1120,
+                      maxWidth: 1000,
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 16,
@@ -146,8 +146,6 @@ class HomeworkDetailScreen extends ConsumerWidget {
           final requirements = <Widget>[
             HomeworkSectionCard(
               title: '作业要求',
-              icon: Icons.description_outlined,
-              iconColor: c.subtitle,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -176,8 +174,6 @@ class HomeworkDetailScreen extends ConsumerWidget {
           final submission = <Widget>[
             HomeworkSectionCard(
               title: '当前提交',
-              icon: Icons.task_alt_rounded,
-              iconColor: hw.submitted ? AppColors.success : c.subtitle,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -241,8 +237,6 @@ class HomeworkDetailScreen extends ConsumerWidget {
             if (showAnswerContent || hasAnswerAttachment)
               HomeworkSectionCard(
                 title: '参考答案',
-                icon: Icons.auto_stories_outlined,
-                iconColor: c.subtitle,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -266,8 +260,6 @@ class HomeworkDetailScreen extends ConsumerWidget {
             if (hw.comment?.isNotEmpty == true)
               HomeworkSectionCard(
                 title: '我的备注',
-                icon: Icons.sticky_note_2_outlined,
-                iconColor: c.subtitle,
                 child: Text(
                   hw.comment!,
                   style: AppTypography.bodyMedium.copyWith(color: c.text),
@@ -278,12 +270,12 @@ class HomeworkDetailScreen extends ConsumerWidget {
             key: PageStorageKey('homework-detail-$homeworkId'),
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
             child: ReadingWidth(
-              maxWidth: 1120,
+              maxWidth: 1000,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   HomeworkStatusHeader(homework: hw),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 12),
                   HomeworkDeadlineCard(homework: hw),
                   const SizedBox(height: 24),
                   LayoutBuilder(
@@ -296,7 +288,7 @@ class HomeworkDetailScreen extends ConsumerWidget {
                               flex: 3,
                               child: _SectionList(children: requirements),
                             ),
-                            const SizedBox(width: 40),
+                            const SizedBox(width: 20),
                             Expanded(
                               flex: 2,
                               child: _SectionList(children: submission),

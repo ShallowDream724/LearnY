@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/database/database.dart' as db;
 import '../../core/design/app_surfaces.dart';
+import '../../core/design/app_materials.dart';
 import '../../core/design/app_toast.dart';
 import '../../core/design/cooldown_toast.dart';
 import '../../core/design/file_type_utils.dart';
@@ -107,6 +108,7 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
         ],
       ),
       body: ReadingWidth(
+        maxWidth: 960,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -129,12 +131,10 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
                       segments: const [
                         ButtonSegment(
                           value: _SortMode.byTime,
-                          icon: Icon(Icons.schedule_rounded),
                           label: Text('时间'),
                         ),
                         ButtonSegment(
                           value: _SortMode.byCourse,
-                          icon: Icon(Icons.folder_outlined),
                           label: Text('课程'),
                         ),
                       ],
@@ -234,12 +234,20 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
                           return ListTile(
                             contentPadding: EdgeInsets.zero,
                             title: Text(courseNames[id] ?? '未知课程'),
-                            leading: Icon(
-                              collapsed
-                                  ? Icons.chevron_right_rounded
-                                  : Icons.expand_more_rounded,
+                            leading: CourseSeal(courseId: id, size: 24),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text('$count'),
+                                const SizedBox(width: 8),
+                                Icon(
+                                  collapsed
+                                      ? Icons.expand_more_rounded
+                                      : Icons.expand_less_rounded,
+                                  size: 20,
+                                ),
+                              ],
                             ),
-                            trailing: Text('$count'),
                             onTap: () => setState(() {
                               if (collapsed) {
                                 _collapsedCourses.remove(id);
@@ -252,7 +260,7 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
                         final file = row as db.CourseFile;
                         return Padding(
                           key: ValueKey(file.id),
-                          padding: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.only(bottom: 3),
                           child: SwipeToRead(
                             onSwipe: () => _markRead(file),
                             child: FileCard(

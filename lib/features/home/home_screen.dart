@@ -1,10 +1,4 @@
-// Home Screen — Smart aggregation of urgent items.
-//
-// Sections:
-// 1. Greeting + Stats bar (courses, pending, unread)
-// 2. Urgent assignments (deadline timeline)
-// 3. Unread notifications
-// 4. Quick actions
+// Daily arrangement and actionable coursework share a single reading rhythm.
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -251,8 +245,7 @@ class _HomeContentSliver extends StatelessWidget {
       sliver: SliverList(
         delegate: SliverChildListDelegate([
           HomeStatsSection(onUnreadTap: onUnreadStatTap),
-          const SizedBox(height: 20),
-          const HomeTodayScheduleSection(),
+          const SizedBox(height: 16),
           LayoutBuilder(
             builder: (context, constraints) {
               final updates = Column(
@@ -267,15 +260,27 @@ class _HomeContentSliver extends StatelessWidget {
               );
               if (constraints.maxWidth < 840) {
                 return Column(
-                  children: [const HomeUrgentAssignmentsSection(), updates],
+                  children: [
+                    const HomeTodayScheduleSection(),
+                    const HomeUrgentAssignmentsSection(),
+                    updates,
+                  ],
                 );
               }
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Expanded(child: HomeUrgentAssignmentsSection()),
-                  const SizedBox(width: 32),
-                  Expanded(child: updates),
+                  const Expanded(
+                    flex: 5,
+                    child: Column(
+                      children: [
+                        HomeTodayScheduleSection(),
+                        HomeUrgentAssignmentsSection(),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 24),
+                  Expanded(flex: 3, child: updates),
                 ],
               );
             },

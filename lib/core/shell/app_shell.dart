@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../design/app_surfaces.dart';
+import '../design/app_materials.dart';
 import '../design/app_theme_colors.dart';
 import '../design/responsive.dart';
 import '../design/typography.dart';
@@ -14,23 +16,23 @@ import 'app_bottom_navigation.dart';
 
 const _destinations = <ShellNavDestinationData>[
   ShellNavDestinationData(
-    icon: Icons.home_outlined,
-    selectedIcon: Icons.home_rounded,
+    icon: CupertinoIcons.house,
+    selectedIcon: CupertinoIcons.house_fill,
     label: '首页',
   ),
   ShellNavDestinationData(
-    icon: Icons.assignment_outlined,
-    selectedIcon: Icons.assignment_rounded,
+    icon: CupertinoIcons.doc_text,
+    selectedIcon: CupertinoIcons.doc_text_fill,
     label: '作业',
   ),
   ShellNavDestinationData(
-    icon: Icons.school_outlined,
-    selectedIcon: Icons.school_rounded,
+    icon: CupertinoIcons.square_grid_2x2,
+    selectedIcon: CupertinoIcons.square_grid_2x2_fill,
     label: '课程',
   ),
   ShellNavDestinationData(
-    icon: Icons.person_outlined,
-    selectedIcon: Icons.person_rounded,
+    icon: CupertinoIcons.person_crop_circle,
+    selectedIcon: CupertinoIcons.person_crop_circle_fill,
     label: '我的',
   ),
 ];
@@ -109,9 +111,9 @@ class _Sidebar extends StatelessWidget {
     final c = context.colors;
     final extended = MediaQuery.sizeOf(context).width >= 1000;
     return Material(
-      color: c.surface,
+      color: StudyPalette.of(context, StudyTone.ink).fill,
       child: Container(
-        width: extended ? 208 : 76,
+        width: extended ? 208 : 80,
         decoration: BoxDecoration(
           border: Border(right: BorderSide(color: c.border, width: .5)),
         ),
@@ -120,17 +122,23 @@ class _Sidebar extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Padding(
-                padding: EdgeInsets.fromLTRB(extended ? 24 : 8, 28, 8, 28),
+                padding: EdgeInsets.fromLTRB(extended ? 24 : 8, 30, 8, 30),
                 child: extended
-                    ? Text(
-                        'LearnY',
-                        style: AppTypography.headlineMedium.copyWith(
-                          color: c.text,
-                        ),
+                    ? Row(
+                        children: [
+                          const StudyMark(size: 30),
+                          const SizedBox(width: 10),
+                          Text(
+                            'LearnY',
+                            style: AppTypography.headlineMedium.copyWith(
+                              color: c.text,
+                            ),
+                          ),
+                        ],
                       )
                     : Tooltip(
                         message: 'LearnY',
-                        child: Icon(Icons.school_outlined, color: c.infoAccent),
+                        child: const StudyMark(size: 30),
                       ),
               ),
               Expanded(
@@ -144,9 +152,9 @@ class _Sidebar extends StatelessWidget {
                             ? ListTile(
                                 selected: i == index,
                                 selectedColor: c.infoAccent,
-                                selectedTileColor: c.infoAccent.withAlpha(20),
+                                selectedTileColor: c.surface,
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
                                 contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 12,
@@ -161,7 +169,11 @@ class _Sidebar extends StatelessWidget {
                                 ),
                                 title: Text(
                                   destination.label,
-                                  style: AppTypography.titleMedium,
+                                  style: AppTypography.titleMedium.copyWith(
+                                    fontWeight: i == index
+                                        ? FontWeight.w600
+                                        : FontWeight.w400,
+                                  ),
                                 ),
                                 onTap: () => onSelected(i),
                               )
@@ -170,7 +182,7 @@ class _Sidebar extends StatelessWidget {
                                 isSelected: i == index,
                                 style: IconButton.styleFrom(
                                   backgroundColor: i == index
-                                      ? c.infoAccent.withAlpha(20)
+                                      ? c.surface
                                       : null,
                                   foregroundColor: i == index
                                       ? c.infoAccent
@@ -184,10 +196,9 @@ class _Sidebar extends StatelessWidget {
                   ],
                 ),
               ),
-              const Divider(),
               Padding(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
+                  horizontal: 12,
                   vertical: 12,
                 ),
                 child: extended

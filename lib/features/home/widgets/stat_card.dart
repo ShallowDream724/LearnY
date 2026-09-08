@@ -2,51 +2,45 @@ import 'package:flutter/material.dart';
 
 import '../../../core/design/app_theme_colors.dart';
 import '../../../core/design/typography.dart';
+import '../../../core/design/app_materials.dart';
 
 class StatCard extends StatelessWidget {
   const StatCard({
     super.key,
     required this.label,
     required this.value,
-    required this.icon,
+    this.tone = StudyTone.ink,
     this.onTap,
   });
   final String label;
   final String value;
-  final IconData icon;
+  final StudyTone tone;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) => Material(
-    color: context.colors.surface,
-    borderRadius: BorderRadius.circular(8),
+    color: Colors.transparent,
+    borderRadius: BorderRadius.circular(12),
     child: InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(12),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Wrap(
-              spacing: 4,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Icon(icon, size: 15, color: context.colors.subtitle),
-                Text(
-                  label,
-                  style: AppTypography.bodySmall.copyWith(
-                    color: context.colors.subtitle,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
             Text(
               value,
               style: AppTypography.statMedium.copyWith(
                 fontSize: 22,
-                color: context.colors.text,
+                color: StudyPalette.of(context, tone).accent,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: AppTypography.bodySmall.copyWith(
+                color: context.colors.subtitle,
               ),
             ),
           ],

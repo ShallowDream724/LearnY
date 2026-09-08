@@ -11,6 +11,7 @@ import '../../app/app_orientation.dart';
 import '../../core/design/app_toast.dart';
 import '../../core/design/app_theme_colors.dart';
 import '../../core/design/app_surfaces.dart';
+import '../../core/design/app_materials.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/file_type_utils.dart';
 import '../../core/files/file_access_resolver.dart';
@@ -23,6 +24,7 @@ import '../../core/services/file_manager_reveal_service.dart';
 import 'providers/file_bookmark_providers.dart';
 import 'providers/file_queries.dart';
 import 'widgets/file_preview_view.dart';
+import 'widgets/file_type_mark.dart';
 
 class FileDetailScreen extends ConsumerStatefulWidget {
   const FileDetailScreen({super.key, required this.routeData});
@@ -471,8 +473,7 @@ class _DownloadingView extends StatelessWidget {
             style: TextStyle(
               color: c.subtitle,
               fontSize: 13,
-              fontFamily: 'JetBrains Mono',
-              fontFamilyFallback: const ['monospace'],
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
         ],
@@ -536,52 +537,48 @@ class _FileInfoPanel extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Center(
-                  child: Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      color: FileTypeUtils.color(ext).withAlpha(25),
-                      borderRadius: BorderRadius.circular(8),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    FileTypeMark(extension: ext, width: 58),
+                    const SizedBox(width: 20),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            file.title,
+                            style: TextStyle(
+                              fontSize: 21,
+                              fontWeight: FontWeight.w500,
+                              color: c.text,
+                              height: 1.4,
+                            ),
+                          ),
+                          if (courseName.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              courseName,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: StudyPalette.of(
+                                  context,
+                                  StudyPalette.course(file.courseId),
+                                ).accent,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
-                    child: Icon(
-                      FileTypeUtils.icon(ext),
-                      color: FileTypeUtils.color(ext),
-                      size: 28,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Center(
-                  child: Text(
-                    file.title,
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: c.text,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Center(
-                  child: Text(
-                    courseName,
-                    style: TextStyle(fontSize: 13, color: c.subtitle),
-                  ),
+                  ],
                 ),
                 const SizedBox(height: 24),
-                Container(
-                  decoration: BoxDecoration(
-                    border: Border(
-                      top: BorderSide(color: c.border),
-                      bottom: BorderSide(color: c.border),
-                    ),
-                  ),
+                StudySurface(
+                  radius: 16,
                   child: Column(
                     children: [
                       _MetaRow(
-                        icon: Icons.insert_drive_file_rounded,
                         label: '类型',
                         value: ext.toUpperCase(),
                         textColor: c.text,
@@ -589,7 +586,6 @@ class _FileInfoPanel extends StatelessWidget {
                       ),
                       Divider(height: 1, color: c.border),
                       _MetaRow(
-                        icon: Icons.file_download_rounded,
                         label: '大小',
                         value: file.size.isNotEmpty
                             ? file.size
@@ -599,7 +595,6 @@ class _FileInfoPanel extends StatelessWidget {
                       ),
                       Divider(height: 1, color: c.border),
                       _MetaRow(
-                        icon: Icons.access_time_rounded,
                         label: '上传时间',
                         value: _formatUploadTime(file.uploadTime),
                         textColor: c.text,
@@ -608,7 +603,6 @@ class _FileInfoPanel extends StatelessWidget {
                       if (file.markedImportant) ...[
                         Divider(height: 1, color: c.border),
                         _MetaRow(
-                          icon: Icons.star_rounded,
                           label: '标记',
                           value: '重要文件',
                           textColor: c.text,
@@ -704,7 +698,6 @@ class _FileInfoPanel extends StatelessWidget {
 
 class _MetaRow extends StatelessWidget {
   const _MetaRow({
-    required this.icon,
     required this.label,
     required this.value,
     required this.textColor,
@@ -712,7 +705,6 @@ class _MetaRow extends StatelessWidget {
     this.valueColor,
   });
 
-  final IconData icon;
   final String label;
   final String value;
   final Color textColor;
@@ -725,14 +717,14 @@ class _MetaRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: sub),
-          const SizedBox(width: 10),
-          Text(label, style: TextStyle(fontSize: 14, color: sub)),
-          const SizedBox(width: 20),
+          SizedBox(
+            width: 96,
+            child: Text(label, style: TextStyle(fontSize: 14, color: sub)),
+          ),
+          const SizedBox(width: 16),
           Expanded(
             child: Text(
               value,
-              textAlign: TextAlign.end,
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,

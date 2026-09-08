@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/design/app_materials.dart';
 import '../../../core/design/app_theme_colors.dart';
-import '../../../core/design/colors.dart';
 import '../../../core/design/typography.dart';
 import '../providers/search_models.dart';
 
@@ -22,48 +22,35 @@ class SearchSectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
           child: Row(
             children: [
-              Icon(section.icon, size: 18, color: c.subtitle),
-              const SizedBox(width: 6),
-              Expanded(
+              Flexible(
                 child: Text(
                   section.title,
-                  style: AppTypography.labelMedium.copyWith(
-                    color: c.subtitle,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: AppTypography.titleSmall.copyWith(color: c.text),
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(
-                  color: c.surfaceHigh,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '$count',
-                  style: AppTypography.labelSmall.copyWith(
-                    color: c.subtitle,
-                    fontSize: 12,
-                  ),
-                ),
+              const SizedBox(width: 8),
+              Text(
+                '$count',
+                style: AppTypography.labelMedium.copyWith(color: c.subtitle),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 16),
+              Expanded(child: Divider(color: c.border)),
+              const SizedBox(width: 8),
               Icon(
                 collapsed
-                    ? Icons.keyboard_arrow_down_rounded
-                    : Icons.keyboard_arrow_up_rounded,
+                    ? Icons.expand_more_rounded
+                    : Icons.expand_less_rounded,
                 size: 18,
-                color: c.tertiary,
+                color: c.subtitle,
               ),
             ],
           ),
@@ -79,122 +66,90 @@ class SearchResultTile extends StatelessWidget {
     required this.result,
     required this.onTap,
   });
-
   final SearchResult result;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-
+    final course = StudyPalette.of(
+      context,
+      StudyPalette.course(result.courseId),
+    );
+    final isCourse = result.kind == SearchResultKind.course;
     return Material(
-      color: c.surface,
-      borderRadius: BorderRadius.circular(8),
+      color: c.surface.withValues(alpha: 0.7),
+      borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: c.border, width: 0.5),
-          ),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
             children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: result.accentColor.withAlpha(20),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(result.icon, size: 17, color: result.accentColor),
-              ),
-              const SizedBox(width: 12),
+              if (isCourse) ...[
+                CourseSeal(courseId: result.courseId, size: 36),
+                const SizedBox(width: 14),
+              ],
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       result.title,
-                      style: AppTypography.titleMedium.copyWith(color: c.text),
+                      style: AppTypography.titleMedium.copyWith(
+                        color: c.text,
+                        fontSize: 15,
+                        height: 1.45,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      result.subtitle,
+                      style: AppTypography.bodySmall.copyWith(
+                        color: isCourse ? c.subtitle : course.accent,
+                        height: 1.5,
+                      ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                     if (result.isFavorite || result.isDownloaded) ...[
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 7),
                       Wrap(
-                        spacing: 6,
+                        spacing: 10,
                         runSpacing: 4,
                         children: [
                           if (result.isFavorite)
-                            _ResultTag(
-                              label: '已收藏',
-                              icon: Icons.bookmark_rounded,
-                              color: AppColors.warning,
+                            Text(
+                              '已收藏',
+                              style: AppTypography.labelSmall.copyWith(
+                                color: StudyPalette.of(
+                                  context,
+                                  StudyTone.ochre,
+                                ).accent,
+                              ),
                             ),
                           if (result.isDownloaded)
-                            _ResultTag(
-                              label: '已下载',
-                              icon: Icons.download_done_rounded,
-                              color: AppColors.success,
+                            Text(
+                              '已下载',
+                              style: AppTypography.labelSmall.copyWith(
+                                color: StudyPalette.of(
+                                  context,
+                                  StudyTone.jade,
+                                ).accent,
+                              ),
                             ),
                         ],
                       ),
                     ],
-                    const SizedBox(height: 2),
-                    Text(
-                      result.subtitle,
-                      style: AppTypography.bodySmall.copyWith(
-                        color: c.subtitle,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right_rounded, size: 18, color: c.tertiary),
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _ResultTag extends StatelessWidget {
-  const _ResultTag({
-    required this.label,
-    required this.icon,
-    required this.color,
-  });
-
-  final String label;
-  final IconData icon;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withAlpha(14),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: color),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: AppTypography.labelSmall.copyWith(
-              color: color,
-              fontSize: 10,
-            ),
-          ),
-        ],
       ),
     );
   }

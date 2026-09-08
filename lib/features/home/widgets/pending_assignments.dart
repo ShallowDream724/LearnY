@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/providers.dart';
 import '../../../core/design/app_theme_colors.dart';
+import '../../../core/design/app_materials.dart';
 import '../../../core/design/typography.dart';
 import '../../../core/design/app_toast.dart';
 import '../../../core/router/router.dart';
@@ -167,7 +168,11 @@ class PendingAssignments extends ConsumerWidget {
           ),
       ],
     );
-    return content;
+    return StudySurface(
+      tone: StudyTone.ochre,
+      padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
+      child: content,
+    );
   }
 
   String _deadlineLabel(HomeworkSummary homework) {
@@ -180,7 +185,7 @@ class PendingAssignments extends ConsumerWidget {
     if (remaining.inHours < 24) {
       final hours = remaining.inHours;
       final minutes = remaining.inMinutes.remainder(60);
-      return hours > 0 ? '剩余 ${hours}h ${minutes}m' : '剩余 $minutes 分钟';
+      return hours > 0 ? '$hours 小时后' : '$minutes 分钟后';
     }
     return formatRelativeDeadlineLabel(deadline, now: now);
   }

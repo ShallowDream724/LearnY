@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/design/app_toast.dart';
+import '../../core/design/app_materials.dart';
 import '../../core/design/app_theme_colors.dart';
 import '../../core/design/app_surfaces.dart';
 import '../../core/design/colors.dart';
@@ -175,7 +176,7 @@ class _NotificationDetailScreenState
                       isRead
                           ? Icons.mark_email_unread_rounded
                           : Icons.mark_email_read_outlined,
-                      color: isRead ? AppColors.primary : c.subtitle,
+                      color: isRead ? c.infoAccent : c.subtitle,
                     ),
                     tooltip: isRead ? '标为未读' : '标为已读',
                     onPressed: () => _toggleReadState(notification),
@@ -183,143 +184,99 @@ class _NotificationDetailScreenState
                 ],
               ),
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
+                padding: EdgeInsets.fromLTRB(
+                  pageGutter(context, maxWidth: 800),
+                  16,
+                  pageGutter(context, maxWidth: 800),
+                  40,
+                ),
                 sliver: SliverList(
                   delegate: SliverChildListDelegate([
                     ReadingWidth(
-                      maxWidth: 760,
+                      maxWidth: 800,
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (notification.markedImportant)
-                                Container(
-                                  margin: const EdgeInsets.only(
-                                    top: 4,
-                                    right: 8,
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.warning.withAlpha(20),
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(
-                                      color: AppColors.warning.withAlpha(60),
-                                    ),
-                                  ),
-                                  child: Text(
-                                    '重要',
-                                    style: AppTypography.labelSmall.copyWith(
-                                      color: AppColors.warning,
-                                      fontSize: 10,
-                                    ),
-                                  ),
-                                ),
-                              Expanded(
-                                child: Text(
-                                  notification.title,
-                                  style: AppTypography.headlineSmall.copyWith(
-                                    color: c.text,
-                                  ),
-                                ),
+                          LayoutBuilder(
+                            builder: (context, constraints) => StudySurface(
+                              tone: StudyPalette.course(widget.courseId),
+                              radius: 22,
+                              padding: EdgeInsets.all(
+                                constraints.maxWidth >= 600 ? 36 : 22,
                               ),
-                            ],
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          // ── Metadata bar ──
-                          Row(
-                            children: [
-                              // Publisher avatar
-                              Container(
-                                width: 28,
-                                height: 28,
-                                decoration: BoxDecoration(
-                                  color: AppColors.primary.withAlpha(20),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    _initial(notification.publisher),
-                                    style: AppTypography.labelSmall.copyWith(
-                                      color: AppColors.primary,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Wrap(
-                                  spacing: 16,
-                                  runSpacing: 4,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  children: [
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (notification.markedImportant) ...[
                                     Text(
-                                      notification.publisher,
-                                      style: AppTypography.bodyMedium.copyWith(
-                                        color: c.subtitle,
+                                      '重要通知',
+                                      style: AppTypography.labelMedium.copyWith(
+                                        color: AppColors.warning,
                                       ),
                                     ),
+                                    const SizedBox(height: 12),
+                                  ],
+                                  Text(
+                                    notification.title,
+                                    style: AppTypography.headlineMedium
+                                        .copyWith(color: c.text, height: 1.5),
+                                  ),
+                                  const SizedBox(height: 18),
+                                  Wrap(
+                                    spacing: 18,
+                                    runSpacing: 6,
+                                    children: [
+                                      if (notification.publisher
+                                          .trim()
+                                          .isNotEmpty)
+                                        Text(
+                                          notification.publisher,
+                                          style: AppTypography.bodyMedium
+                                              .copyWith(color: c.subtitle),
+                                        ),
+                                      Text(
+                                        _formatFullTime(
+                                          notification.publishTime,
+                                        ),
+                                        style: AppTypography.bodyMedium
+                                            .copyWith(color: c.subtitle),
+                                      ),
+                                    ],
+                                  ),
+                                  if (notification.expireTime != null) ...[
+                                    const SizedBox(height: 8),
                                     Text(
-                                      _formatFullTime(notification.publishTime),
+                                      '有效期至 ${_formatFullTime(notification.expireTime!)}',
                                       style: AppTypography.bodySmall.copyWith(
-                                        color: c.subtitle,
+                                        color: c.tertiary,
                                       ),
                                     ),
                                   ],
-                                ),
-                              ),
-                            ],
-                          ),
-
-                          // Expiry indicator
-                          if (notification.expireTime != null) ...[
-                            const SizedBox(height: 6),
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.schedule_rounded,
-                                  size: 13,
-                                  color: c.tertiary,
-                                ),
-                                const SizedBox(width: 4),
-                                Expanded(
-                                  child: Text(
-                                    '有效期至 ${_formatFullTime(notification.expireTime!)}',
-                                    style: AppTypography.bodySmall.copyWith(
-                                      color: c.tertiary,
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 26,
+                                    ),
+                                    child: Divider(
+                                      color: c.border,
+                                      height: 1,
+                                      thickness: .7,
                                     ),
                                   ),
-                                ),
-                              ],
-                            ),
-                          ],
-
-                          const SizedBox(height: 20),
-
-                          // ── Divider ──
-                          Divider(color: c.border, height: 1),
-
-                          const SizedBox(height: 20),
-
-                          // ── Content body ──
-                          if (hasContent)
-                            _ContentBody(htmlContent: notification.content)
-                          else
-                            Text(
-                              '（无内容）',
-                              style: AppTypography.bodyMedium.copyWith(
-                                color: c.tertiary,
+                                  if (hasContent)
+                                    _ContentBody(
+                                      htmlContent: notification.content,
+                                    )
+                                  else
+                                    Text(
+                                      '暂无正文',
+                                      style: AppTypography.bodyMedium.copyWith(
+                                        color: c.tertiary,
+                                      ),
+                                    ),
+                                ],
                               ),
                             ),
-
+                          ),
                           // ── Attachment ──
                           if (notification.attachmentJson != null &&
                               notification.attachmentJson!.isNotEmpty) ...[
@@ -349,9 +306,9 @@ class _NotificationDetailScreenState
                               ),
                             ),
                             const SizedBox(height: 8),
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(vertical: 8),
+                            StudySurface(
+                              tone: StudyTone.ochre,
+                              padding: const EdgeInsets.all(20),
                               child: Text(
                                 notification.comment!,
                                 style: AppTypography.bodyMedium.copyWith(
@@ -371,15 +328,6 @@ class _NotificationDetailScreenState
         },
       ),
     );
-  }
-
-  String _initial(String name) {
-    if (name.isEmpty) return '';
-    final chars = name.runes.toList();
-    if (chars.isNotEmpty && chars[0] > 127) {
-      return String.fromCharCode(chars[0]);
-    }
-    return name.substring(0, name.length >= 2 ? 2 : 1).toUpperCase();
   }
 
   String _formatFullTime(String time) {

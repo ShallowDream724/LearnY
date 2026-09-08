@@ -97,19 +97,11 @@ dependency_overrides:
 flutter:
   uses-material-design: true
 
-  # Assets directory (will be populated later)
-  # assets:
-  #   - assets/icons/
-  #   - assets/images/
-
-  # Custom fonts will be configured when design system is built
-  # fonts:
-  #   - family: Inter
-  #     fonts:
-  #       - asset: assets/fonts/Inter-Regular.ttf
-  #       - asset: assets/fonts/Inter-Medium.ttf
-  #         weight: 500
-  #       - asset: assets/fonts/Inter-SemiBold.ttf
-  #         weight: 600
-  #       - asset: assets/fonts/Inter-Bold.ttf
-  #         weight: 700
+  assets:
+    - assets/fonts/OFL.txt
+    - assets/brand/app_icon.png
+  fonts:
+    - family: LXGW WenKai GB Screen
+      fonts:
+        - asset: assets/fonts/LXGWWenKaiGBScreen.ttf
+          weight: 400

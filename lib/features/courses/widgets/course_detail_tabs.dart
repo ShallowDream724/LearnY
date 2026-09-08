@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/design/app_materials.dart';
 import '../../../core/design/app_theme_colors.dart';
 import '../../../core/design/app_surfaces.dart';
 import '../../../core/design/colors.dart';
@@ -57,7 +58,7 @@ class CourseNotificationsTab extends ConsumerWidget {
           if (notifications.isEmpty) {
             return RefreshIndicator(
               onRefresh: () => _onRefresh(context, ref),
-              color: AppColors.primary,
+              color: context.colors.infoAccent,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: EdgeInsets.zero,
@@ -73,7 +74,7 @@ class CourseNotificationsTab extends ConsumerWidget {
 
           return RefreshIndicator(
             onRefresh: () => _onRefresh(context, ref),
-            color: AppColors.primary,
+            color: context.colors.infoAccent,
             child: ListView.builder(
               key: PageStorageKey('course-notifications-$courseId'),
               physics: const AlwaysScrollableScrollPhysics(),
@@ -85,125 +86,87 @@ class CourseNotificationsTab extends ConsumerWidget {
 
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 10),
-                  child: Material(
-                    color: c.surface,
-                    borderRadius: BorderRadius.circular(8),
-                    clipBehavior: Clip.antiAlias,
-                    child: InkWell(
-                      onTap: () => context.push(
-                        Routes.notificationDetail(
-                          notificationId: notification.id,
-                          courseId: courseId,
-                          courseName: courseName,
-                        ),
+                  child: StudySurface(
+                    tone: isRead
+                        ? StudyTone.slate
+                        : StudyPalette.course(courseId),
+                    radius: 16,
+                    padding: const EdgeInsets.all(18),
+                    onTap: () => context.push(
+                      Routes.notificationDetail(
+                        notificationId: notification.id,
+                        courseId: courseId,
+                        courseName: courseName,
                       ),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: c.border, width: 0.5),
-                        ),
-                        child: Row(
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            Expanded(
+                              child: Text(
+                                notification.title,
+                                style: AppTypography.titleLarge.copyWith(
+                                  color: c.text,
+                                  fontWeight: isRead
+                                      ? FontWeight.w500
+                                      : FontWeight.w500,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
                             if (!isRead)
                               Padding(
                                 padding: const EdgeInsets.only(
-                                  top: 4,
-                                  right: 10,
+                                  left: 12,
+                                  top: 8,
                                 ),
                                 child: Container(
-                                  width: 8,
-                                  height: 8,
+                                  width: 6,
+                                  height: 6,
                                   decoration: BoxDecoration(
-                                    color: notification.markedImportant
-                                        ? AppColors.warning
-                                        : AppColors.info,
+                                    color: c.infoAccent,
                                     shape: BoxShape.circle,
                                   ),
                                 ),
-                              )
-                            else
-                              const SizedBox(width: 18),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          notification.title,
-                                          style: AppTypography.titleMedium
-                                              .copyWith(
-                                                color: isRead
-                                                    ? c.subtitle
-                                                    : c.text,
-                                                fontWeight: isRead
-                                                    ? FontWeight.w400
-                                                    : FontWeight.w600,
-                                              ),
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      if (notification.markedImportant)
-                                        Container(
-                                          margin: const EdgeInsets.only(
-                                            left: 8,
-                                          ),
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 6,
-                                            vertical: 2,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: AppColors.warning.withAlpha(
-                                              20,
-                                            ),
-                                            borderRadius: BorderRadius.circular(
-                                              4,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            '重要',
-                                            style: AppTypography.labelSmall
-                                                .copyWith(
-                                                  color: AppColors.warning,
-                                                  fontSize: 10,
-                                                ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Wrap(
-                                    spacing: 12,
-                                    runSpacing: 4,
-                                    children: [
-                                      if (notification
-                                          .publisher
-                                          .isNotEmpty) ...[
-                                        Text(
-                                          notification.publisher,
-                                          style: AppTypography.bodySmall
-                                              .copyWith(color: c.tertiary),
-                                        ),
-                                      ],
-                                      Text(
-                                        _formatTime(notification.publishTime),
-                                        style: AppTypography.bodySmall.copyWith(
-                                          color: c.tertiary,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 4,
+                          children: [
+                            if (notification.markedImportant)
+                              Text(
+                                '重要',
+                                style: AppTypography.bodySmall.copyWith(
+                                  color: StudyPalette.of(
+                                    context,
+                                    StudyTone.ochre,
+                                  ).accent,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            if (notification.publisher.isNotEmpty)
+                              Text(
+                                notification.publisher,
+                                style: AppTypography.bodySmall.copyWith(
+                                  color: c.subtitle,
+                                ),
+                              ),
+                            Text(
+                              _formatTime(notification.publishTime),
+                              style: AppTypography.bodySmall.copyWith(
+                                color: c.subtitle,
                               ),
                             ),
                           ],
                         ),
-                      ),
+                      ],
                     ),
                   ),
                 );
@@ -277,7 +240,7 @@ class _CourseFilesTabState extends ConsumerState<CourseFilesTab> {
 
           return RefreshIndicator(
             onRefresh: _onRefresh,
-            color: AppColors.primary,
+            color: context.colors.infoAccent,
             child: Column(
               children: [
                 Padding(
@@ -466,7 +429,7 @@ class CourseHomeworksTab extends ConsumerWidget {
           if (homeworks.isEmpty) {
             return RefreshIndicator(
               onRefresh: () => _onRefresh(context, ref),
-              color: AppColors.primary,
+              color: context.colors.infoAccent,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: EdgeInsets.zero,
@@ -482,7 +445,7 @@ class CourseHomeworksTab extends ConsumerWidget {
 
           return RefreshIndicator(
             onRefresh: () => _onRefresh(context, ref),
-            color: AppColors.primary,
+            color: context.colors.infoAccent,
             child: ListView.builder(
               key: PageStorageKey('course-homeworks-$courseId'),
               physics: const AlwaysScrollableScrollPhysics(),
@@ -490,7 +453,8 @@ class CourseHomeworksTab extends ConsumerWidget {
               itemCount: homeworks.length,
               itemBuilder: (context, index) {
                 final homework = homeworks[index];
-                final statusColor = _statusColor(homework, now);
+                final statusTone = _statusTone(homework, now);
+                final statusColor = StudyPalette.of(context, statusTone).accent;
                 final statusText = _statusText(homework, now);
                 final gradeDisplay = resolveHomeworkGradeDisplay(
                   grade: homework.grade,
@@ -499,94 +463,59 @@ class CourseHomeworksTab extends ConsumerWidget {
 
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 10),
-                  child: Material(
-                    color: c.surface,
-                    borderRadius: BorderRadius.circular(8),
-                    clipBehavior: Clip.antiAlias,
-                    child: InkWell(
-                      onTap: () => context.push(
-                        Routes.homeworkDetail(
-                          homeworkId: homework.id,
-                          courseId: courseId,
-                          courseName: courseName,
-                        ),
+                  child: StudySurface(
+                    tone: statusTone,
+                    radius: 16,
+                    padding: const EdgeInsets.all(18),
+                    onTap: () => context.push(
+                      Routes.homeworkDetail(
+                        homeworkId: homework.id,
+                        courseId: courseId,
+                        courseName: courseName,
                       ),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: c.border, width: 0.5),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          homework.title,
+                          style: AppTypography.titleLarge.copyWith(
+                            color: c.text,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 14,
+                          runSpacing: 6,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    homework.title,
-                                    style: AppTypography.titleMedium.copyWith(
-                                      color: c.text,
-                                    ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 3,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: statusColor.withAlpha(20),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    statusText,
-                                    style: AppTypography.labelSmall.copyWith(
-                                      color: statusColor,
-                                      fontSize: 10,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                            Text(
+                              statusText,
+                              style: AppTypography.bodySmall.copyWith(
+                                color: statusColor,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.schedule_rounded,
-                                  size: 14,
-                                  color: c.tertiary,
-                                ),
-                                const SizedBox(width: 4),
-                                Expanded(
-                                  child: Text(
-                                    _formatDeadline(homework.deadline),
-                                    style: AppTypography.bodySmall.copyWith(
-                                      color: c.subtitle,
-                                    ),
-                                  ),
-                                ),
-                                if (homework.graded &&
-                                    gradeDisplay.hasDisplayValue) ...[
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    gradeDisplay.primaryLabel!,
-                                    style: AppTypography.titleSmall.copyWith(
-                                      color: _gradeColor(
-                                        gradeDisplay.numericGrade,
-                                      ),
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
-                              ],
+                            Text(
+                              _formatDeadline(homework.deadline),
+                              style: AppTypography.bodySmall.copyWith(
+                                color: c.subtitle,
+                              ),
                             ),
+                            if (homework.graded && gradeDisplay.hasDisplayValue)
+                              Text(
+                                gradeDisplay.primaryLabel!,
+                                style: AppTypography.titleSmall.copyWith(
+                                  color: _gradeColor(gradeDisplay.numericGrade),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
                           ],
                         ),
-                      ),
+                      ],
                     ),
                   ),
                 );
@@ -598,14 +527,14 @@ class CourseHomeworksTab extends ConsumerWidget {
     );
   }
 
-  Color _statusColor(db.Homework homework, DateTime now) {
-    if (homework.graded) return AppColors.success;
-    if (homework.submitted) return AppColors.info;
+  StudyTone _statusTone(db.Homework homework, DateTime now) {
+    if (homework.graded) return StudyTone.jade;
+    if (homework.submitted) return StudyTone.slate;
     final deadline = tryParseEpochMillisToLocal(homework.deadline);
     if (deadline != null && deadline.isBefore(now)) {
-      return AppColors.error;
+      return StudyTone.rose;
     }
-    return AppColors.warning;
+    return StudyTone.ochre;
   }
 
   String _statusText(db.Homework homework, DateTime now) {
@@ -620,8 +549,8 @@ class CourseHomeworksTab extends ConsumerWidget {
 
   String _formatDeadline(String deadline) {
     final d = tryParseEpochMillisToLocal(deadline);
-    if (d == null) return deadline;
-    return '${d.month}/${d.day} '
+    if (d == null) return deadline.isEmpty ? '截止时间待确认' : '截止 $deadline';
+    return '截止 ${d.month}/${d.day} '
         '${d.hour.toString().padLeft(2, '0')}:'
         '${d.minute.toString().padLeft(2, '0')}';
   }
@@ -663,7 +592,7 @@ class _CourseFileFilterPill extends StatelessWidget {
         children: [
           Text(
             label,
-            style: TextStyle(
+            style: AppTypography.bodySmall.copyWith(
               fontSize: 13,
               fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
               color: isActive ? activeColor : c.subtitle,
@@ -673,10 +602,10 @@ class _CourseFileFilterPill extends StatelessWidget {
             const SizedBox(width: 4),
             Text(
               '$count',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: isActive ? activeColor : c.subtitle.withAlpha(128),
+              style: AppTypography.bodySmall.copyWith(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: isActive ? activeColor : c.subtitle,
               ),
             ),
           ],

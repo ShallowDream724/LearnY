@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/design/app_theme_colors.dart';
+import '../../../core/design/app_materials.dart';
 import '../../../core/design/typography.dart';
 import '../../../core/providers/sync_provider.dart';
 import '../../../core/utils/deadline_time.dart';
@@ -15,13 +16,13 @@ class NotificationCard extends StatelessWidget {
     final c = context.colors;
     final published = tryParseEpochMillisToLocal(notification.publishTime);
     return Material(
-      color: c.surface,
-      borderRadius: BorderRadius.circular(8),
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -33,7 +34,10 @@ class NotificationCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppTypography.bodySmall.copyWith(
-                        color: c.subtitle,
+                        color: StudyPalette.of(
+                          context,
+                          StudyPalette.course(notification.courseId),
+                        ).accent,
                       ),
                     ),
                   ),
@@ -41,10 +45,11 @@ class NotificationCard extends StatelessWidget {
                     const SizedBox(width: 8),
                     Tooltip(
                       message: '重要通知',
-                      child: Icon(
-                        Icons.star_rounded,
-                        color: c.infoAccent,
-                        size: 16,
+                      child: Text(
+                        '重要',
+                        style: AppTypography.labelMedium.copyWith(
+                          color: c.infoAccent,
+                        ),
                       ),
                     ),
                   ],

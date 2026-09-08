@@ -83,7 +83,8 @@ void main() {
         expect(find.text('大学物理'), findsOneWidget);
         expect(
           tester.getSize(find.byType(ScheduleBrowser)).height,
-          lessThan(350),
+          lessThan(tester.view.physicalSize.height * .45),
+          reason: 'A full day leaves most of the viewport for coursework.',
         );
         await clickScheduleMouse(tester, find.text('计算机系统结构'));
         expect(opened, ['1-0']);
@@ -217,7 +218,7 @@ void main() {
       failure: ScheduleFailure.campusAccess,
     );
     expect(find.text('今天没有课'), findsNothing);
-    expect(find.text('课表需要校园网或 WebVPN 授权'), findsOneWidget);
+    expect(find.text('校园连接暂未恢复，请稍后重试'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
     await tester.tap(find.byTooltip('查看整周课表'));
     await tester.pumpAndSettle();

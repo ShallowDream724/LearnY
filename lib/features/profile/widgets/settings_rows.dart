@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/design/app_materials.dart';
 import '../../../core/design/app_theme_colors.dart';
 import '../../../core/design/typography.dart';
 
@@ -9,72 +10,109 @@ class SettingsSectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 16),
+    padding: const EdgeInsets.fromLTRB(2, 0, 2, 10),
     child: Text(
       label,
-      style: AppTypography.labelSmall.copyWith(color: context.colors.subtitle),
+      style: AppTypography.titleSmall.copyWith(color: context.colors.subtitle),
     ),
   );
 }
 
 class SettingsGroup extends StatelessWidget {
-  const SettingsGroup({super.key, required this.children});
+  const SettingsGroup({
+    super.key,
+    required this.children,
+    this.tone = StudyTone.slate,
+  });
   final List<Widget> children;
+  final StudyTone tone;
 
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      for (var index = 0; index < children.length; index++) ...[
-        if (index > 0) const SizedBox(height: 6),
-        children[index],
+  Widget build(BuildContext context) => StudySurface(
+    tone: tone,
+    child: Column(
+      children: [
+        for (var index = 0; index < children.length; index++) ...[
+          if (index > 0)
+            Divider(
+              height: 1,
+              thickness: .7,
+              indent: 20,
+              endIndent: 20,
+              color: StudyPalette.of(context, tone).edge.withAlpha(130),
+            ),
+          children[index],
+        ],
       ],
-    ],
+    ),
   );
 }
 
 class SettingsRow extends StatelessWidget {
   const SettingsRow({
     super.key,
-    required this.icon,
+    this.icon,
     required this.title,
     this.subtitle,
     this.trailingColor,
     this.onTap,
     this.trailing,
+    this.onDetails,
   });
 
-  final IconData icon;
+  final IconData? icon;
   final String title;
   final String? subtitle;
   final Color? trailingColor;
   final VoidCallback? onTap;
   final Widget? trailing;
+  final VoidCallback? onDetails;
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     return Material(
-      color: c.surface,
-      borderRadius: BorderRadius.circular(8),
-      clipBehavior: Clip.antiAlias,
+      type: MaterialType.transparency,
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
           child: Row(
             children: [
-              SizedBox(
-                width: 24,
-                child: Icon(icon, size: 22, color: c.subtitle),
-              ),
-              const SizedBox(width: 14),
+              if (icon != null) ...[
+                Icon(icon, size: 20, color: c.subtitle),
+                const SizedBox(width: 14),
+              ],
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
-                      style: AppTypography.titleMedium.copyWith(color: c.text),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: AppTypography.titleMedium.copyWith(
+                              color: c.text,
+                            ),
+                          ),
+                        ),
+                        if (onDetails != null) ...[
+                          const SizedBox(width: 6),
+                          TextButton(
+                            onPressed: onDetails,
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                              ),
+                              minimumSize: const Size(44, 36),
+                              foregroundColor: c.infoAccent,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: const Text('详情'),
+                          ),
+                        ],
+                      ],
                     ),
                     if (subtitle?.isNotEmpty == true) ...[
                       const SizedBox(height: 4),
@@ -110,24 +148,27 @@ class SettingsRow extends StatelessWidget {
 class SettingsSwitchRow extends StatelessWidget {
   const SettingsSwitchRow({
     super.key,
-    required this.icon,
+    this.icon,
     required this.title,
     required this.subtitle,
     required this.value,
     required this.onChanged,
+    this.onDetails,
   });
 
-  final IconData icon;
+  final IconData? icon;
   final String title;
   final String subtitle;
   final bool value;
   final ValueChanged<bool>? onChanged;
+  final VoidCallback? onDetails;
 
   @override
   Widget build(BuildContext context) => SettingsRow(
     icon: icon,
     title: title,
     subtitle: subtitle,
+    onDetails: onDetails,
     onTap: onChanged == null ? null : () => onChanged!(!value),
     trailing: Switch.adaptive(value: value, onChanged: onChanged),
   );

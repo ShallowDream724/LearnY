@@ -171,7 +171,7 @@ class _AssignmentSubmissionScreenState
               mainAxisSize: MainAxisSize.min,
               children: [
                 ReadingWidth(
-                  maxWidth: 1120,
+                  maxWidth: 1000,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -224,7 +224,7 @@ class _AssignmentSubmissionScreenState
                     ScrollViewKeyboardDismissBehavior.onDrag,
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
                 child: ReadingWidth(
-                  maxWidth: 1120,
+                  maxWidth: 1000,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -252,8 +252,14 @@ class _AssignmentSubmissionScreenState
                             return Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Expanded(flex: 2, child: requirements),
-                                const SizedBox(width: 40),
+                                Expanded(
+                                  flex: 2,
+                                  child: HomeworkSectionCard(
+                                    title: '作业要求',
+                                    child: requirements,
+                                  ),
+                                ),
+                                const SizedBox(width: 24),
                                 Expanded(flex: 3, child: editor),
                               ],
                             );
@@ -335,7 +341,7 @@ class _AssignmentSubmissionScreenState
             counterText: '${state.characterCount} 字',
             filled: true,
             fillColor: c.surface,
-            border: const OutlineInputBorder(),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
           ),
         ),
         const SizedBox(height: 24),

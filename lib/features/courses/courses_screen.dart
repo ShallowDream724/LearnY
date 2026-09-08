@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -22,7 +24,22 @@ import 'providers/course_workbench_repository.dart';
 import 'widgets/course_card_tile.dart';
 import 'widgets/course_drag_auto_scroller.dart';
 import 'widgets/course_drag_source.dart';
+import 'widgets/course_grid_layout.dart';
 import 'widgets/course_workbench_sheets.dart';
+
+typedef _CourseExtentSignature = ({
+  String title,
+  String secondaryLabel,
+  IconData? icon,
+  int pendingHomeworks,
+  int unreadNotifications,
+  int totalFiles,
+  double width,
+  TextScaler textScaler,
+  TextDirection textDirection,
+  bool isEditing,
+  String fontFamily,
+});
 
 class CoursesScreen extends ConsumerStatefulWidget {
   const CoursesScreen({super.key});
@@ -34,6 +51,8 @@ class CoursesScreen extends ConsumerStatefulWidget {
 class _CoursesScreenState extends ConsumerState<CoursesScreen> {
   final _scrollController = ScrollController();
   final Map<String, GlobalKey> _cardKeys = <String, GlobalKey>{};
+  final _cardExtents =
+      <String, ({_CourseExtentSignature signature, double extent})>{};
   Offset _dragAnchorOffset = Offset.zero;
   Size _dragSize = Size.zero;
   Offset? _dragPosition;
@@ -318,7 +337,7 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
         onPointerCancel: _handleGlobalPointerEnd,
         child: RefreshIndicator(
           onRefresh: workbenchState.isEditing ? () async {} : _handleRefresh,
-          color: AppColors.primary,
+          color: context.colors.infoAccent,
           child: CustomScrollView(
             controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
@@ -389,6 +408,8 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
                       ? workbenchState.draftCards
                       : cards;
                   if (displayCards.isEmpty) {
+                    _cardKeys.clear();
+                    _cardExtents.clear();
                     return _buildEmpty(c);
                   }
 
@@ -438,21 +459,33 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
       builder: (context, constraints) {
         final gutter = pageGutterForWidth(constraints.crossAxisExtent);
         final width = constraints.crossAxisExtent - gutter * 2;
-        final minCardWidth = MediaQuery.textScalerOf(context).scale(170);
+        final minCardWidth = MediaQuery.textScalerOf(
+          context,
+        ).scale(constraints.crossAxisExtent < 600 ? 170 : 230);
         final cols = ((width + 12) / (minCardWidth + 12))
             .floor()
             .clamp(1, 4)
             .toInt();
         final cardWidth = (width - (cols - 1) * 12) / cols;
-        final cardHeight = CourseCardTile.gridExtent(
-          context,
-          isEditing: workbenchState.isEditing,
-        );
+        final rowExtents = List<double>.filled((cards.length / cols).ceil(), 0);
+        for (var index = 0; index < cards.length; index++) {
+          final extent = _cardExtent(
+            context,
+            card: cards[index],
+            width: cardWidth,
+            isEditing: workbenchState.isEditing,
+          );
+          rowExtents[index ~/ cols] = math.max(
+            rowExtents[index ~/ cols],
+            extent,
+          );
+        }
         final indices = {
           for (var index = 0; index < cards.length; index++)
             cards[index].course.id: index,
         };
         _cardKeys.removeWhere((id, _) => !indices.containsKey(id));
+        _cardExtents.removeWhere((id, _) => !indices.containsKey(id));
         _columns = cols;
         return SliverPadding(
           padding: EdgeInsets.fromLTRB(
@@ -462,11 +495,10 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
             shellContentBottomInset(context),
           ),
           sliver: SliverGrid.builder(
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: cols,
-              mainAxisExtent: cardHeight,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
+            gridDelegate: CourseGridDelegate(
+              columns: cols,
+              cardWidth: cardWidth,
+              rowExtents: rowExtents,
             ),
             itemCount: cards.length,
             findChildIndexCallback: (key) =>
@@ -481,13 +513,45 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
                 columns: cols,
                 workbenchState: workbenchState,
                 controller: controller,
-                feedbackSize: Size(cardWidth, cardHeight),
+                feedbackSize: Size(cardWidth, rowExtents[index ~/ cols]),
               ),
             ),
           ),
         );
       },
     );
+  }
+
+  double _cardExtent(
+    BuildContext context, {
+    required ResolvedCourseCardModel card,
+    required double width,
+    required bool isEditing,
+  }) {
+    final signature = (
+      title: card.displayTitle,
+      secondaryLabel: card.secondaryLabel,
+      icon: resolveCourseIconOption(card.iconKey)?.icon,
+      pendingHomeworks: card.pendingHomeworks,
+      unreadNotifications: card.unreadNotifications,
+      totalFiles: card.totalFiles,
+      width: width,
+      textScaler: MediaQuery.textScalerOf(context),
+      textDirection: Directionality.of(context),
+      isEditing: isEditing,
+      fontFamily: AppTypography.fontFamily,
+    );
+    final cached = _cardExtents[card.course.id];
+    if (cached?.signature == signature) return cached!.extent;
+
+    final extent = CourseCardTile.gridExtent(
+      context,
+      card: card,
+      width: width,
+      isEditing: isEditing,
+    );
+    _cardExtents[card.course.id] = (signature: signature, extent: extent);
+    return extent;
   }
 
   Widget _buildGridCardCell({
@@ -503,12 +567,10 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
     _attachDragAutoScroller(localContext);
     final isDragging = workbenchState.draggingCourseId == card.course.id;
     final isHoverTarget = workbenchState.hoverCourseId == card.course.id;
-    final colorIndex = _stableColorIndex(card.course.id);
     final targetKey = _cardKeys.putIfAbsent(card.course.id, GlobalKey.new);
     final baseCard = CourseCardTile(
       key: ValueKey('course-card-${card.course.id}'),
       card: card,
-      colorIndex: colorIndex,
       isEditing: workbenchState.isEditing,
       onTap: () => _handleCardTap(card, workbenchState.isEditing, allCards),
       onMenu: (anchor) => _openCardMenu(card, anchor),
@@ -539,7 +601,7 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
           duration: AppMotion.duration(context, AppMotion.feedback),
           curve: Curves.easeOutCubic,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(18),
             boxShadow: isTargeted
                 ? [
                     BoxShadow(
@@ -576,16 +638,12 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
                   color: Colors.transparent,
                   child: CourseCardTile(
                     card: card,
-                    colorIndex: colorIndex,
                     isEditing: true,
                     onTap: () {},
                   ),
                 ),
               ),
-              placeholder: _DragPlaceholderCard(
-                card: card,
-                colorIndex: colorIndex,
-              ),
+              placeholder: _DragPlaceholderCard(card: card),
               onStarted: () => _handleDragStarted(card.course.id, controller),
               onFinished: () => _handleDragFinished(controller),
               child: cardWidget,
@@ -631,21 +689,12 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
         ? targetIndex
         : targetIndex + 1;
   }
-
-  int _stableColorIndex(String courseId) {
-    var hash = 0;
-    for (final unit in courseId.codeUnits) {
-      hash = 0x1fffffff & (hash * 37 + unit);
-    }
-    return hash;
-  }
 }
 
 class _DragPlaceholderCard extends StatelessWidget {
-  const _DragPlaceholderCard({required this.card, required this.colorIndex});
+  const _DragPlaceholderCard({required this.card});
 
   final ResolvedCourseCardModel card;
-  final int colorIndex;
 
   @override
   Widget build(BuildContext context) {
@@ -655,12 +704,7 @@ class _DragPlaceholderCard extends StatelessWidget {
         maintainState: true,
         maintainAnimation: true,
         maintainSize: true,
-        child: CourseCardTile(
-          card: card,
-          colorIndex: colorIndex,
-          isEditing: true,
-          onTap: () {},
-        ),
+        child: CourseCardTile(card: card, isEditing: true, onTap: () {}),
       ),
     );
   }

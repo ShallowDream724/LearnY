@@ -9,24 +9,26 @@ From PowerShell on Windows:
 ```powershell
 conda activate aider
 $env:LEARNY_CAPTURE_UI = '1'
-$env:LEARNY_PREVIEW_FONT = 'C:/Windows/Fonts/msyh.ttc'
 flutter test --no-pub tool/ui_preview/schedule_preview_runner.dart --plain-name 'render the actual home and shell'
-Remove-Item Env:LEARNY_CAPTURE_UI, Env:LEARNY_PREVIEW_FONT
+Remove-Item Env:LEARNY_CAPTURE_UI
 ```
 
 The aider environment's `Library/bin` must precede other SQLite installations
 on PATH. LibreOffice's `sqlite3.dll` lacks symbols needed by these tests. In Git
 Bash, prefix the command with `PATH="/d/anaconda/envs/aider/Library/bin:$PATH"`.
 
-Use a locally installed CJK font. Fonts are read only and are not copied into
-the repository. PNGs are written under `build/ui_preview/`. Application captures:
+The runner loads the bundled WenKai screen font and both icon fonts used by the
+production app. `LEARNY_PREVIEW_FONT` may optionally supply a local fallback font
+for comparison; normal review needs no system font installation. PNGs are written
+under `build/ui_preview/`. Application captures:
 
 - 390x844 and 1440x900: home, assignments, courses, profile, unread files, files,
   course detail, homework detail, and the submission editor.
 - 800x1000: home and courses using the actual shell pane constraints.
 - Settings at all three widths, the appearance menu, enlarged text, and light/dark desktop and phone layouts.
 - Course editor at all three widths, plus the desktop anchored course menu.
-- 390x844: enlarged text on home/assignments/courses and dark home.
+- 390x844: enlarged text on home/assignments/courses; home, courses, assignments
+  and settings also render dark surfaces at phone and desktop sizes.
 
 Set `LEARNY_PREVIEW_ROUTES=courses` to capture only course surfaces when changing
 course interactions. The comma-separated filter also accepts the route names
@@ -34,9 +36,8 @@ above. Unset it to restore full coverage. Shadows are rendered rather than the
 test framework's solid-outline substitute.
 
 `LEARNY_PREVIEW_PLATFORM=windows` or `android` selects the target platform's
-theme behavior, including its configured font family. The local CJK font is
-registered under those family names for rendering; this verifies layout but
-does not verify which font a real device's system fallback will choose.
+theme behavior. The actual bundled family is loaded in both cases; rare missing
+glyphs that require system fallback remain part of real-device acceptance.
 
 Detail routes are pushed from the shell so captures include real return controls.
 The editor is opened through its real homework detail action; no submission is

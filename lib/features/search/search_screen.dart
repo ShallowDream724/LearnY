@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/design/app_theme_colors.dart';
 import '../../core/design/app_surfaces.dart';
-import '../../core/design/colors.dart';
 import '../../core/design/typography.dart';
 import '../../core/router/router.dart';
 import '../search/widgets/search_result_sections.dart';
@@ -186,6 +185,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         ],
       ),
       body: ReadingWidth(
+        maxWidth: 960,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -232,7 +232,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               height: 32,
               child: CircularProgressIndicator(
                 strokeWidth: 2.5,
-                color: AppColors.primary,
+                color: c.infoAccent,
               ),
             ),
             const SizedBox(height: 12),
@@ -277,7 +277,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final c = context.colors;
 
     if (searchState.recentSearches.isEmpty) {
-      return const AppEmptyState(icon: Icons.search_rounded, title: '搜索');
+      return const AppEmptyState(
+        icon: Icons.search_rounded,
+        title: '找到需要的学习内容',
+        message: '输入课程名、标题或关键词',
+      );
     }
 
     return ListView(
@@ -305,7 +309,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           runSpacing: 8,
           children: searchState.recentSearches.map((query) {
             return ActionChip(
-              avatar: Icon(Icons.history_rounded, size: 16, color: c.subtitle),
               label: Text(query),
               onPressed: () => _onRecentTap(query),
             );
@@ -331,7 +334,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
     return ListView.builder(
       controller: _scrollController,
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       itemCount: items.length,
       itemBuilder: (context, index) {
         final item = items[index];
@@ -355,7 +358,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             onTap: () => _toggleSection(group.section.id),
           ),
           _SearchResultItem(:final result) => Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.only(bottom: 3),
             child: SearchResultTile(
               result: result,
               onTap: () => _onResultTap(result),

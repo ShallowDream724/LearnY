@@ -117,14 +117,18 @@ abstract final class AppTheme {
         style: IconButton.styleFrom(
           foregroundColor: textSecondary,
           minimumSize: const Size(44, 44),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size(64, 44),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           textStyle: AppTypography.labelLarge,
         ),
       ),
@@ -132,7 +136,9 @@ abstract final class AppTheme {
         style: OutlinedButton.styleFrom(
           minimumSize: const Size(64, 44),
           side: BorderSide(color: border),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           textStyle: AppTypography.labelLarge,
         ),
       ),
@@ -142,7 +148,9 @@ abstract final class AppTheme {
           selectedForegroundColor: colorScheme.primary,
           selectedBackgroundColor: colorScheme.secondaryContainer,
           side: BorderSide(color: border),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           textStyle: AppTypography.labelLarge,
         ),
       ),
@@ -158,7 +166,7 @@ abstract final class AppTheme {
       popupMenuTheme: PopupMenuThemeData(
         color: surface,
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         textStyle: AppTypography.bodyMedium.copyWith(color: textPrimary),
         menuPadding: const EdgeInsets.symmetric(vertical: 6),
       ),
@@ -170,7 +178,7 @@ abstract final class AppTheme {
             EdgeInsets.symmetric(vertical: 6),
           ),
           shape: WidgetStatePropertyAll(
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         ),
       ),
@@ -201,13 +209,14 @@ abstract final class AppTheme {
 
       // ── App Bar ──
       appBarTheme: AppBarTheme(
+        toolbarHeight: 64,
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
         backgroundColor: background,
         foregroundColor: textPrimary,
         centerTitle: false,
-        titleTextStyle: AppTypography.headlineSmall.copyWith(
+        titleTextStyle: AppTypography.headlineMedium.copyWith(
           color: textPrimary,
         ),
         systemOverlayStyle: isDark
@@ -295,15 +304,15 @@ abstract final class AppTheme {
         filled: true,
         fillColor: surfaceHigh,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: colorScheme.primary, width: 1.5),
         ),
         contentPadding: const EdgeInsets.symmetric(
@@ -320,7 +329,9 @@ abstract final class AppTheme {
           foregroundColor: colorScheme.onPrimary,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           textStyle: AppTypography.labelLarge,
         ),
       ),
@@ -338,7 +349,7 @@ abstract final class AppTheme {
       snackBarTheme: SnackBarThemeData(
         backgroundColor: surfaceHigh,
         contentTextStyle: AppTypography.bodyMedium.copyWith(color: textPrimary),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         behavior: SnackBarBehavior.floating,
       ),
 

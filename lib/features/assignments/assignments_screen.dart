@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/design/app_surfaces.dart';
+import '../../core/design/app_materials.dart';
 import '../../core/design/app_theme_colors.dart';
 import '../../core/design/app_toast.dart';
 import '../../core/design/cooldown_toast.dart';
@@ -117,7 +118,7 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
         builder: (context, constraints) {
           final gutter = pageGutterForWidth(
             constraints.maxWidth,
-            maxWidth: 1000,
+            maxWidth: 960,
           );
           return RefreshIndicator(
             onRefresh: _refresh,
@@ -203,7 +204,7 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
                         slivers: [
                           SliverToBoxAdapter(
                             child: Padding(
-                              padding: const EdgeInsets.only(bottom: 24),
+                              padding: const EdgeInsets.only(bottom: 28),
                               child: _AssignmentFilters(
                                 current: filter,
                                 stats: presentation.stats,
@@ -241,30 +242,9 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
                                     bottom: 12,
                                     top: 4,
                                   ),
-                                  child: Row(
-                                    children: [
-                                      Text(
-                                        _groupLabel(section.group),
-                                        style: AppTypography.titleMedium
-                                            .copyWith(
-                                              color:
-                                                  section.group ==
-                                                      AssignmentTimelineGroup
-                                                          .overdue
-                                                  ? Theme.of(
-                                                      context,
-                                                    ).colorScheme.error
-                                                  : context.colors.text,
-                                            ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        '${section.homeworks.length}',
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.bodySmall,
-                                      ),
-                                    ],
+                                  child: _AssignmentGroupHeading(
+                                    group: section.group,
+                                    count: section.homeworks.length,
                                   ),
                                 ),
                               ),
@@ -284,7 +264,7 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
                                       bottom:
                                           index == section.homeworks.length - 1
                                           ? 24
-                                          : 8,
+                                          : 3,
                                     ),
                                     child: AssignmentListItem(
                                       homework: homework,
@@ -340,6 +320,47 @@ String _filterLabel(HomeworkFilter filter) => switch (filter) {
   HomeworkFilter.noSubmissionNeeded => '无需提交',
 };
 
+class _AssignmentGroupHeading extends StatelessWidget {
+  const _AssignmentGroupHeading({required this.group, required this.count});
+  final AssignmentTimelineGroup group;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = StudyPalette.of(
+      context,
+      group == AssignmentTimelineGroup.overdue
+          ? StudyTone.rose
+          : StudyTone.slate,
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          Text(
+            _groupLabel(group),
+            style: AppTypography.titleMedium.copyWith(color: colors.accent),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            decoration: BoxDecoration(
+              color: colors.fill,
+              borderRadius: BorderRadius.circular(5),
+            ),
+            child: Text(
+              '$count',
+              style: AppTypography.labelSmall.copyWith(color: colors.accent),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(child: Divider(color: context.colors.border)),
+        ],
+      ),
+    );
+  }
+}
+
 class _AssignmentFilters extends StatelessWidget {
   const _AssignmentFilters({
     required this.current,
@@ -365,20 +386,18 @@ class _AssignmentFilters extends StatelessWidget {
       };
       if (constraints.maxWidth >= 760 &&
           MediaQuery.textScalerOf(context).scale(14) < 18) {
-        return Align(
-          alignment: Alignment.centerLeft,
-          child: SegmentedButton<HomeworkFilter>(
-            showSelectedIcon: false,
-            segments: [
-              for (final value in HomeworkFilter.values)
-                ButtonSegment(
-                  value: value,
-                  label: Text('${_filterLabel(value)} ${counts[value]}'),
-                ),
-            ],
-            selected: {current},
-            onSelectionChanged: (values) => onChanged(values.single),
-          ),
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final value in HomeworkFilter.values)
+              ChoiceChip(
+                showCheckmark: false,
+                label: Text('${_filterLabel(value)}  ${counts[value]}'),
+                selected: current == value,
+                onSelected: (_) => onChanged(value),
+              ),
+          ],
         );
       }
       return Row(
