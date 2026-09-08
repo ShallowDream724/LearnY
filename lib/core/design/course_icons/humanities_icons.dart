@@ -478,30 +478,34 @@ void _finance(CourseIconCanvas g) {
 }
 
 void _philosophy(CourseIconCanvas g) {
-  final profile = Path()
-    ..moveTo(26, 7)
-    ..cubicTo(16, 7, 11, 14, 11, 22)
-    ..cubicTo(11, 28, 14, 32, 18, 34)
-    ..lineTo(18, 41)
-    ..lineTo(31, 41)
-    ..lineTo(31, 34)
-    ..cubicTo(35, 32, 35, 28, 35, 25)
-    ..lineTo(41, 23)
-    ..lineTo(36, 18)
-    ..cubicTo(35, 11, 31, 7, 26, 7);
-  g.area(profile, .07);
-  g.outline(profile);
+  final ribbon = Path()
+    ..moveTo(6, 24)
+    ..cubicTo(10, 10, 19, 9, 25, 20)
+    ..cubicTo(31, 31, 36, 34, 42, 24)
+    ..cubicTo(38, 38, 29, 39, 23, 28)
+    ..cubicTo(17, 17, 12, 14, 6, 24)
+    ..close();
+  g.area(ribbon, .12);
+  g.outline(ribbon);
   g.outline(
     Path()
-      ..moveTo(17, 22)
-      ..cubicTo(18, 15, 29, 14, 31, 21)
-      ..cubicTo(33, 27, 24, 31, 19, 27)
-      ..cubicTo(15, 24, 20, 19, 25, 21)
-      ..cubicTo(29, 23, 27, 27, 24, 28),
+      ..moveTo(7.5, 24)
+      ..cubicTo(12, 33, 18, 33, 23, 28),
     secondary: true,
   );
-  g.dot(22, 20, 1.2);
-  g.dot(28, 25, 1.1, secondary: true);
+  g.outline(
+    Path()
+      ..moveTo(25, 20)
+      ..cubicTo(30, 15, 36, 15, 40.5, 24),
+    secondary: true,
+  );
+  g.outline(
+    Path()
+      ..moveTo(18, 12.5)
+      ..cubicTo(22, 15, 24, 19, 27, 24)
+      ..cubicTo(30, 30, 34, 34, 38, 34),
+    secondary: true,
+  );
 }
 
 void _theatre(CourseIconCanvas g) {
