@@ -1,8 +1,8 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import 'app_theme_colors.dart';
+import 'course_icons/course_icon.dart';
+import 'course_icons/course_icon_catalog.dart';
 
 /// Course identity is independent of urgency and of a course's list position.
 enum StudyTone { ink, jade, ochre, rose, slate, plum }
@@ -145,61 +145,24 @@ class CourseSeal extends StatelessWidget {
     super.key,
     required this.courseId,
     this.size = 32,
-    this.icon,
+    this.iconKey,
+    this.courseName = '',
   });
   final String courseId;
   final double size;
-  final IconData? icon;
+  final String? iconKey;
+  final String courseName;
 
   @override
   Widget build(BuildContext context) {
     final tone = StudyPalette.course(courseId);
     final color = StudyPalette.of(context, tone).accent;
-    return ExcludeSemantics(
-      child: SizedBox.square(
-        dimension: size,
-        child: icon != null
-            ? Icon(icon, size: size * .7, color: color)
-            : CustomPaint(painter: _SealPainter(color, tone.index)),
-      ),
+    return CourseIcon(
+      option: courseIconFor(key: iconKey, courseName: courseName),
+      color: color,
+      size: size,
     );
   }
-}
-
-class _SealPainter extends CustomPainter {
-  const _SealPainter(this.color, this.variant);
-  final Color color;
-  final int variant;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    canvas.save();
-    canvas.scale(size.width / 32, size.height / 32);
-    canvas.translate(16, 16);
-    canvas.rotate(variant * math.pi / 6);
-    final stroke = Paint()
-      ..color = color.withAlpha(170)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.25;
-    final fill = Paint()..color = color.withAlpha(20);
-    final a = RRect.fromRectAndRadius(
-      const Rect.fromLTWH(-10, -10, 15, 20),
-      const Radius.circular(7),
-    );
-    final b = RRect.fromRectAndRadius(
-      const Rect.fromLTWH(-5, -10, 15, 20),
-      const Radius.circular(7),
-    );
-    canvas.drawRRect(a, fill);
-    canvas.drawRRect(b, fill);
-    canvas.drawRRect(a, stroke);
-    canvas.drawRRect(b, stroke);
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(_SealPainter oldDelegate) =>
-      color != oldDelegate.color || variant != oldDelegate.variant;
 }
 
 class StudyMark extends StatelessWidget {

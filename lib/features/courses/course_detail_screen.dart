@@ -9,7 +9,6 @@ import '../../core/design/shimmer.dart';
 import '../../core/design/typography.dart';
 import '../../core/router/router.dart';
 import 'providers/course_queries.dart';
-import 'providers/course_workbench_models.dart';
 import 'providers/course_workbench_repository.dart';
 import 'widgets/course_detail_tabs.dart';
 
@@ -159,9 +158,8 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                           CourseSeal(
                             courseId: widget.courseId,
                             size: 44,
-                            icon: resolveCourseIconOption(
-                              preference?.iconKey,
-                            )?.icon,
+                            iconKey: preference?.iconKey,
+                            courseName: course.name,
                           ),
                         ],
                       ),

@@ -1,3 +1,6 @@
+import '../../../core/design/course_glass.dart';
+import '../../../core/design/course_icons/course_icon.dart';
+import '../../../core/design/course_icons/course_icon_catalog.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -13,24 +16,34 @@ class CourseCardTile extends StatelessWidget {
     required this.card,
     required this.isEditing,
     required this.onTap,
+    this.onChooseIcon,
     this.onLongPress,
     this.onMenu,
   });
 
   final ResolvedCourseCardModel card;
+  final VoidCallback? onChooseIcon;
   final bool isEditing;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
   final ValueChanged<Rect>? onMenu;
 
+  static const _controlExtent = 48.0;
+  static const _glyphExtent = 40.0;
+  static const _menuGap = 4.0;
+
   static TextStyle get _titleStyle => AppTypography.titleLarge.copyWith(
+    inherit: false,
     fontSize: 16,
     height: 1.4,
     fontWeight: FontWeight.w500,
+    letterSpacing: 0,
   );
 
   static TextStyle get _statStyle => AppTypography.bodySmall.copyWith(
+    inherit: false,
     fontWeight: FontWeight.w500,
+    letterSpacing: 0,
     fontFeatures: const [FontFeature.tabularFigures()],
   );
 
@@ -64,22 +77,20 @@ class CourseCardTile extends StatelessWidget {
       return size;
     }
 
-    final title = measure(
-      card.displayTitle,
-      _titleStyle,
-      contentWidth - (resolveCourseIconOption(card.iconKey) == null ? 0 : 44),
-      2,
+    final title = measure(card.displayTitle, _titleStyle, contentWidth, 2);
+    final identityRow = math.max(
+      isEditing ? _controlExtent : _glyphExtent,
+      measure(
+        card.secondaryLabel,
+        AppTypography.bodySmall,
+        contentWidth - 52,
+        1,
+      ).height,
     );
-    final teacher = card.secondaryLabel.isEmpty
-        ? 0.0
-        : 6 +
-              measure(
-                card.secondaryLabel,
-                AppTypography.bodySmall,
-                contentWidth,
-                1,
-              ).height;
-    final statWidth = math.max(1.0, contentWidth - (isEditing ? 48 : 0));
+    final statWidth = math.max(
+      1.0,
+      contentWidth - (isEditing ? _controlExtent + _menuGap : 0),
+    );
     var lineWidth = 0.0;
     var lines = 1;
     var lineHeight = 0.0;
@@ -104,17 +115,10 @@ class CourseCardTile extends StatelessWidget {
       }
     }
     final footerHeight = math.max(
-      isEditing ? 44.0 : 0.0,
+      isEditing ? _controlExtent : 0.0,
       lines * lineHeight + (lines - 1) * 4,
     );
-    return (32 +
-            math.max(32, title.height) +
-            teacher +
-            14 +
-            1 +
-            10 +
-            footerHeight +
-            2)
+    return (32 + title.height + 4 + identityRow + 6 + 1 + 8 + footerHeight + 2)
         .ceilToDouble();
   }
 
@@ -126,7 +130,7 @@ class CourseCardTile extends StatelessWidget {
     final teacher = card.secondaryLabel;
     final labels = _statLabels(card);
 
-    return StudySurface(
+    return CourseGlassSurface(
       tone: tone,
       radius: 18,
       padding: const EdgeInsets.all(16),
@@ -135,56 +139,71 @@ class CourseCardTile extends StatelessWidget {
       mouseCursor: isEditing
           ? SystemMouseCursors.grab
           : SystemMouseCursors.click,
-      onSecondaryTapDown: isEditing && onMenu != null
+      onSecondaryTapDown: onMenu != null
           ? (details) => onMenu!(details.globalPosition & Size.zero)
           : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Tooltip(
+            triggerMode: TooltipTriggerMode.manual,
+            message: card.hasCustomAlias
+                ? '${card.displayTitle}\n${card.course.name}'
+                : card.course.name,
+            child: Text(
+              card.displayTitle,
+              style: _titleStyle.copyWith(color: c.text),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(height: 4),
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 child: Tooltip(
                   triggerMode: TooltipTriggerMode.manual,
-                  message: card.hasCustomAlias
-                      ? '${card.displayTitle}\n${card.course.name}'
-                      : card.course.name,
+                  message: teacher,
                   child: Text(
-                    card.displayTitle,
-                    style: _titleStyle.copyWith(color: c.text),
-                    maxLines: 2,
+                    teacher,
+                    style: AppTypography.bodySmall.copyWith(color: c.subtitle),
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
-              if (resolveCourseIconOption(card.iconKey) != null) ...[
-                const SizedBox(width: 12),
-                CourseSeal(
-                  courseId: card.course.id,
-                  size: 32,
-                  icon: resolveCourseIconOption(card.iconKey)?.icon,
+              const SizedBox(width: 12),
+              if (isEditing)
+                IconButton(
+                  tooltip: '更换图标',
+                  onPressed: onChooseIcon,
+                  constraints: const BoxConstraints.tightFor(
+                    width: _controlExtent,
+                    height: _controlExtent,
+                  ),
+                  padding: const EdgeInsets.all(4),
+                  icon: CourseIcon(
+                    option: courseIconFor(
+                      key: card.iconKey,
+                      courseName: card.course.name,
+                    ),
+                    color: Color.lerp(palette.accent, c.text, .12)!,
+                  ),
+                )
+              else
+                CourseIcon(
+                  option: courseIconFor(
+                    key: card.iconKey,
+                    courseName: card.course.name,
+                  ),
+                  color: Color.lerp(palette.accent, c.text, .12)!,
                 ),
-              ],
             ],
           ),
-          if (teacher.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Tooltip(
-              triggerMode: TooltipTriggerMode.manual,
-              message: teacher,
-              child: Text(
-                teacher,
-                style: AppTypography.bodySmall.copyWith(color: c.subtitle),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
           const Spacer(),
-          const SizedBox(height: 14),
+          const SizedBox(height: 6),
           Divider(height: 1, thickness: 1, color: palette.edge.withAlpha(110)),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
@@ -210,13 +229,13 @@ class CourseCardTile extends StatelessWidget {
                 ),
               ),
               if (isEditing) ...[
-                const SizedBox(width: 4),
+                const SizedBox(width: _menuGap),
                 Builder(
                   builder: (context) => IconButton(
                     tooltip: '编辑课程',
                     constraints: const BoxConstraints.tightFor(
-                      width: 44,
-                      height: 44,
+                      width: _controlExtent,
+                      height: _controlExtent,
                     ),
                     onPressed: () {
                       final box = context.findRenderObject()! as RenderBox;

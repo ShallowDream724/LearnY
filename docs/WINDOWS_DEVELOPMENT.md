@@ -54,7 +54,7 @@ flutter analyze --no-pub lib test
 - 教务刷新失败时保留可用课表；有排课推算时显示其来源提示。无任何数据的请求失败不应显示“今天没有课”。新增或退选课程后刷新，应立即更新推算安排。
 - 切到上一学期、当前学期，再快速往返；列表与搜索结果必须属于选中学期。正式入口重启后应保留选择。
 - 刷新、模拟断网、恢复网络后重试，检查本地内容可浏览，加载能结束，错误可查看。
-- 点击通知或文件主体应打开内容；右侧“标为已读”应只改变读状态。作业右键及“更多”应打开操作菜单。
+- 点击通知或文件主体应打开内容；桌面左侧信封按钮应只改变读状态，手机通过左滑操作。作业右键及“更多”应打开操作菜单。
 - 课程编辑中用鼠标按住卡片后直接拖动，检查 16 门课跨行、首尾排序、抓住不同位置时的落点，以及靠边停住自动滚动和松手停止。触屏仍可直接滚动，长按再拖动；右键和省略号打开紧凑菜单。完成保存后重进课程页检查顺序。
 - 验证真实登录、文件打开、正文和附件提交；这些需要人工连接学校服务，示例环境不能替代。
 
@@ -67,3 +67,11 @@ flutter analyze --no-pub lib test
 2026-09-07 UI 整合检查：应用自有 `lib test tool` 静态分析通过；作业分组与提交、搜索竞态与恢复、学期边界、已读输入、提醒设置、课程拖动和学期同步的 41 项针对性检查通过。应用预览覆盖手机、平板和桌面主要页面，以及手机大字号、深色首页和提交编辑页。Windows release 与 Android debug 均构建成功，尚未发布。
 
 本机 Android 调试包可用 `GRADLE_USER_HOME` 指向项目 `.gradle-user` 缓存后执行 `flutter build apk --debug --no-pub`，产物为 `build/app/outputs/flutter-apk/app-debug.apk`。真机安装可直接打开 APK；需要热重载时启用 USB 或无线调试，连接设备后用 `flutter run -d <设备ID>`，无需先启动模拟器。
+
+## 安装包与课程图形版本
+
+完成 Windows Release 构建后，可用 `.\tool\windows_release\build_windows_setup.ps1 -SkipBuild` 生成安装包。脚本支持通过 `-IsccPath`、`INNO_SETUP_ISCC` 或 Inno Setup 的系统/用户默认安装位置找到编译器，并在编译失败时停止，避免把旧文件当作新产物。
+
+0.1.4+10（2026-09-09）包含 100 个课程矢量图形、课程玻璃样式与图标选择器。两端 Release 已构建，Windows 安装包位于 `dist/windows/LearnY-Setup-0.1.4-build10.exe`，完整运行目录位于 `dist/windows/LearnY-0.1.4-build10/`，通用 Android 包位于 `dist/android/LearnY-0.1.4+10.apk`。文件清单与 SHA-256 见 `dist/LearnY-0.1.4-build10-manifest.json`。
+
+此轮检查覆盖旧图标编号兼容、选择/取消/保存/恢复、账号学期隔离、鼠标与触屏排序、手机键盘选择器，以及真实 Flutter 明暗与两端页面渲染；使用方式和维护入口见 [COURSE_ICONS.md](COURSE_ICONS.md)。

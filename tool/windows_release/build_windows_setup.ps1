@@ -13,7 +13,8 @@ function Resolve-InnoSetupCompiler {
     $PreferredPath,
     $env:INNO_SETUP_ISCC,
     'C:\Program Files (x86)\Inno Setup 6\ISCC.exe',
-    'C:\Program Files\Inno Setup 6\ISCC.exe'
+    'C:\Program Files\Inno Setup 6\ISCC.exe',
+    (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe')
   ) | Where-Object { $_ }
 
   foreach ($candidate in $candidates) {
@@ -67,6 +68,7 @@ if (-not $SkipBuild) {
   Push-Location $repoRoot
   try {
     flutter build windows
+    if ($LASTEXITCODE -ne 0) { throw "Flutter exited with code $LASTEXITCODE" }
   } finally {
     Pop-Location
   }
@@ -97,6 +99,7 @@ try {
     "/DOutputDir=$resolvedOutputDir" `
     "/DOutputBaseFilename=$outputBaseFilename" `
     $issPath
+  if ($LASTEXITCODE -ne 0) { throw "Inno Setup exited with code $LASTEXITCODE" }
 } finally {
   Pop-Location
 }

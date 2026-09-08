@@ -5,7 +5,11 @@ import '../../../core/design/app_surfaces.dart';
 import '../../../core/design/colors.dart';
 import '../../../core/design/typography.dart';
 import '../../../core/design/responsive.dart';
+import '../../../core/design/course_icons/course_icon_catalog.dart';
 import '../providers/course_workbench_models.dart';
+
+export 'course_icon_picker.dart'
+    show CourseIconPickerResult, showCourseIconPickerSheet;
 
 enum CourseWorkbenchMenuAction {
   chooseIcon,
@@ -13,17 +17,6 @@ enum CourseWorkbenchMenuAction {
   restoreDefault,
   moveEarlier,
   moveLater,
-}
-
-@immutable
-class CourseIconPickerResult {
-  const CourseIconPickerResult({
-    required this.submitted,
-    required this.iconKey,
-  });
-
-  final bool submitted;
-  final String? iconKey;
 }
 
 @immutable
@@ -168,77 +161,6 @@ Future<CourseWorkbenchMenuAction?> showCourseWorkbenchMenu(
                 ),
               ],
             ),
-          ],
-        );
-      },
-    ),
-  );
-}
-
-Future<CourseIconPickerResult?> showCourseIconPickerSheet(
-  BuildContext context, {
-  required String? selectedIconKey,
-}) {
-  return _showWorkbenchSheet<CourseIconPickerResult>(
-    context,
-    maxHeightFactor: 0.84,
-    scrollable: true,
-    child: Builder(
-      builder: (context) {
-        final c = context.colors;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '课程图标',
-              style: AppTypography.titleLarge.copyWith(color: c.text),
-            ),
-            const SizedBox(height: 16),
-            _WorkbenchCardGroup(
-              children: [
-                _WorkbenchActionTile(
-                  icon: Icons.refresh_rounded,
-                  title: '恢复默认图标',
-                  subtitle: '',
-                  selected: selectedIconKey == null,
-                  onTap: () => Navigator.of(context).pop(
-                    const CourseIconPickerResult(
-                      submitted: true,
-                      iconKey: null,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            for (final group in courseIconGroups) ...[
-              Padding(
-                padding: const EdgeInsets.only(top: 10, bottom: 8),
-                child: Text(
-                  group,
-                  style: AppTypography.labelMedium.copyWith(color: c.tertiary),
-                ),
-              ),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  for (final option in courseIconOptions.where(
-                    (item) => item.group == group,
-                  ))
-                    _CourseIconOptionTile(
-                      option: option,
-                      selected: option.key == selectedIconKey,
-                      onTap: () => Navigator.of(context).pop(
-                        CourseIconPickerResult(
-                          submitted: true,
-                          iconKey: option.key,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ],
           ],
         );
       },
@@ -430,14 +352,12 @@ class _WorkbenchActionTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
-    this.selected = false,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
-  final bool selected;
 
   @override
   Widget build(BuildContext context) {
@@ -482,76 +402,7 @@ class _WorkbenchActionTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              Icon(
-                selected ? Icons.check_rounded : Icons.chevron_right_rounded,
-                size: selected ? 20 : 18,
-                color: selected ? AppColors.primary : c.tertiary,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _CourseIconOptionTile extends StatelessWidget {
-  const _CourseIconOptionTile({
-    required this.option,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final CourseIconOption option;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    return Material(
-      color: selected
-          ? AppColors.primary.withAlpha(context.isDark ? 34 : 14)
-          : c.surfaceHigh.withAlpha(context.isDark ? 180 : 216),
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: onTap,
-        child: Container(
-          width: 92,
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: selected ? AppColors.primary : c.border,
-              width: selected ? 1 : 0.5,
-            ),
-          ),
-          child: Column(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: selected
-                      ? AppColors.primary.withAlpha(context.isDark ? 48 : 18)
-                      : c.surface,
-                  borderRadius: BorderRadius.circular(11),
-                ),
-                child: Icon(
-                  option.icon,
-                  size: 18,
-                  color: selected ? AppColors.primary : c.text,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                option.label,
-                textAlign: TextAlign.center,
-                style: AppTypography.labelSmall.copyWith(
-                  color: selected ? AppColors.primary : c.text,
-                ),
-              ),
+              Icon(Icons.chevron_right_rounded, size: 18, color: c.tertiary),
             ],
           ),
         ),

@@ -7,8 +7,13 @@ class CourseWorkbenchController extends StateNotifier<CourseWorkbenchState> {
   CourseWorkbenchController(this._ref) : super(const CourseWorkbenchState());
 
   final Ref _ref;
+  CourseWorkbenchScope? _editingScope;
 
-  void beginEditing(List<ResolvedCourseCardModel> cards) {
+  void beginEditing(
+    List<ResolvedCourseCardModel> cards, {
+    CourseWorkbenchScope? scope,
+  }) {
+    _editingScope = scope;
     state = CourseWorkbenchState(
       isEditing: true,
       baselineCards: List<ResolvedCourseCardModel>.unmodifiable(cards),
@@ -24,6 +29,7 @@ class CourseWorkbenchController extends StateNotifier<CourseWorkbenchState> {
       return false;
     }
     state = const CourseWorkbenchState();
+    _editingScope = null;
     return true;
   }
 
@@ -153,13 +159,21 @@ class CourseWorkbenchController extends StateNotifier<CourseWorkbenchState> {
       return true;
     }
     final scope = _ref.read(courseWorkbenchScopeProvider);
-    if (scope == null) {
+    final editingScope = _editingScope;
+    if (scope == null ||
+        (editingScope != null &&
+            (editingScope.ownerKey != scope.ownerKey ||
+                editingScope.semesterId != scope.semesterId))) {
       return false;
     }
+    final draft = state;
     await _ref
         .read(courseDisplayPrefsRepositoryProvider)
-        .saveScope(scope: scope, cards: state.draftCards);
-    state = const CourseWorkbenchState();
+        .saveScope(scope: scope, cards: draft.draftCards);
+    if (identical(state, draft)) {
+      state = const CourseWorkbenchState();
+      _editingScope = null;
+    }
     return true;
   }
 
