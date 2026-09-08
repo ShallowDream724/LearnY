@@ -31,7 +31,6 @@ class UnreadFilesScreen extends ConsumerStatefulWidget {
 class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
   final _searchController = TextEditingController();
   final _collapsedCourses = <String>{};
-  final _markingRead = <String>{};
   _SortMode _sort = _SortMode.byTime;
   String _query = '';
   String? _typeFilter;
@@ -56,18 +55,6 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
       if (mounted) AppToast.showError(context, message: '文件刷新失败');
     } finally {
       if (mounted) setState(() => _refreshing = false);
-    }
-  }
-
-  Future<void> _markRead(db.CourseFile file) async {
-    if (!_markingRead.add(file.id)) return;
-    setState(() {});
-    try {
-      await ref.read(learningDataActionsProvider).markFileRead(file.id);
-    } catch (_) {
-      if (mounted) AppToast.showError(context, message: '标记已读失败');
-    } finally {
-      if (mounted) setState(() => _markingRead.remove(file.id));
     }
   }
 
@@ -262,7 +249,9 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
                           key: ValueKey(file.id),
                           padding: const EdgeInsets.only(bottom: 3),
                           child: SwipeToRead(
-                            onSwipe: () => _markRead(file),
+                            onSwipe: () => ref
+                                .read(learningDataActionsProvider)
+                                .markFileRead(file.id),
                             child: FileCard(
                               item: FileDetailItem.fromCourseFile(
                                 file,
@@ -275,23 +264,6 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
                                   courseId: file.courseId,
                                   courseName: courseNames[file.courseId] ?? '',
                                 ),
-                              ),
-                              trailing: IconButton(
-                                tooltip: '标为已读',
-                                onPressed: _markingRead.contains(file.id)
-                                    ? null
-                                    : () => _markRead(file),
-                                icon: _markingRead.contains(file.id)
-                                    ? const SizedBox.square(
-                                        dimension: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : const Icon(
-                                        Icons.mark_email_read_outlined,
-                                        size: 20,
-                                      ),
                               ),
                             ),
                           ),

@@ -33,6 +33,7 @@ Before polishing, decide information priority and density using real sparse, den
 - The home timetable remains compact and daily on phone, tablet, and Windows. The large weekly timetable has its own browsing scope. Preserve [semester and dismissal rules](../../../docs/SCHEDULE_DESIGN.md), including remaining at the boundary when cross-semester confirmation is cancelled.
 - Preserve data provenance: official calendar, cached snapshot, and routine-derived schedule are not interchangeable. Unknown ending times remain unknown; never infer duration from credits. Unscheduled courses retain an accessible reminder.
 - A detail visit returns to the previous list position, query, filters, and scope. A local timetable or preview interaction does not silently change the whole application's semester.
+- Mobile lists mark unread items read by a left swipe, with no persistent read-state button. Desktop lists expose exactly one read-state button per row. The shared interaction owns the asynchronous operation; child cards must not add a duplicate. Detail-page read/unread controls remain available.
 - Distinguish loading, background refresh, genuine emptiness, filtered emptiness, stale content, and failure. Design the presentation for the task and allocated area; a shared centered empty-state component is not automatically right for every region.
 - Avoid decorative left-side accent bars. The user values quiet hierarchy and Apple-like continuity, with platform-appropriate input behavior. This does not prescribe one radius or material for every component.
 

@@ -86,87 +86,95 @@ class CourseNotificationsTab extends ConsumerWidget {
 
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 10),
-                  child: StudySurface(
-                    tone: isRead
-                        ? StudyTone.slate
-                        : StudyPalette.course(courseId),
-                    radius: 16,
-                    padding: const EdgeInsets.all(18),
-                    onTap: () => context.push(
-                      Routes.notificationDetail(
-                        notificationId: notification.id,
-                        courseId: courseId,
-                        courseName: courseName,
+                  child: SwipeToRead(
+                    key: ValueKey(notification.id),
+                    isRead: isRead,
+                    onSwipe: () => ref
+                        .read(learningDataActionsProvider)
+                        .setNotificationReadState(
+                          notification.id,
+                          isRead: !isRead,
+                        ),
+                    child: StudySurface(
+                      tone: isRead
+                          ? StudyTone.slate
+                          : StudyPalette.course(courseId),
+                      radius: 16,
+                      padding: const EdgeInsets.all(18),
+                      onTap: () => context.push(
+                        Routes.notificationDetail(
+                          notificationId: notification.id,
+                          courseId: courseId,
+                          courseName: courseName,
+                        ),
                       ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                notification.title,
-                                style: AppTypography.titleLarge.copyWith(
-                                  color: c.text,
-                                  fontWeight: isRead
-                                      ? FontWeight.w500
-                                      : FontWeight.w500,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  notification.title,
+                                  style: AppTypography.titleLarge.copyWith(
+                                    color: c.text,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
                               ),
-                            ),
-                            if (!isRead)
-                              Padding(
-                                padding: const EdgeInsets.only(
-                                  left: 12,
-                                  top: 8,
-                                ),
-                                child: Container(
-                                  width: 6,
-                                  height: 6,
-                                  decoration: BoxDecoration(
-                                    color: c.infoAccent,
-                                    shape: BoxShape.circle,
+                              if (!isRead)
+                                Padding(
+                                  padding: const EdgeInsets.only(
+                                    left: 12,
+                                    top: 8,
+                                  ),
+                                  child: Container(
+                                    width: 6,
+                                    height: 6,
+                                    decoration: BoxDecoration(
+                                      color: c.infoAccent,
+                                      shape: BoxShape.circle,
+                                    ),
                                   ),
                                 ),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Wrap(
-                          spacing: 12,
-                          runSpacing: 4,
-                          children: [
-                            if (notification.markedImportant)
-                              Text(
-                                '重要',
-                                style: AppTypography.bodySmall.copyWith(
-                                  color: StudyPalette.of(
-                                    context,
-                                    StudyTone.ochre,
-                                  ).accent,
-                                  fontWeight: FontWeight.w500,
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 4,
+                            children: [
+                              if (notification.markedImportant)
+                                Text(
+                                  '重要',
+                                  style: AppTypography.bodySmall.copyWith(
+                                    color: StudyPalette.of(
+                                      context,
+                                      StudyTone.ochre,
+                                    ).accent,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
-                              ),
-                            if (notification.publisher.isNotEmpty)
+                              if (notification.publisher.isNotEmpty)
+                                Text(
+                                  notification.publisher,
+                                  style: AppTypography.bodySmall.copyWith(
+                                    color: c.subtitle,
+                                  ),
+                                ),
                               Text(
-                                notification.publisher,
+                                _formatTime(notification.publishTime),
                                 style: AppTypography.bodySmall.copyWith(
                                   color: c.subtitle,
                                 ),
                               ),
-                            Text(
-                              _formatTime(notification.publishTime),
-                              style: AppTypography.bodySmall.copyWith(
-                                color: c.subtitle,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 );
@@ -323,14 +331,12 @@ class _CourseFilesTabState extends ConsumerState<CourseFilesTab> {
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 8),
                               child: SwipeToRead(
+                                key: ValueKey(file.id),
                                 isRead: !file.isNew,
-                                onSwipe: () {
-                                  if (file.isNew) {
-                                    actions.markFileRead(file.id);
-                                  } else {
-                                    actions.markFileUnread(file.id);
-                                  }
-                                },
+                                onSwipe: () => actions.setFileReadState(
+                                  file.id,
+                                  isRead: file.isNew,
+                                ),
                                 child: FileCard(
                                   item: FileDetailItem.fromCourseFile(
                                     file,
@@ -338,21 +344,6 @@ class _CourseFilesTabState extends ConsumerState<CourseFilesTab> {
                                   ),
                                   hideCourseName: true,
                                   isFavorite: isFavorite,
-                                  trailing: IconButton(
-                                    tooltip: file.isNew ? '标为已读' : '标为未读',
-                                    icon: Icon(
-                                      file.isNew
-                                          ? Icons.mark_email_read_outlined
-                                          : Icons.mark_email_unread_outlined,
-                                    ),
-                                    onPressed: () {
-                                      if (file.isNew) {
-                                        actions.markFileRead(file.id);
-                                      } else {
-                                        actions.markFileUnread(file.id);
-                                      }
-                                    },
-                                  ),
                                   onTap: () {
                                     context.push(
                                       Routes.fileDetail(

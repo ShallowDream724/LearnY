@@ -1,6 +1,5 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 
 import 'app_surfaces.dart';
 import 'app_theme_colors.dart';
@@ -16,7 +15,7 @@ class SwipeToRead extends StatefulWidget {
     this.isRead = false,
   });
   final Widget child;
-  final FutureOr<void> Function() onSwipe;
+  final Future<void> Function() onSwipe;
   final bool isRead;
 
   @override
@@ -42,48 +41,56 @@ class _SwipeToReadState extends State<SwipeToRead> {
   Widget build(BuildContext context) {
     final label = widget.isRead ? '标为未读' : '标为已读';
     final icon = widget.isRead ? Icons.mark_email_unread_outlined : Icons.done;
-    final content = Row(
-      children: [
-        Expanded(child: widget.child),
-        IconButton(
-          tooltip: label,
-          onPressed: _busy ? null : _apply,
-          icon: _busy
-              ? const SizedBox.square(
-                  dimension: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Icon(icon, size: 19),
+    if (usesDesktopControls(context)) {
+      return Row(
+        children: [
+          Expanded(child: widget.child),
+          IconButton(
+            tooltip: label,
+            onPressed: _busy ? null : _apply,
+            icon: _busy
+                ? const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(icon, size: 19),
+          ),
+        ],
+      );
+    }
+    // Read items stay still on mobile. They can be marked unread in details.
+    if (widget.isRead) return widget.child;
+    return Semantics(
+      customSemanticsActions: _busy
+          ? null
+          : {CustomSemanticsAction(label: label): _apply},
+      child: Dismissible(
+        key: ValueKey(this),
+        direction: _busy ? DismissDirection.none : DismissDirection.endToStart,
+        movementDuration: AppMotion.duration(context),
+        background: Container(
+          alignment: AlignmentDirectional.centerEnd,
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          decoration: BoxDecoration(
+            color: context.colors.infoAccent.withAlpha(18),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: context.colors.infoAccent, size: 20),
+              const SizedBox(width: 8),
+              Text(label),
+            ],
+          ),
         ),
-      ],
-    );
-    if (usesDesktopControls(context)) return content;
-    return Dismissible(
-      key: ValueKey(this),
-      direction: _busy ? DismissDirection.none : DismissDirection.endToStart,
-      movementDuration: AppMotion.duration(context),
-      background: Container(
-        alignment: AlignmentDirectional.centerEnd,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        decoration: BoxDecoration(
-          color: context.colors.infoAccent.withAlpha(18),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: context.colors.infoAccent, size: 20),
-            const SizedBox(width: 8),
-            Text(label),
-          ],
-        ),
+        confirmDismiss: (_) async {
+          await _apply();
+          // Successful writes update the source list; failed writes stay visible.
+          return false;
+        },
+        child: widget.child,
       ),
-      confirmDismiss: (_) async {
-        await _apply();
-        // Successful writes update the source list; failed writes stay visible.
-        return false;
-      },
-      child: content,
     );
   }
 }
