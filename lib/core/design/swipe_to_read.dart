@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 
 import 'app_surfaces.dart';
 import 'app_theme_colors.dart';
 import 'app_toast.dart';
 import 'responsive.dart';
+import 'read_action_feedback.dart';
 
 /// Gesture, pointer, and keyboard paths share one operation. Data owns removal.
 class SwipeToRead extends StatefulWidget {
@@ -13,10 +15,16 @@ class SwipeToRead extends StatefulWidget {
     required this.child,
     required this.onSwipe,
     this.isRead = false,
-  });
+    this.removesOnRead = false,
+    this.actionId,
+    this.onUndo,
+  }) : assert(onUndo == null || actionId != null);
   final Widget child;
   final Future<void> Function() onSwipe;
   final bool isRead;
+  final bool removesOnRead;
+  final Object? actionId;
+  final Future<void> Function()? onUndo;
 
   @override
   State<SwipeToRead> createState() => _SwipeToReadState();
@@ -25,13 +33,28 @@ class SwipeToRead extends StatefulWidget {
 class _SwipeToReadState extends State<SwipeToRead> {
   bool _busy = false;
 
-  Future<void> _apply() async {
-    if (_busy) return;
+  Future<bool> _apply() async {
+    if (_busy) return false;
+    final feedback = ReadActionFeedback.of(context);
+    final wasRead = widget.isRead;
+    final undo = widget.onUndo;
+    final id = widget.actionId;
+    final touch = !usesDesktopControls(context);
     setState(() => _busy = true);
     try {
       await widget.onSwipe();
+      if (undo != null && id != null) {
+        feedback?.record(id: id, wasRead: wasRead, undo: undo);
+      }
+      if (touch) HapticFeedback.selectionClick().ignore();
+      return true;
     } catch (_) {
-      if (mounted) AppToast.showError(context, message: '已读状态未能更新');
+      if (feedback != null) {
+        feedback.showFailure();
+      } else if (mounted) {
+        AppToast.showError(context, message: '已读状态未能更新');
+      }
+      return false;
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -58,7 +81,13 @@ class _SwipeToReadState extends State<SwipeToRead> {
                 : Icon(icon, size: 18),
           ),
           const SizedBox(width: 4),
-          Expanded(child: widget.child),
+          Expanded(
+            child: AnimatedOpacity(
+              opacity: _busy ? 0.6 : 1,
+              duration: AppMotion.duration(context, AppMotion.feedback),
+              child: widget.child,
+            ),
+          ),
         ],
       );
     }
@@ -72,6 +101,8 @@ class _SwipeToReadState extends State<SwipeToRead> {
         key: ValueKey(this),
         direction: _busy ? DismissDirection.none : DismissDirection.endToStart,
         movementDuration: AppMotion.duration(context),
+        // The list owns vertical reflow; Dismissible only owns horizontal motion.
+        resizeDuration: null,
         background: Container(
           alignment: AlignmentDirectional.centerEnd,
           padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -89,9 +120,8 @@ class _SwipeToReadState extends State<SwipeToRead> {
           ),
         ),
         confirmDismiss: (_) async {
-          await _apply();
-          // Successful writes update the source list; failed writes stay visible.
-          return false;
+          final removesOnRead = widget.removesOnRead;
+          return await _apply() && removesOnRead;
         },
         child: widget.child,
       ),

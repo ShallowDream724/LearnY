@@ -10,6 +10,8 @@ import '../../../core/design/app_toast.dart';
 import '../../../core/design/file_type_utils.dart';
 import '../../../core/design/homework_reminder_menu.dart';
 import '../../../core/design/swipe_to_read.dart';
+import '../../../core/design/animated_data_list.dart';
+import '../../../core/design/read_action_feedback.dart';
 import '../../../core/design/typography.dart';
 import '../../../core/providers/providers.dart';
 import '../../../core/providers/sync_models.dart';
@@ -200,34 +202,42 @@ class HomeUnreadNotificationsSection extends ConsumerWidget {
     );
     if (data == null) return const SizedBox.shrink();
     final (notifications, unread) = data;
+    final actions = ref.read(learningDataActionsProvider);
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
       child: StudySurface(
         padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            HomeSectionTitle(title: '未读通知', count: unread),
-            const SizedBox(height: 12),
-            if (notifications.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text(
-                  '暂无未读通知',
-                  style: Theme.of(context).textTheme.bodyMedium,
+        child: ReadActionFeedback(
+          key: ValueKey(ref.watch(currentSemesterIdProvider)),
+          expand: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              HomeSectionTitle(title: '未读通知', count: unread),
+              const SizedBox(height: 12),
+              AnimatedDataList(
+                items: notifications,
+                itemId: (notification) => notification.id,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                emptyBuilder: (context) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    '暂无未读通知',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
                 ),
-              )
-            else
-              for (final notification in notifications)
-                Padding(
+                itemBuilder: (context, notification) => Padding(
                   key: ValueKey('notification-${notification.id}'),
                   padding: const EdgeInsets.only(bottom: 8),
                   child: SwipeToRead(
+                    actionId: 'notification-${notification.id}',
+                    removesOnRead: true,
+                    onUndo: () =>
+                        actions.markNotificationUnread(notification.id),
                     onSwipe: () async {
                       onBeforeSwipeRead?.call();
-                      await ref
-                          .read(learningDataActionsProvider)
-                          .markNotificationRead(notification.id);
+                      await actions.markNotificationRead(notification.id);
                     },
                     child: NotificationCard(
                       notification: notification,
@@ -241,7 +251,9 @@ class HomeUnreadNotificationsSection extends ConsumerWidget {
                     ),
                   ),
                 ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -265,45 +277,59 @@ class HomeUnreadFilesSection extends ConsumerWidget {
     );
     if (data == null) return const SizedBox.shrink();
     final (files, total) = data;
-    if (files.isEmpty) return const SizedBox.shrink();
+    final actions = ref.read(learningDataActionsProvider);
     return StudySurface(
       padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          HomeSectionTitle(
-            title: '未读文件',
-            count: total,
-            action: total > 5
-                ? IconButton(
-                    tooltip: '查看全部未读文件',
-                    onPressed: () => context.push(Routes.unreadFiles),
-                    icon: const Icon(Icons.arrow_forward, size: 18),
-                  )
-                : null,
-          ),
-          const SizedBox(height: 12),
-          for (final file in files.take(5))
-            Padding(
-              key: ValueKey('file-${file.id}'),
-              padding: const EdgeInsets.only(bottom: 8),
-              child: SwipeToRead(
-                onSwipe: () =>
-                    ref.read(learningDataActionsProvider).markFileRead(file.id),
-                child: HomeNewFileCard(
-                  file: file,
-                  onTap: () => context.push(
-                    Routes.fileDetail(
-                      fileId: file.id,
-                      courseId: file.courseId,
-                      courseName: file.courseName,
+      child: ReadActionFeedback(
+        key: ValueKey(ref.watch(currentSemesterIdProvider)),
+        expand: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            HomeSectionTitle(
+              title: '未读文件',
+              count: total,
+              action: total > 5
+                  ? IconButton(
+                      tooltip: '查看全部未读文件',
+                      onPressed: () => context.push(Routes.unreadFiles),
+                      icon: const Icon(Icons.arrow_forward, size: 18),
+                    )
+                  : null,
+            ),
+            const SizedBox(height: 12),
+            AnimatedDataList(
+              items: files.take(5).toList(),
+              itemId: (file) => file.id,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              emptyBuilder: (context) => const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Text('暂无未读文件'),
+              ),
+              itemBuilder: (context, file) => Padding(
+                key: ValueKey('file-${file.id}'),
+                padding: const EdgeInsets.only(bottom: 8),
+                child: SwipeToRead(
+                  actionId: 'file-${file.id}',
+                  removesOnRead: true,
+                  onUndo: () => actions.markFileUnread(file.id),
+                  onSwipe: () => actions.markFileRead(file.id),
+                  child: HomeNewFileCard(
+                    file: file,
+                    onTap: () => context.push(
+                      Routes.fileDetail(
+                        fileId: file.id,
+                        courseId: file.courseId,
+                        courseName: file.courseName,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          const SizedBox(height: 16),
-        ],
+          ],
+        ),
       ),
     );
   }

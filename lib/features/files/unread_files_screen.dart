@@ -10,6 +10,8 @@ import '../../core/design/cooldown_toast.dart';
 import '../../core/design/file_type_utils.dart';
 import '../../core/design/shimmer.dart';
 import '../../core/design/swipe_to_read.dart';
+import '../../core/design/animated_data_list.dart';
+import '../../core/design/read_action_feedback.dart';
 import '../../core/files/file_models.dart';
 import '../../core/providers/providers.dart';
 import '../../core/providers/sync_models.dart';
@@ -71,6 +73,7 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
     final files = ref.watch(unreadFilesProvider);
     final courseNames = ref.watch(fileCourseNameMapProvider).valueOrNull ?? {};
     final allFiles = files.valueOrNull ?? const <db.CourseFile>[];
+    final actions = ref.read(learningDataActionsProvider);
     final typeCounts = <String, int>{};
     for (final file in allFiles) {
       final type = FileTypeUtils.extractExt(file.title, file.fileType);
@@ -168,21 +171,7 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
                                 ) ==
                                 _typeFilter);
                   }).toList();
-                  if (filtered.isEmpty) {
-                    final hasFilter = query.isNotEmpty || _typeFilter != null;
-                    return AppEmptyState(
-                      icon: hasFilter
-                          ? Icons.search_off_rounded
-                          : Icons.check_circle_outline_rounded,
-                      title: hasFilter ? '没有符合条件的未读文件' : '暂无未读文件',
-                      action: hasFilter
-                          ? TextButton(
-                              onPressed: _clearFilters,
-                              child: const Text('清除筛选'),
-                            )
-                          : null,
-                    );
-                  }
+                  final hasFilter = query.isNotEmpty || _typeFilter != null;
                   final rows = <Object>[];
                   if (_sort == _SortMode.byTime) {
                     rows.addAll(filtered);
@@ -204,71 +193,90 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
                       }
                     }
                   }
-                  return RefreshIndicator(
-                    onRefresh: _refresh,
-                    child: ListView.builder(
-                      key: PageStorageKey(
-                        'unread-${_sort.name}-${_typeFilter ?? 'all'}-${_query.trim()}',
-                      ),
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
-                      itemCount: rows.length,
-                      itemBuilder: (context, index) {
-                        final row = rows[index];
-                        if (row is (String, int)) {
-                          final (id, count) = row;
-                          final collapsed = _collapsedCourses.contains(id);
-                          return ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: Text(courseNames[id] ?? '未知课程'),
-                            leading: CourseSeal(courseId: id, size: 24),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text('$count'),
-                                const SizedBox(width: 8),
-                                Icon(
-                                  collapsed
-                                      ? Icons.expand_more_rounded
-                                      : Icons.expand_less_rounded,
-                                  size: 20,
-                                ),
-                              ],
-                            ),
-                            onTap: () => setState(() {
-                              if (collapsed) {
-                                _collapsedCourses.remove(id);
-                              } else {
-                                _collapsedCourses.add(id);
-                              }
-                            }),
-                          );
-                        }
-                        final file = row as db.CourseFile;
-                        return Padding(
-                          key: ValueKey(file.id),
-                          padding: const EdgeInsets.only(bottom: 3),
-                          child: SwipeToRead(
-                            onSwipe: () => ref
-                                .read(learningDataActionsProvider)
-                                .markFileRead(file.id),
-                            child: FileCard(
-                              item: FileDetailItem.fromCourseFile(
-                                file,
-                                courseName: courseNames[file.courseId] ?? '',
+                  return ReadActionFeedback(
+                    key: ValueKey((_sort, _typeFilter, query)),
+                    child: RefreshIndicator(
+                      onRefresh: _refresh,
+                      child: AnimatedDataList<Object>(
+                        key: PageStorageKey(
+                          'unread-${_sort.name}-${_typeFilter ?? 'all'}-${_query.trim()}',
+                        ),
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+                        items: rows,
+                        itemId: (row) => row is db.CourseFile
+                            ? 'file-${row.id}'
+                            : 'course-${(row as (String, int)).$1}',
+                        emptyBuilder: (context) => AppEmptyState(
+                          icon: hasFilter
+                              ? Icons.search_off_rounded
+                              : Icons.drafts_outlined,
+                          title: hasFilter ? '没有符合条件的未读文件' : '暂无未读文件',
+                          action: hasFilter
+                              ? TextButton(
+                                  onPressed: _clearFilters,
+                                  child: const Text('清除筛选'),
+                                )
+                              : null,
+                        ),
+                        itemBuilder: (context, row) {
+                          if (row is (String, int)) {
+                            final (id, count) = row;
+                            final collapsed = _collapsedCourses.contains(id);
+                            return ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(courseNames[id] ?? '未知课程'),
+                              leading: CourseSeal(courseId: id, size: 24),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text('$count'),
+                                  const SizedBox(width: 8),
+                                  Icon(
+                                    collapsed
+                                        ? Icons.expand_more_rounded
+                                        : Icons.expand_less_rounded,
+                                    size: 20,
+                                  ),
+                                ],
                               ),
-                              hideCourseName: _sort == _SortMode.byCourse,
-                              onTap: () => context.push(
-                                Routes.fileDetail(
-                                  fileId: file.id,
-                                  courseId: file.courseId,
+                              onTap: () => setState(() {
+                                if (collapsed) {
+                                  _collapsedCourses.remove(id);
+                                } else {
+                                  _collapsedCourses.add(id);
+                                }
+                              }),
+                            );
+                          }
+                          final file = row as db.CourseFile;
+                          return Padding(
+                            key: ValueKey(file.id),
+                            padding: const EdgeInsets.only(bottom: 3),
+                            child: SwipeToRead(
+                              actionId: 'file-${file.id}',
+                              removesOnRead: true,
+                              onUndo: () => actions.markFileUnread(file.id),
+                              onSwipe: () => actions.markFileRead(file.id),
+                              child: FileCard(
+                                item: FileDetailItem.fromCourseFile(
+                                  file,
                                   courseName: courseNames[file.courseId] ?? '',
                                 ),
+                                hideCourseName: _sort == _SortMode.byCourse,
+                                onTap: () => context.push(
+                                  Routes.fileDetail(
+                                    fileId: file.id,
+                                    courseId: file.courseId,
+                                    courseName:
+                                        courseNames[file.courseId] ?? '',
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
-                        );
-                      },
+                          );
+                        },
+                      ),
                     ),
                   );
                 },

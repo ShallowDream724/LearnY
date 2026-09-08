@@ -3,8 +3,76 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:learn_y/core/design/swipe_to_read.dart';
+import 'package:learn_y/core/design/animated_data_list.dart';
+import 'package:learn_y/core/design/read_action_feedback.dart';
 
 void main() {
+  for (final platform in [TargetPlatform.windows, TargetPlatform.android]) {
+    testWidgets(
+      '$platform groups read feedback and undo survives row removal',
+      (tester) async {
+        final items = ValueNotifier(['A', 'B']);
+        addTearDown(items.dispose);
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = const Size(390, 844);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.view.resetPhysicalSize);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData(platform: platform),
+            home: Scaffold(
+              body: ReadActionFeedback(
+                child: ValueListenableBuilder(
+                  valueListenable: items,
+                  builder: (context, values, _) => AnimatedDataList<String>(
+                    items: values,
+                    itemId: (id) => id,
+                    emptyBuilder: (_) => const Text('Empty'),
+                    itemBuilder: (context, id) => SwipeToRead(
+                      key: ValueKey(id),
+                      actionId: id,
+                      removesOnRead: true,
+                      onSwipe: () async {
+                        items.value = items.value
+                            .where((value) => value != id)
+                            .toList();
+                      },
+                      onUndo: () async {
+                        items.value = [...items.value, id]..sort();
+                      },
+                      child: SizedBox(height: 60, child: Text(id)),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        for (final id in ['A', 'B']) {
+          final row = find.byKey(ValueKey(id));
+          if (platform == TargetPlatform.windows) {
+            await tester.tap(
+              find.descendant(of: row, matching: find.byType(IconButton)),
+            );
+          } else {
+            await tester.drag(row, const Offset(-240, 0));
+          }
+          await tester.pumpAndSettle();
+        }
+        expect(find.text('2 项已标为已读'), findsOneWidget);
+        expect(find.text('撤销'), findsOneWidget);
+        expect(find.byType(SnackBar), findsNothing);
+        expect(find.text('Empty'), findsOneWidget);
+        await tester.tap(find.text('撤销'));
+        await tester.pumpAndSettle();
+        expect(items.value, ['A', 'B']);
+        expect(find.text('A'), findsOneWidget);
+        expect(find.text('B'), findsOneWidget);
+        expect(find.text('撤销'), findsNothing);
+      },
+    );
+  }
+
   testWidgets('desktop read action and content click are independent', (
     tester,
   ) async {

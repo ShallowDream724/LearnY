@@ -9,6 +9,8 @@ import '../../../core/design/colors.dart';
 import '../../../core/design/cooldown_toast.dart';
 import '../../../core/design/shimmer.dart';
 import '../../../core/design/swipe_to_read.dart';
+import '../../../core/design/animated_data_list.dart';
+import '../../../core/design/read_action_feedback.dart';
 import '../../../core/design/typography.dart';
 import '../../../core/database/database.dart' as db;
 import '../../../core/files/file_models.dart';
@@ -47,6 +49,7 @@ class CourseNotificationsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.colors;
     final notifAsync = ref.watch(courseNotificationsProvider(courseId));
+    final actions = ref.read(learningDataActionsProvider);
 
     return ReadingWidth(
       child: notifAsync.when(
@@ -72,113 +75,119 @@ class CourseNotificationsTab extends ConsumerWidget {
             );
           }
 
-          return RefreshIndicator(
-            onRefresh: () => _onRefresh(context, ref),
-            color: context.colors.infoAccent,
-            child: ListView.builder(
-              key: PageStorageKey('course-notifications-$courseId'),
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-              itemCount: notifications.length,
-              itemBuilder: (context, index) {
-                final notification = notifications[index];
-                final isRead = notification.isEffectivelyRead;
+          return ReadActionFeedback(
+            key: ValueKey(courseId),
+            child: RefreshIndicator(
+              onRefresh: () => _onRefresh(context, ref),
+              color: context.colors.infoAccent,
+              child: ListView.builder(
+                key: PageStorageKey('course-notifications-$courseId'),
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+                itemCount: notifications.length,
+                itemBuilder: (context, index) {
+                  final notification = notifications[index];
+                  final isRead = notification.isEffectivelyRead;
 
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: SwipeToRead(
-                    key: ValueKey(notification.id),
-                    isRead: isRead,
-                    onSwipe: () => ref
-                        .read(learningDataActionsProvider)
-                        .setNotificationReadState(
-                          notification.id,
-                          isRead: !isRead,
-                        ),
-                    child: StudySurface(
-                      tone: isRead
-                          ? StudyTone.slate
-                          : StudyPalette.course(courseId),
-                      radius: 16,
-                      padding: const EdgeInsets.all(18),
-                      onTap: () => context.push(
-                        Routes.notificationDetail(
-                          notificationId: notification.id,
-                          courseId: courseId,
-                          courseName: courseName,
-                        ),
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: SwipeToRead(
+                      key: ValueKey(notification.id),
+                      isRead: isRead,
+                      actionId: 'notification-${notification.id}',
+                      onUndo: () => actions.setNotificationReadState(
+                        notification.id,
+                        isRead: isRead,
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  notification.title,
-                                  style: AppTypography.titleLarge.copyWith(
-                                    color: c.text,
-                                    fontWeight: FontWeight.w500,
+                      onSwipe: () => actions.setNotificationReadState(
+                        notification.id,
+                        isRead: !isRead,
+                      ),
+                      child: StudySurface(
+                        tone: isRead
+                            ? StudyTone.slate
+                            : StudyPalette.course(courseId),
+                        radius: 16,
+                        padding: const EdgeInsets.all(18),
+                        onTap: () => context.push(
+                          Routes.notificationDetail(
+                            notificationId: notification.id,
+                            courseId: courseId,
+                            courseName: courseName,
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    notification.title,
+                                    style: AppTypography.titleLarge.copyWith(
+                                      color: c.text,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              ),
-                              if (!isRead)
-                                Padding(
-                                  padding: const EdgeInsets.only(
-                                    left: 12,
-                                    top: 8,
-                                  ),
-                                  child: Container(
-                                    width: 6,
-                                    height: 6,
-                                    decoration: BoxDecoration(
-                                      color: c.infoAccent,
-                                      shape: BoxShape.circle,
+                                if (!isRead)
+                                  Padding(
+                                    padding: const EdgeInsets.only(
+                                      left: 12,
+                                      top: 8,
+                                    ),
+                                    child: Container(
+                                      width: 6,
+                                      height: 6,
+                                      decoration: BoxDecoration(
+                                        color: c.infoAccent,
+                                        shape: BoxShape.circle,
+                                      ),
                                     ),
                                   ),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Wrap(
-                            spacing: 12,
-                            runSpacing: 4,
-                            children: [
-                              if (notification.markedImportant)
-                                Text(
-                                  '重要',
-                                  style: AppTypography.bodySmall.copyWith(
-                                    color: StudyPalette.of(
-                                      context,
-                                      StudyTone.ochre,
-                                    ).accent,
-                                    fontWeight: FontWeight.w500,
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Wrap(
+                              spacing: 12,
+                              runSpacing: 4,
+                              children: [
+                                if (notification.markedImportant)
+                                  Text(
+                                    '重要',
+                                    style: AppTypography.bodySmall.copyWith(
+                                      color: StudyPalette.of(
+                                        context,
+                                        StudyTone.ochre,
+                                      ).accent,
+                                      fontWeight: FontWeight.w500,
+                                    ),
                                   ),
-                                ),
-                              if (notification.publisher.isNotEmpty)
+                                if (notification.publisher.isNotEmpty)
+                                  Text(
+                                    notification.publisher,
+                                    style: AppTypography.bodySmall.copyWith(
+                                      color: c.subtitle,
+                                    ),
+                                  ),
                                 Text(
-                                  notification.publisher,
+                                  _formatTime(notification.publishTime),
                                   style: AppTypography.bodySmall.copyWith(
                                     color: c.subtitle,
                                   ),
                                 ),
-                              Text(
-                                _formatTime(notification.publishTime),
-                                style: AppTypography.bodySmall.copyWith(
-                                  color: c.subtitle,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           );
         },
@@ -306,58 +315,59 @@ class _CourseFilesTabState extends ConsumerState<CourseFilesTab> {
                   ),
                 ),
                 Expanded(
-                  child: files.isEmpty
-                      ? ListView(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          children: [
-                            _CourseEmptyState(
-                              icon: _filter == CourseFileFilter.all
-                                  ? Icons.folder_open_rounded
-                                  : Icons.filter_list_off_rounded,
-                              label: _buildEmptyStateLabel(),
+                  child: ReadActionFeedback(
+                    key: ValueKey((widget.courseId, _filter, _typeFilter)),
+                    child: AnimatedDataList(
+                      items: files,
+                      itemId: (file) => file.id,
+                      emptyBuilder: (context) => _CourseEmptyState(
+                        icon: _filter == CourseFileFilter.all
+                            ? Icons.folder_open_rounded
+                            : Icons.filter_list_off_rounded,
+                        label: _buildEmptyStateLabel(),
+                      ),
+                      key: PageStorageKey('course-files-${widget.courseId}'),
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                      itemBuilder: (context, file) {
+                        final isFavorite = favoriteKeys.contains(file.id);
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: SwipeToRead(
+                            key: ValueKey(file.id),
+                            isRead: !file.isNew,
+                            actionId: 'file-${file.id}',
+                            removesOnRead: _filter == CourseFileFilter.unread,
+                            onUndo: () => actions.setFileReadState(
+                              file.id,
+                              isRead: !file.isNew,
                             ),
-                          ],
-                        )
-                      : ListView.builder(
-                          key: PageStorageKey(
-                            'course-files-${widget.courseId}',
-                          ),
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                          itemCount: files.length,
-                          itemBuilder: (context, index) {
-                            final file = files[index];
-                            final isFavorite = favoriteKeys.contains(file.id);
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: SwipeToRead(
-                                key: ValueKey(file.id),
-                                isRead: !file.isNew,
-                                onSwipe: () => actions.setFileReadState(
-                                  file.id,
-                                  isRead: file.isNew,
-                                ),
-                                child: FileCard(
-                                  item: FileDetailItem.fromCourseFile(
-                                    file,
+                            onSwipe: () => actions.setFileReadState(
+                              file.id,
+                              isRead: file.isNew,
+                            ),
+                            child: FileCard(
+                              item: FileDetailItem.fromCourseFile(
+                                file,
+                                courseName: widget.courseName,
+                              ),
+                              hideCourseName: true,
+                              isFavorite: isFavorite,
+                              onTap: () {
+                                context.push(
+                                  Routes.fileDetail(
+                                    fileId: file.id,
+                                    courseId: widget.courseId,
                                     courseName: widget.courseName,
                                   ),
-                                  hideCourseName: true,
-                                  isFavorite: isFavorite,
-                                  onTap: () {
-                                    context.push(
-                                      Routes.fileDetail(
-                                        fileId: file.id,
-                                        courseId: widget.courseId,
-                                        courseName: widget.courseName,
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                            );
-                          },
-                        ),
+                                );
+                              },
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
                 ),
               ],
             ),
