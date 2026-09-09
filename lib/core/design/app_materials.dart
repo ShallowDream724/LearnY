@@ -173,14 +173,11 @@ class StudyMark extends StatelessWidget {
   Widget build(BuildContext context) => ExcludeSemantics(
     child: SizedBox.square(
       dimension: size,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(size * .24),
-        child: Image.asset(
-          'assets/brand/app_icon.png',
-          width: size,
-          height: size,
-          filterQuality: FilterQuality.medium,
-        ),
+      child: Image.asset(
+        'assets/brand/app_icon.png',
+        width: size,
+        height: size,
+        filterQuality: FilterQuality.medium,
       ),
     ),
   );
