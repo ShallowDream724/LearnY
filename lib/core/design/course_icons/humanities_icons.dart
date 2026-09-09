@@ -638,32 +638,26 @@ void _global(CourseIconCanvas g) {
 }
 
 void _sociology(CourseIconCanvas g) {
-  g.circle(24, 11, 4);
-  g.circle(10, 20, 3.3, secondary: true);
-  g.circle(38, 20, 3.3, secondary: true);
-  g.circle(15, 37, 3.3, secondary: true);
-  g.circle(33, 37, 3.3, secondary: true);
-  final ties = Path()
-    ..moveTo(20, 13)
-    ..lineTo(13, 18)
-    ..moveTo(28, 13)
-    ..lineTo(35, 18)
-    ..moveTo(9, 24)
-    ..lineTo(13, 34)
-    ..moveTo(39, 24)
-    ..lineTo(35, 34)
-    ..moveTo(19, 37)
-    ..lineTo(29, 37);
-  g.outline(ties, secondary: true);
-  final center = Path()
-    ..moveTo(24, 20)
-    ..lineTo(30, 24)
-    ..lineTo(28, 31)
-    ..lineTo(20, 31)
-    ..lineTo(18, 24)
+  for (final x in [12.0, 36.0]) {
+    g.circle(x, 12, 3.5, secondary: true);
+    final figure = Path()
+      ..moveTo(x - 7, 28)
+      ..lineTo(x - 7, 24)
+      ..cubicTo(x - 7, 17, x + 7, 17, x + 7, 24)
+      ..lineTo(x + 7, 28)
+      ..close();
+    g.area(figure, .06);
+    g.outline(figure, secondary: true);
+  }
+  g.circle(24, 23, 4);
+  final figure = Path()
+    ..moveTo(16, 40)
+    ..lineTo(16, 35)
+    ..cubicTo(16, 28, 32, 28, 32, 35)
+    ..lineTo(32, 40)
     ..close();
-  g.area(center, .15);
-  g.outline(center);
+  g.area(figure, .14);
+  g.outline(figure);
 }
 
 void _psychology(CourseIconCanvas g) {
@@ -780,34 +774,37 @@ void _photography(CourseIconCanvas g) {
 }
 
 void _film(CourseIconCanvas g) {
-  final strip = Path()
-    ..moveTo(8, 9)
-    ..cubicTo(17, 7, 26, 13, 40, 10)
-    ..lineTo(40, 36)
-    ..cubicTo(27, 39, 18, 33, 8, 36)
+  final board = Path()
+    ..moveTo(8, 19)
+    ..lineTo(41, 19)
+    ..lineTo(41, 37)
+    ..quadraticBezierTo(41, 40, 38, 40)
+    ..lineTo(11, 40)
+    ..quadraticBezierTo(8, 40, 8, 37)
     ..close();
-  g.area(strip, .08);
-  g.outline(strip);
-  g.outline(
-    Path()
-      ..moveTo(8, 16)
-      ..cubicTo(17, 14, 26, 20, 40, 17),
-    secondary: true,
-  );
-  g.outline(
-    Path()
-      ..moveTo(8, 29)
-      ..cubicTo(18, 26, 27, 33, 40, 29),
-    secondary: true,
-  );
-  for (final x in [13.0, 22.0, 31.0, 38.0]) {
-    g.line(x, 10, x, 15, secondary: true);
-    g.line(x, 30, x, 35, secondary: true);
+  g.area(board, .06);
+  g.outline(board);
+  final clap = Path()
+    ..moveTo(6, 11)
+    ..lineTo(38, 5)
+    ..lineTo(40, 12)
+    ..lineTo(8, 18)
+    ..close();
+  g.area(clap, .14);
+  g.outline(clap);
+  for (final x in [14.0, 23.0, 32.0]) {
+    g.line(
+      x,
+      11 - (x - 6) * 6 / 32,
+      x + 4,
+      18 - (x - 4) * 6 / 32,
+      secondary: true,
+    );
   }
   final frame = Path()
-    ..moveTo(19, 20)
-    ..lineTo(29, 24)
-    ..lineTo(19, 28)
+    ..moveTo(21, 25)
+    ..lineTo(29, 30)
+    ..lineTo(21, 35)
     ..close();
   g.area(frame, .17);
   g.outline(frame);
@@ -949,10 +946,9 @@ void _running(CourseIconCanvas g) {
   );
   g.outline(
     Path()
-      ..moveTo(28, 29)
-      ..lineTo(19, 38)
-      ..lineTo(12, 38),
-    secondary: true,
+      ..moveTo(25, 16)
+      ..lineTo(20, 14)
+      ..lineTo(14, 20),
   );
   g.line(6, 17, 17, 17, secondary: true);
   g.line(9, 23, 15, 23, secondary: true);

@@ -200,34 +200,32 @@ void _flask(CourseIconCanvas g) {
 }
 
 void _flow(CourseIconCanvas g) {
-  final wing = Path()
-    ..moveTo(15, 26)
-    ..cubicTo(19, 19, 30, 20, 37, 24)
-    ..cubicTo(29, 28, 20, 30, 15, 26)
+  final drop = Path()
+    ..moveTo(24, 5)
+    ..cubicTo(21, 11, 15, 17, 15, 22)
+    ..cubicTo(15, 34, 33, 34, 33, 22)
+    ..cubicTo(33, 17, 27, 11, 24, 5)
     ..close();
-  g.area(wing, .2);
-  g.outline(wing);
+  g.area(drop, .12);
+  g.outline(drop);
   g.outline(
     Path()
-      ..moveTo(6, 14)
-      ..cubicTo(17, 14, 22, 9, 42, 14),
-  );
-  g.outline(
-    Path()
-      ..moveTo(6, 22)
-      ..cubicTo(15, 22, 12, 11, 42, 19),
+      ..moveTo(19, 22)
+      ..quadraticBezierTo(19, 27, 23, 27),
     secondary: true,
   );
   g.outline(
     Path()
-      ..moveTo(6, 30)
-      ..cubicTo(13, 30, 15, 38, 42, 30),
-    secondary: true,
+      ..moveTo(6, 35)
+      ..cubicTo(12, 30, 18, 40, 24, 35)
+      ..cubicTo(30, 30, 36, 40, 42, 35),
   );
   g.outline(
     Path()
-      ..moveTo(6, 38)
-      ..cubicTo(21, 38, 25, 38, 42, 36),
+      ..moveTo(9, 42)
+      ..cubicTo(15, 38, 20, 46, 26, 42)
+      ..cubicTo(31, 39, 35, 43, 39, 41),
+    secondary: true,
   );
 }
 

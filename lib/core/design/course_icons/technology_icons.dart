@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'course_icon_canvas.dart';
@@ -253,28 +255,33 @@ void _drawStructure(CourseIconCanvas g) {
 }
 
 void _drawMechanical(CourseIconCanvas g) {
-  g.circle(19, 27, 10);
-  g.circle(19, 27, 3, secondary: true);
-  g.circle(34, 16, 6.5);
-  g.circle(34, 16, 2, secondary: true);
-  for (final line in [
-    (19.0, 13.0, 19.0, 17.0),
-    (19.0, 37.0, 19.0, 41.0),
-    (5.0, 27.0, 9.0, 27.0),
-    (29.0, 27.0, 33.0, 27.0),
-    (9.0, 17.0, 12.0, 20.0),
-    (26.0, 34.0, 29.0, 37.0),
-    (9.0, 37.0, 12.0, 34.0),
-    (26.0, 20.0, 29.0, 17.0),
-    (34.0, 6.0, 34.0, 9.5),
-    (34.0, 22.5, 34.0, 26.0),
-    (24.0, 16.0, 27.5, 16.0),
-    (40.5, 16.0, 43.0, 16.0),
-  ]) {
-    g.line(line.$1, line.$2, line.$3, line.$4);
+  Path gear(Offset center, double root, double tip, int teeth, double phase) {
+    final path = Path();
+    const offsets = [-.5, -.24, .24, .5];
+    for (var tooth = 0; tooth < teeth; tooth++) {
+      for (var step = 0; step < offsets.length; step++) {
+        final angle = phase + (tooth + offsets[step]) * 2 * math.pi / teeth;
+        final radius = step == 1 || step == 2 ? tip : root;
+        final point =
+            center + Offset(math.cos(angle), math.sin(angle)) * radius;
+        if (tooth == 0 && step == 0) {
+          path.moveTo(point.dx, point.dy);
+        } else {
+          path.lineTo(point.dx, point.dy);
+        }
+      }
+    }
+    return path..close();
   }
-  g.line(12, 27, 26, 27, secondary: true);
-  g.line(19, 20, 19, 34, secondary: true);
+
+  final large = gear(const Offset(18, 29), 9.4, 12, 8, 0);
+  final small = gear(const Offset(32, 15.5), 6, 7.8, 6, .24);
+  g.area(large, .1);
+  g.area(small, .06);
+  g.outline(large);
+  g.outline(small);
+  g.circle(18, 29, 3.4, secondary: true);
+  g.circle(32, 15.5, 2.2, secondary: true);
 }
 
 void _drawMaterial(CourseIconCanvas g) {
@@ -1045,10 +1052,27 @@ void _drawDatabase(CourseIconCanvas g) {
 }
 
 void _drawInteraction(CourseIconCanvas g) {
+  final cursor = Path()
+    ..moveTo(23, 20)
+    ..lineTo(23, 38)
+    ..lineTo(28, 33)
+    ..lineTo(32, 41)
+    ..lineTo(36, 39)
+    ..lineTo(32, 31)
+    ..lineTo(39, 31)
+    ..close();
+  // Keep the pointer silhouette legible over a transparent course surface.
+  g.canvas.save();
+  g.canvas.clipPath(
+    Path()
+      ..fillType = PathFillType.evenOdd
+      ..addRect(const Rect.fromLTWH(0, 0, 48, 48))
+      ..addPath(cursor, Offset.zero),
+  );
   final panel = Path()
     ..addRRect(
       RRect.fromRectAndRadius(
-        const Rect.fromLTWH(6, 7, 36, 27),
+        const Rect.fromLTWH(6, 7, 36, 25),
         const Radius.circular(4),
       ),
     );
@@ -1065,21 +1089,7 @@ void _drawInteraction(CourseIconCanvas g) {
     );
   g.area(button, .15);
   g.outline(button, secondary: true);
-  final cursor = Path()
-    ..moveTo(25, 23)
-    ..lineTo(38, 37)
-    ..lineTo(32, 38)
-    ..lineTo(29, 43)
-    ..lineTo(25, 42)
-    ..lineTo(28, 36)
-    ..lineTo(22, 34)
-    ..close();
+  g.canvas.restore();
   g.area(cursor, .18);
   g.outline(cursor);
-  g.outline(
-    Path()
-      ..moveTo(30, 19)
-      ..quadraticBezierTo(37, 19, 38, 26),
-    secondary: true,
-  );
 }

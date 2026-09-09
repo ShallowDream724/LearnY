@@ -579,14 +579,29 @@ void _drawOptics(CourseIconCanvas g) {
     ..close();
   g.area(lens, .1);
   g.outline(lens);
-  g.line(6, 15, 19, 18);
-  g.line(6, 24, 18, 24);
-  g.line(6, 33, 19, 30);
-  g.line(29, 18, 42, 30);
-  g.line(30, 24, 42, 24, secondary: true);
-  g.line(29, 30, 42, 18);
-  g.line(24, 7, 24, 41, secondary: true);
-  g.dot(42, 24, 1.6);
+  g.outline(
+    Path()
+      ..moveTo(6, 15)
+      ..lineTo(24, 15)
+      ..lineTo(40, 24),
+    secondary: true,
+  );
+  g.line(6, 24, 42, 24, secondary: true);
+  g.outline(
+    Path()
+      ..moveTo(6, 33)
+      ..lineTo(24, 33)
+      ..lineTo(40, 24),
+    secondary: true,
+  );
+  g.outline(
+    Path()
+      ..moveTo(9, 13)
+      ..lineTo(12, 15)
+      ..lineTo(9, 17),
+    secondary: true,
+  );
+  g.dot(40, 24, 1.4);
 }
 
 void _drawQuantum(CourseIconCanvas g) {
@@ -889,67 +904,114 @@ void _drawImmunology(CourseIconCanvas g) {
 }
 
 void _drawMicroscope(CourseIconCanvas g) {
-  final arm = Path()
-    ..moveTo(20, 9)
-    ..lineTo(28, 9)
-    ..lineTo(30, 15)
-    ..lineTo(25, 17)
-    ..cubicTo(32, 20, 34, 28, 30, 34)
-    ..cubicTo(27, 39, 19, 40, 14, 36);
-  g.outline(arm);
-  final eyepiece = Path()
-    ..moveTo(18, 6)
-    ..lineTo(29, 6)
-    ..lineTo(30, 10)
-    ..lineTo(20, 13)
+  final foot = Path()
+    ..moveTo(10, 42)
+    ..quadraticBezierTo(10, 37, 17, 37)
+    ..lineTo(31, 37)
+    ..quadraticBezierTo(37, 37, 39, 42)
     ..close();
-  g.area(eyepiece, .12);
-  g.outline(eyepiece);
-  g.line(24, 18, 19, 29);
-  g.line(20, 30, 29, 30);
-  g.line(12, 35, 35, 35, secondary: true);
+  g.area(foot, .12);
+  g.outline(foot);
+  final arm = Path()
+    ..moveTo(27, 15)
+    ..cubicTo(39, 15, 42, 29, 31, 37)
+    ..lineTo(25, 37)
+    ..cubicTo(34, 31, 36, 22, 27, 20)
+    ..close();
+  g.area(arm, .09);
+  g.outline(arm);
+  final tube = Path()
+    ..moveTo(14, 8)
+    ..lineTo(20, 5)
+    ..lineTo(28, 19)
+    ..lineTo(22, 22)
+    ..close();
+  g.area(tube, .14);
+  g.outline(tube);
+  g.line(13, 8, 21, 4);
+  g.line(16, 11.5, 22, 8.5, secondary: true);
   g.outline(
     Path()
-      ..moveTo(14, 36)
-      ..quadraticBezierTo(15, 42, 23, 42)
-      ..lineTo(38, 42),
+      ..moveTo(23, 22)
+      ..lineTo(23, 25)
+      ..lineTo(27, 25)
+      ..lineTo(27, 20),
   );
-  g.circle(29, 21, 2, secondary: true);
-  g.dot(23, 27, 1.4);
+  final stage = Path()
+    ..addRRect(
+      RRect.fromRectAndRadius(
+        const Rect.fromLTWH(11, 29, 20, 2.5),
+        const Radius.circular(.8),
+      ),
+    );
+  g.area(stage, .12);
+  g.outline(stage);
+  g.circle(34, 24, 2, secondary: true);
 }
 
 void _drawPipette(CourseIconCanvas g) {
+  final plunger = Path()
+    ..addRRect(
+      RRect.fromRectAndRadius(
+        const Rect.fromLTWH(21, 4, 8, 3.5),
+        const Radius.circular(1),
+      ),
+    );
+  g.area(plunger, .16);
+  g.outline(plunger);
+  g.line(25, 7.5, 25, 11);
   final body = Path()
-    ..moveTo(14, 8)
-    ..lineTo(22, 6)
-    ..lineTo(36, 24)
-    ..lineTo(30, 30)
+    ..moveTo(23, 11)
+    ..lineTo(27, 11)
+    ..quadraticBezierTo(30, 11, 30, 14)
+    ..lineTo(30, 23)
+    ..quadraticBezierTo(30, 27, 27, 29)
+    ..lineTo(23, 29)
+    ..quadraticBezierTo(20, 27, 20, 24)
+    ..lineTo(20, 14)
+    ..quadraticBezierTo(20, 11, 23, 11)
     ..close();
   g.area(body, .1);
   g.outline(body);
-  g.line(18, 7, 32, 26, secondary: true);
   g.outline(
     Path()
-      ..moveTo(30, 30)
-      ..lineTo(22, 38)
-      ..lineTo(25, 41)
-      ..lineTo(33, 31),
+      ..moveTo(20, 13)
+      ..lineTo(16, 13)
+      ..quadraticBezierTo(14, 13, 14, 16),
   );
-  final drop = Path()
-    ..moveTo(19, 34)
-    ..cubicTo(16, 38, 15, 40, 17, 42)
-    ..cubicTo(20, 43, 24, 42, 22, 39)
-    ..close();
-  g.area(drop, .16);
-  g.outline(drop);
   g.outline(
     Path()
-      ..moveTo(7, 15)
-      ..quadraticBezierTo(12, 12, 17, 15),
+      ..moveTo(17, 18)
+      ..lineTo(17, 29)
+      ..quadraticBezierTo(17, 32, 22, 32),
     secondary: true,
   );
-  g.circle(8, 21, 2, secondary: true);
-  g.circle(14, 23, 1.5, secondary: true);
+  g.outline(
+    Path()..addRRect(
+      RRect.fromRectAndRadius(
+        const Rect.fromLTWH(23, 16, 4, 7),
+        const Radius.circular(.8),
+      ),
+    ),
+    secondary: true,
+  );
+  g.line(24, 19, 26, 19, secondary: true);
+  g.outline(
+    Path()
+      ..moveTo(23, 29)
+      ..lineTo(23, 33)
+      ..lineTo(24.5, 38)
+      ..lineTo(25.5, 38)
+      ..lineTo(27, 33)
+      ..lineTo(27, 29),
+  );
+  final drop = Path()
+    ..moveTo(25, 40)
+    ..cubicTo(24, 41.5, 22, 44, 25, 44)
+    ..cubicTo(28, 44, 26, 41.5, 25, 40)
+    ..close();
+  g.area(drop, .16);
+  g.outline(drop, secondary: true);
 }
 
 void _drawPetri(CourseIconCanvas g) {
