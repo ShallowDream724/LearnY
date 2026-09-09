@@ -72,6 +72,9 @@ enum StudyWallpaper {
   static List<StudyWallpaper> choices({required bool forMobile}) =>
       forMobile ? mobileChoices : desktopChoices;
 
+  static StudyWallpaper defaultFor({required bool forMobile}) =>
+      forMobile ? prism : dunes;
+
   WallpaperArtwork artwork({bool forMobile = false}) {
     final result = forMobile ? mobile : desktop;
     if (result == null) {
@@ -89,7 +92,7 @@ enum StudyWallpaper {
     final available = choices(forMobile: forMobile);
     return available.firstWhere(
       (wallpaper) => wallpaper.id == id,
-      orElse: () => available.first,
+      orElse: () => defaultFor(forMobile: forMobile),
     );
   }
 }

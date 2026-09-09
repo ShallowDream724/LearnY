@@ -24,6 +24,7 @@ import 'package:learn_y/core/providers/connectivity_provider.dart';
 import 'package:learn_y/core/shell/app_shell.dart';
 import 'package:learn_y/demo/demo_environment.dart';
 import 'package:learn_y/features/courses/courses_screen.dart';
+import 'package:learn_y/features/profile/profile_screen.dart';
 import 'package:learn_y/features/courses/providers/course_workbench_repository.dart';
 import 'package:learn_y/core/design/course_icons/course_icon.dart';
 import 'package:learn_y/core/design/course_icons/course_icon_catalog.dart';
@@ -134,6 +135,8 @@ void main() {
                     path: route,
                     builder: (_, _) => route == Routes.courses
                         ? const CoursesScreen()
+                        : route == Routes.profile
+                        ? const ProfileScreen()
                         : const SizedBox(),
                   ),
                 ],
@@ -221,7 +224,7 @@ void main() {
     }
 
     Future<void> capture(String name, double ratio) async {
-      final sceneContext = find.byType(CoursesScreen);
+      final sceneContext = find.byType(AppShell);
       if (sceneContext.evaluate().isNotEmpty) {
         final context = tester.element(sceneContext);
         final wallpaper = ProviderScope.containerOf(
@@ -264,9 +267,23 @@ void main() {
     }
 
     await capture('courses_windows_final', 2);
-    if (sceneStudy) {
-      await tester.tap(find.byTooltip('更换背景'));
+    Future<void> openWallpaperPicker() async {
+      await tester.tap(find.text('我的'));
+      await settleStorage();
+      await tester.ensureVisible(find.text('背景'));
+      await tester.tap(find.text('背景'));
       await tester.pumpAndSettle();
+    }
+
+    Future<void> returnToCourses() async {
+      await tester.tap(find.byTooltip('关闭'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('课程'));
+      await tester.pumpAndSettle();
+    }
+
+    if (sceneStudy) {
+      await openWallpaperPicker();
       await capture('wallpaper_picker_windows', 2);
       await tester.tap(find.text('澄光'));
       await settleStorage();
@@ -300,8 +317,7 @@ void main() {
           '45',
         );
       });
-      await tester.tap(find.byTooltip('关闭'));
-      await tester.pumpAndSettle();
+      await returnToCourses();
     }
     if (!sceneStudy) {
       await tester.tap(find.byTooltip('编辑课程'));
@@ -331,9 +347,8 @@ void main() {
         tester.element(find.byType(AppShell)),
       );
       // A saved desktop-only choice migrates to the phone's own default.
-      expect(container.read(wallpaperProvider), StudyWallpaper.warmHills);
-      await tester.tap(find.byTooltip('更换背景'));
-      await tester.pumpAndSettle();
+      expect(container.read(wallpaperProvider), StudyWallpaper.prism);
+      await openWallpaperPicker();
       await capture('wallpaper_picker_android', 3);
       expect(find.text('晴岚'), findsNothing);
       expect(find.text('微光'), findsNothing);
@@ -369,8 +384,7 @@ void main() {
           '$coveIntensity',
         );
       });
-      await tester.tap(find.byTooltip('关闭'));
-      await tester.pumpAndSettle();
+      await returnToCourses();
       await capture('courses_android_cove', 3);
       await tester.pumpWidget(
         app(AppTheme.dark.copyWith(platform: TargetPlatform.android)),
@@ -391,7 +405,7 @@ void main() {
     if (sceneStudy) {
       await tester.pumpWidget(const SizedBox());
       router.dispose();
-      await tester.runAsync(demo!.dispose);
+      await pumpAsyncWork(demo!.dispose);
       debugDisableShadows = originalShadows;
       return;
     }
@@ -470,7 +484,7 @@ void main() {
     await capture('course_icons_100', 2);
     await tester.pumpWidget(const SizedBox());
     router.dispose();
-    await tester.runAsync(demo!.dispose);
+    await pumpAsyncWork(demo!.dispose);
     debugDisableShadows = originalShadows;
   });
 }

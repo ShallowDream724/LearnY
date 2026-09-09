@@ -34,21 +34,26 @@ class StudyLightBackdrop extends StatefulWidget {
   static ({StudyLightScene scene, Size size, Offset origin}) locate(
     RenderBox surface, {
     required bool dark,
+    Offset fallbackOrigin = Offset.zero,
   }) {
     RenderObject? ancestor = surface.parent;
     while (ancestor != null && ancestor is! _LightBackdrop) {
       ancestor = ancestor.parent;
     }
     final backdrop = ancestor as _LightBackdrop?;
+    final origin = backdrop == null
+        ? Offset.zero
+        : MatrixUtils.transformPoint(
+            surface.getTransformTo(backdrop),
+            Offset.zero,
+          );
     return (
       scene: backdrop?.scene ?? StudyLightScene(dark: dark),
       size: backdrop?.size ?? surface.size,
-      origin: backdrop == null
-          ? Offset.zero
-          : MatrixUtils.transformPoint(
-              surface.getTransformTo(backdrop),
-              Offset.zero,
-            ),
+      // Retained sliver children have a zero paint transform while offscreen.
+      // Their layers can still repaint, so never send that projection's NaN
+      // coordinates into native drawing. Reuse the last visible mapping.
+      origin: origin.isFinite ? origin : fallbackOrigin,
     );
   }
 
@@ -227,6 +232,7 @@ class _SceneSurfaceBox extends RenderBox {
   _SceneSurfaceBox(this.scene, this.dark);
   StudyLightScene? scene;
   bool dark;
+  Offset _lastSceneOrigin = Offset.zero;
 
   void update(StudyLightScene? next, bool nextDark) {
     if (identical(scene, next) && dark == nextDark) return;
@@ -242,7 +248,12 @@ class _SceneSurfaceBox extends RenderBox {
 
   @override
   void paint(PaintingContext context, Offset offset) {
-    final backdrop = StudyLightBackdrop.locate(this, dark: dark);
+    final backdrop = StudyLightBackdrop.locate(
+      this,
+      dark: dark,
+      fallbackOrigin: _lastSceneOrigin,
+    );
+    _lastSceneOrigin = backdrop.origin;
     context.canvas.save();
     context.canvas.translate(
       offset.dx - backdrop.origin.dx,

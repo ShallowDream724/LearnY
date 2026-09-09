@@ -94,6 +94,7 @@ class _GlassSurface extends RenderProxyBox {
   // The inherited image revision invalidates surfaces in retained page layers.
   // Position still resolves at paint time, independently of widget rebuilds.
   StudyLightScene? scene;
+  Offset _lastSceneOrigin = Offset.zero;
   void update(
     double nextRadius,
     bool nextDark,
@@ -115,7 +116,12 @@ class _GlassSurface extends RenderProxyBox {
 
   @override
   void paint(PaintingContext context, Offset offset) {
-    final backdrop = StudyLightBackdrop.locate(this, dark: dark);
+    final backdrop = StudyLightBackdrop.locate(
+      this,
+      dark: dark,
+      fallbackOrigin: _lastSceneOrigin,
+    );
+    _lastSceneOrigin = backdrop.origin;
     context.canvas.save();
     context.canvas.translate(offset.dx, offset.dy);
     _GlassOptics(

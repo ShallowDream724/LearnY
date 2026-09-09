@@ -170,7 +170,7 @@ class PendingAssignments extends ConsumerWidget {
     );
     return StudySurface(
       tone: StudyTone.ochre,
-      padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
+      padding: const EdgeInsets.fromLTRB(18, 12, 18, 12),
       child: content,
     );
   }

@@ -206,7 +206,7 @@ class HomeUnreadNotificationsSection extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
       child: StudySurface(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
         child: ReadActionFeedback(
           key: ValueKey(ref.watch(currentSemesterIdProvider)),
           expand: false,
@@ -279,7 +279,7 @@ class HomeUnreadFilesSection extends ConsumerWidget {
     final (files, total) = data;
     final actions = ref.read(learningDataActionsProvider);
     return StudySurface(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
       child: ReadActionFeedback(
         key: ValueKey(ref.watch(currentSemesterIdProvider)),
         expand: false,

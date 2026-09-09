@@ -106,6 +106,8 @@ LearnY 面向清华大学网络学堂的日常使用场景，围绕课程、作�
 
 Windows 本地运行、热重载和人工验收见 [Windows 开发文档](docs/WINDOWS_DEVELOPMENT.md)。没有课程或作业时可使用[隔离示例环境](docs/DEMO.md)。当前实现边界与后续计划见[架构文档](docs/ARCHITECTURE.md)。
 
+Android 模拟器的本机启动参数、安装和课程页验证见 [Android 开发文档](docs/ANDROID_DEVELOPMENT.md)。
+
 ```bash
 flutter pub get
 flutter run

@@ -15,7 +15,7 @@ final mobileWallpapersProvider = Provider<bool>(
 
 class WallpaperNotifier extends StateNotifier<StudyWallpaper> {
   WallpaperNotifier(this._database, {this.forMobile = false})
-    : super(StudyWallpaper.choices(forMobile: forMobile).first) {
+    : super(StudyWallpaper.defaultFor(forMobile: forMobile)) {
     _load();
   }
 

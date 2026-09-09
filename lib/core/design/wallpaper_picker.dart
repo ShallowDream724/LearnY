@@ -9,17 +9,6 @@ import 'app_toast.dart';
 import 'typography.dart';
 import 'wallpaper.dart';
 
-class WallpaperButton extends StatelessWidget {
-  const WallpaperButton({super.key});
-
-  @override
-  Widget build(BuildContext context) => IconButton(
-    tooltip: '更换背景',
-    onPressed: () => showWallpaperPicker(context),
-    icon: const Icon(CupertinoIcons.photo, size: 20),
-  );
-}
-
 /// Keep the actual page visible, at its real brightness, while trying images.
 /// Selection applies immediately; outside tap, back/Escape and close dismiss.
 Future<void> showWallpaperPicker(BuildContext context) =>

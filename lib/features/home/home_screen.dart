@@ -11,7 +11,6 @@ import '../../core/design/cooldown_toast.dart';
 import '../../core/design/shimmer.dart';
 import '../../core/design/typography.dart';
 import '../../core/design/responsive.dart';
-import '../../core/design/wallpaper_picker.dart';
 import '../../core/design/app_light_scene.dart';
 import '../../core/providers/providers.dart';
 import '../../core/providers/sync_models.dart';
@@ -146,7 +145,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     title: '${_greeting()}，${authState.username ?? "LearnY"}',
                   ),
                   actions: [
-                    const WallpaperButton(),
                     IconButton(
                       tooltip: '课程文件',
                       icon: const Icon(Icons.folder_open_outlined),

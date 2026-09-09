@@ -64,7 +64,8 @@ flutter test --no-pub --dart-define=LEARNY_PREVIEW_SCENE_ONLY=true tool/ui_previ
 
 This produces Windows light/dark (2534 × 1369), Android light/dark/scroll
 (1080 × 2340), and wallpaper picker PNGs in `build/ui_preview/light_scene/`.
-It selects each platform's own artwork collection, waits for assets to decode,
-checks all four mobile choices and independent intensity persistence, and skips
+It opens the wallpaper picker through the actual profile page, selects each
+platform's own artwork collection, waits for assets to decode, checks all four
+mobile choices and independent intensity persistence, and skips
 the course icon picker/atlas.
 This is a visual study using demo course data, not campus-service validation.
