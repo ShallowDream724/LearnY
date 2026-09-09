@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:learn_y/core/design/app_font.dart';
+import 'package:learn_y/core/design/app_light_scene.dart';
 import 'package:learn_y/core/design/theme.dart';
 import 'package:learn_y/core/design/typography.dart';
 import 'package:learn_y/core/router/router.dart';
@@ -42,6 +43,7 @@ const samples = <SampleCourse>[
 ];
 
 void main() {
+  const sceneStudy = bool.fromEnvironment('LEARNY_PREVIEW_SCENE_ONLY');
   testWidgets('render course surfaces, picker and complete icon collection', (
     tester,
   ) async {
@@ -164,13 +166,29 @@ void main() {
     }
     expect(tester.takeException(), isNull);
     Future<void> capture(String name, double ratio) async {
+      final sceneContext = find.byType(CoursesScreen);
+      if (sceneContext.evaluate().isNotEmpty) {
+        final context = tester.element(sceneContext);
+        await tester.runAsync(
+          () => precacheImage(
+            AssetImage(
+              StudyLightBackdrop.assetFor(Theme.of(context).brightness),
+            ),
+            context,
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
       expect(tester.takeException(), isNull);
       await tester.runAsync(() async {
         final boundary =
             key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
         final image = await boundary.toImage(pixelRatio: ratio);
         final png = await image.toByteData(format: ui.ImageByteFormat.png);
-        final file = File('build/ui_preview/$name.png');
+        final directory = sceneStudy
+            ? 'build/ui_preview/light_scene'
+            : 'build/ui_preview';
+        final file = File('$directory/$name.png');
         await file.parent.create(recursive: true);
         await file.writeAsBytes(png!.buffer.asUint8List());
         image.dispose();
@@ -178,15 +196,17 @@ void main() {
     }
 
     await capture('courses_windows_final', 2);
-    await tester.tap(find.byTooltip('编辑课程'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('更换图标').first);
-    await tester.pumpAndSettle();
-    await capture('course_icon_picker_windows', 2);
-    await tester.tap(find.byTooltip('关闭'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('取消'));
-    await tester.pumpAndSettle();
+    if (!sceneStudy) {
+      await tester.tap(find.byTooltip('编辑课程'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('更换图标').first);
+      await tester.pumpAndSettle();
+      await capture('course_icon_picker_windows', 2);
+      await tester.tap(find.byTooltip('关闭'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+    }
     await tester.pumpWidget(
       app(AppTheme.dark.copyWith(platform: TargetPlatform.windows)),
     );
@@ -205,6 +225,13 @@ void main() {
     );
     await tester.pumpAndSettle();
     await capture('courses_android_scrolled', 3);
+    if (sceneStudy) {
+      await tester.pumpWidget(const SizedBox());
+      router.dispose();
+      await tester.runAsync(demo!.dispose);
+      debugDisableShadows = originalShadows;
+      return;
+    }
     await tester.drag(
       find.byType(CustomScrollView).first,
       const Offset(0, 1500),

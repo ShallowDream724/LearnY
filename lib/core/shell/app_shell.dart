@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../design/app_surfaces.dart';
+import '../design/app_light_scene.dart';
 import '../design/app_materials.dart';
 import '../design/app_theme_colors.dart';
 import '../design/responsive.dart';
@@ -78,25 +79,28 @@ class AppShell extends ConsumerWidget {
         ],
       ),
     );
-    return Scaffold(
-      body: rail
-          ? Row(
-              children: [
-                _Sidebar(
-                  index: navigationShell.currentIndex,
-                  onSelected: _select,
-                ),
-                Expanded(child: content),
-              ],
-            )
-          : content,
-      bottomNavigationBar: rail
-          ? null
-          : AppBottomNavigation(
-              destinations: _destinations,
-              selectedIndex: navigationShell.currentIndex,
-              onTap: _select,
-            ),
+    return StudyLightBackdrop(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: rail
+            ? Row(
+                children: [
+                  _Sidebar(
+                    index: navigationShell.currentIndex,
+                    onSelected: _select,
+                  ),
+                  Expanded(child: content),
+                ],
+              )
+            : content,
+        bottomNavigationBar: rail
+            ? null
+            : AppBottomNavigation(
+                destinations: _destinations,
+                selectedIndex: navigationShell.currentIndex,
+                onTap: _select,
+              ),
+      ),
     );
   }
 }
@@ -111,7 +115,7 @@ class _Sidebar extends StatelessWidget {
     final c = context.colors;
     final extended = MediaQuery.sizeOf(context).width >= 1000;
     return Material(
-      color: StudyPalette.of(context, StudyTone.ink).fill,
+      color: c.surface.withAlpha(context.isDark ? 76 : 108),
       child: Container(
         width: extended ? 208 : 80,
         decoration: BoxDecoration(

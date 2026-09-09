@@ -4,43 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 import 'app_materials.dart';
+import 'app_light_scene.dart';
 import 'app_theme_colors.dart';
-
-/// The viewport owns the shared light. Surfaces resolve their location while
-/// painting, so scrolling/resizing never needs post-frame measurement or state.
-class CourseGlassBackdrop extends SingleChildRenderObjectWidget {
-  const CourseGlassBackdrop({super.key, required super.child});
-  @override
-  RenderObject createRenderObject(BuildContext context) =>
-      _GlassBackdrop(context.isDark);
-  @override
-  void updateRenderObject(
-    BuildContext context,
-    covariant RenderObject renderObject,
-  ) {
-    (renderObject as _GlassBackdrop).dark = context.isDark;
-  }
-}
-
-class _GlassBackdrop extends RenderProxyBox {
-  _GlassBackdrop(this._dark);
-  bool _dark;
-  set dark(bool value) {
-    if (_dark != value) {
-      _dark = value;
-      markNeedsPaint();
-    }
-  }
-
-  @override
-  void paint(PaintingContext context, Offset offset) {
-    context.canvas.save();
-    context.canvas.translate(offset.dx, offset.dy);
-    _SceneLight(dark: _dark).paint(context.canvas, size);
-    context.canvas.restore();
-    super.paint(context, offset);
-  }
-}
 
 class CourseGlassSurface extends StatelessWidget {
   const CourseGlassSurface({
@@ -69,6 +34,7 @@ class CourseGlassSurface extends StatelessWidget {
     return _GlassLayer(
       radius: radius,
       dark: context.isDark,
+      scene: StudyLightBackdrop.sceneOf(context),
       tint: Color(
         const [
           0xFF708DE0,
@@ -103,84 +69,65 @@ class _GlassLayer extends SingleChildRenderObjectWidget {
     required this.radius,
     required this.dark,
     required this.tint,
+    required this.scene,
     required super.child,
   });
   final double radius;
   final bool dark;
   final Color tint;
+  final StudyLightScene? scene;
   @override
   RenderObject createRenderObject(BuildContext context) =>
-      _GlassSurface(radius, dark, tint);
+      _GlassSurface(radius, dark, tint, scene);
   @override
   void updateRenderObject(
     BuildContext context,
     covariant _GlassSurface renderObject,
-  ) => renderObject.update(radius, dark, tint);
+  ) => renderObject.update(radius, dark, tint, scene);
 }
 
 class _GlassSurface extends RenderProxyBox {
-  _GlassSurface(this.radius, this.dark, this.tint);
+  _GlassSurface(this.radius, this.dark, this.tint, this.scene);
   double radius;
   bool dark;
   Color tint;
-  void update(double nextRadius, bool nextDark, Color nextTint) {
-    if (radius == nextRadius && dark == nextDark && tint == nextTint) return;
+  // The inherited image revision invalidates surfaces in retained page layers.
+  // Position still resolves at paint time, independently of widget rebuilds.
+  StudyLightScene? scene;
+  void update(
+    double nextRadius,
+    bool nextDark,
+    Color nextTint,
+    StudyLightScene? nextScene,
+  ) {
+    if (radius == nextRadius &&
+        dark == nextDark &&
+        tint == nextTint &&
+        identical(scene, nextScene)) {
+      return;
+    }
     radius = nextRadius;
     dark = nextDark;
     tint = nextTint;
+    scene = nextScene;
     markNeedsPaint();
   }
 
   @override
   void paint(PaintingContext context, Offset offset) {
-    RenderObject? ancestor = parent;
-    while (ancestor != null && ancestor is! _GlassBackdrop) {
-      ancestor = ancestor.parent;
-    }
-    final backdrop = ancestor as _GlassBackdrop?;
-    final origin = backdrop == null
-        ? Offset.zero
-        : MatrixUtils.transformPoint(getTransformTo(backdrop), Offset.zero);
+    final backdrop = StudyLightBackdrop.locate(this, dark: dark);
     context.canvas.save();
     context.canvas.translate(offset.dx, offset.dy);
     _GlassOptics(
       radius,
       tint,
-      backdrop?.size ?? size,
-      origin,
+      backdrop.size,
+      backdrop.origin,
       dark,
+      backdrop.scene,
     ).paint(context.canvas, size);
     context.canvas.restore();
     super.paint(context, offset);
-  }
-}
-
-class _SceneLight {
-  const _SceneLight({required this.dark});
-  final bool dark;
-  static Offset source(Size size) =>
-      Offset(size.width * .02, -size.height * .3);
-  void paint(Canvas canvas, Size size, {Rect? coverage}) {
-    final bounds = Offset.zero & size;
-    // Cards can be painted outside the viewport (scroll cache / refraction).
-    // Extend the same light field there instead of cutting it at the viewport.
-    final paintBounds = coverage ?? bounds;
-    canvas.drawRect(
-      paintBounds,
-      Paint()..color = dark ? const Color(0xFF171C27) : const Color(0xFFEFF3F8),
-    );
-    canvas.drawRect(
-      paintBounds,
-      Paint()
-        ..shader = RadialGradient(
-          center: const Alignment(-.96, -1.6),
-          radius: 1.75,
-          colors: dark
-              ? const [Color(0x0EFFFFFF), Color(0x07FFFFFF), Color(0x00FFFFFF)]
-              : const [Color(0xFFFFFFFF), Color(0xE8FFFFFF), Color(0x00FFFFFF)],
-          stops: const [0, .36, 1],
-        ).createShader(bounds),
-    );
   }
 }
 
@@ -191,18 +138,20 @@ class _GlassOptics {
     this.sceneSize,
     this.origin,
     this.dark,
+    this.scene,
   );
   final double radius;
   final Color tint;
   final Size sceneSize;
   final Offset origin;
   final bool dark;
+  final StudyLightScene scene;
 
   void paint(Canvas canvas, Size size) {
     final bounds = Offset.zero & size;
     final outer = RRect.fromRectAndRadius(bounds, Radius.circular(radius));
     final center = bounds.center;
-    final towardLight = _SceneLight.source(sceneSize) - (origin + center);
+    final towardLight = StudyLightScene.source(sceneSize) - (origin + center);
     final direction = towardLight / math.max(1, towardLight.distance);
     // Shadow is clipped outside: it must never show through the clear center.
     canvas.save();
@@ -232,7 +181,7 @@ class _GlassOptics {
     canvas.translate(center.dx, center.dy);
     canvas.scale(1.04);
     canvas.translate(-center.dx - origin.dx, -center.dy - origin.dy);
-    _SceneLight(dark: dark).paint(
+    scene.paint(
       canvas,
       sceneSize,
       coverage: Rect.fromCenter(
@@ -253,8 +202,12 @@ class _GlassOptics {
     canvas.save();
     canvas.clipRRect(inner);
     canvas.translate(-origin.dx, -origin.dy);
-    _SceneLight(dark: dark).paint(canvas, sceneSize, coverage: origin & size);
+    scene.paint(canvas, sceneSize, coverage: origin & size);
     canvas.translate(origin.dx, origin.dy);
+    canvas.drawRect(
+      bounds,
+      Paint()..color = dark ? const Color(0x44202429) : const Color(0x70FFFFFF),
+    );
     canvas.drawRect(
       bounds,
       Paint()

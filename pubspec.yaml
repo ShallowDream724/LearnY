@@ -1,7 +1,7 @@
 name: learn_y
 description: "LearnY - A premium client for Tsinghua University Web Learning"
 publish_to: 'none'
-version: 0.1.4+13
+version: 0.1.4+14
 
 environment:
   sdk: ^3.11.1
@@ -100,6 +100,8 @@ flutter:
   assets:
     - assets/fonts/OFL.txt
     - assets/brand/app_icon.png
+    - assets/artwork/landscape_light.webp
+    - assets/artwork/landscape_dark.webp
   fonts:
     - family: LXGW WenKai GB Screen
       fonts:

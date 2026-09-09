@@ -11,7 +11,6 @@ import '../../core/design/app_surfaces.dart';
 import '../../core/design/app_toast.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/cooldown_toast.dart';
-import '../../core/design/course_glass.dart';
 import '../../core/design/shimmer.dart';
 import '../../core/design/typography.dart';
 import '../../core/providers/sync_models.dart';
@@ -345,106 +344,103 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
     final workbenchState = ref.watch(courseWorkbenchControllerProvider);
 
     return Scaffold(
-      body: CourseGlassBackdrop(
-        child: Listener(
-          behavior: HitTestBehavior.translucent,
-          onPointerDown: (event) => _activePointer ??= event.pointer,
-          onPointerMove: _handleGlobalPointerMove,
-          onPointerUp: _handleGlobalPointerEnd,
-          onPointerCancel: _handleGlobalPointerEnd,
-          child: RefreshIndicator(
-            onRefresh: workbenchState.isEditing ? () async {} : _handleRefresh,
-            color: context.colors.infoAccent,
-            child: CustomScrollView(
-              controller: _scrollController,
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                SliverAppBar(
-                  backgroundColor: Colors.transparent,
-                  surfaceTintColor: Colors.transparent,
-                  toolbarHeight: semesterToolbarHeight(context),
-                  titleSpacing: pageGutter(context),
-                  floating: true,
-                  snap: true,
-                  leading: workbenchState.isEditing
-                      ? TextButton(
-                          onPressed: _isSaving
-                              ? null
-                              : () => _handleCancel(workbenchState),
-                          child: const Text('取消'),
-                        )
-                      : null,
-                  leadingWidth: workbenchState.isEditing ? 68 : null,
-                  title: workbenchState.isEditing
-                      ? Text(
-                          '编辑课程',
-                          style: AppTypography.headlineMedium.copyWith(
-                            color: c.text,
-                          ),
-                        )
-                      : const SemesterPageTitle(title: '课程'),
-                  actions: workbenchState.isEditing
-                      ? [
-                          PopupMenuButton<String>(
-                            enabled: !_isSaving,
-                            tooltip: '更多',
-                            onSelected: (value) {
-                              if (value == 'reset-order') {
-                                ref
-                                    .read(
-                                      courseWorkbenchControllerProvider
-                                          .notifier,
-                                    )
-                                    .restoreDefaultOrder();
-                              }
-                            },
-                            itemBuilder: (context) => const [
-                              PopupMenuItem<String>(
-                                value: 'reset-order',
-                                child: Text('恢复默认排序'),
-                              ),
-                            ],
-                          ),
-                          TextButton(
-                            onPressed: _isSaving ? null : _handleSave,
-                            child: Text(_isSaving ? '保存中' : '完成'),
-                          ),
-                        ]
-                      : [
-                          if (cardsAsync.valueOrNull?.isNotEmpty == true)
-                            Tooltip(
-                              message: '编辑课程',
-                              child: TextButton(
-                                onPressed: () =>
-                                    _enterEditMode(cardsAsync.valueOrNull!),
-                                child: const Text('整理课程'),
-                              ),
+      backgroundColor: Colors.transparent,
+      body: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (event) => _activePointer ??= event.pointer,
+        onPointerMove: _handleGlobalPointerMove,
+        onPointerUp: _handleGlobalPointerEnd,
+        onPointerCancel: _handleGlobalPointerEnd,
+        child: RefreshIndicator(
+          onRefresh: workbenchState.isEditing ? () async {} : _handleRefresh,
+          color: context.colors.infoAccent,
+          child: CustomScrollView(
+            controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverAppBar(
+                backgroundColor: Colors.transparent,
+                surfaceTintColor: Colors.transparent,
+                toolbarHeight: semesterToolbarHeight(context),
+                titleSpacing: pageGutter(context),
+                floating: true,
+                snap: true,
+                leading: workbenchState.isEditing
+                    ? TextButton(
+                        onPressed: _isSaving
+                            ? null
+                            : () => _handleCancel(workbenchState),
+                        child: const Text('取消'),
+                      )
+                    : null,
+                leadingWidth: workbenchState.isEditing ? 68 : null,
+                title: workbenchState.isEditing
+                    ? Text(
+                        '编辑课程',
+                        style: AppTypography.headlineMedium.copyWith(
+                          color: c.text,
+                        ),
+                      )
+                    : const SemesterPageTitle(title: '课程'),
+                actions: workbenchState.isEditing
+                    ? [
+                        PopupMenuButton<String>(
+                          enabled: !_isSaving,
+                          tooltip: '更多',
+                          onSelected: (value) {
+                            if (value == 'reset-order') {
+                              ref
+                                  .read(
+                                    courseWorkbenchControllerProvider.notifier,
+                                  )
+                                  .restoreDefaultOrder();
+                            }
+                          },
+                          itemBuilder: (context) => const [
+                            PopupMenuItem<String>(
+                              value: 'reset-order',
+                              child: Text('恢复默认排序'),
                             ),
-                        ],
-                ),
-                cardsAsync.when(
-                  loading: () =>
-                      const SliverFillRemaining(child: ListSkeleton()),
-                  error: (error, _) => _buildError(c),
-                  data: (cards) {
-                    final displayCards = workbenchState.isEditing
-                        ? workbenchState.draftCards
-                        : cards;
-                    if (displayCards.isEmpty) {
-                      _cardKeys.clear();
-                      _cardExtents.clear();
-                      return _buildEmpty(c);
-                    }
+                          ],
+                        ),
+                        TextButton(
+                          onPressed: _isSaving ? null : _handleSave,
+                          child: Text(_isSaving ? '保存中' : '完成'),
+                        ),
+                      ]
+                    : [
+                        if (cardsAsync.valueOrNull?.isNotEmpty == true)
+                          Tooltip(
+                            message: '编辑课程',
+                            child: TextButton(
+                              onPressed: () =>
+                                  _enterEditMode(cardsAsync.valueOrNull!),
+                              child: const Text('整理课程'),
+                            ),
+                          ),
+                      ],
+              ),
+              cardsAsync.when(
+                loading: () => const SliverFillRemaining(child: ListSkeleton()),
+                error: (error, _) => _buildError(c),
+                data: (cards) {
+                  final displayCards = workbenchState.isEditing
+                      ? workbenchState.draftCards
+                      : cards;
+                  if (displayCards.isEmpty) {
+                    _cardKeys.clear();
+                    _cardExtents.clear();
+                    return _buildEmpty(c);
+                  }
 
-                    return _buildGridSliver(
-                      context,
-                      displayCards,
-                      workbenchState,
-                    );
-                  },
-                ),
-              ],
-            ),
+                  return _buildGridSliver(
+                    context,
+                    displayCards,
+                    workbenchState,
+                  );
+                },
+              ),
+            ],
           ),
         ),
       ),
