@@ -160,7 +160,7 @@ class StudyLightScene {
     final bounds = Offset.zero & size;
     final texture = image;
     final paint = Paint()
-      ..color = dark ? const Color(0xFF1B1D20) : const Color(0xFFF3F2EC);
+      ..color = dark ? const Color(0xFF1B1D20) : const Color(0xFFF0F2F2);
     if (texture != null) {
       if (_shader == null || _shaderSize != size) {
         final textureSize = Size(
@@ -168,14 +168,14 @@ class StudyLightScene {
           texture.height.toDouble(),
         );
         final fitted = applyBoxFit(BoxFit.cover, textureSize, size);
-        final scale = fitted.destination.width / fitted.source.width;
-        // A narrow viewport frames the rising side of the same curve. Never
-        // stretch a landscape image or invent a second light source for mobile.
+        // Move the main curve toward the lower/right periphery with one shared
+        // camera crop. Portrait framing keeps it below the initial reading area.
+        final scale = fitted.destination.width / fitted.source.width * 1.16;
         final framing = ((1 - size.aspectRatio) / .45).clamp(0.0, 1.0);
         final matrix = Matrix4.identity()
           ..translateByDouble(
-            (size.width - texture.width * scale) * (.5 + .275 * framing),
-            (size.height - texture.height * scale) / 2,
+            (size.width - texture.width * scale) * (.12 + .42 * framing),
+            (size.height - texture.height * scale) * .08,
             0,
             1,
           )
