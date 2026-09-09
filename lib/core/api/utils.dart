@@ -3,6 +3,7 @@ library;
 
 import 'dart:convert';
 
+import '../utils/html_entities.dart';
 import 'enums.dart';
 import 'models.dart';
 
@@ -101,32 +102,9 @@ SemesterType parseSemesterType(int n) {
 
 /// Decodes HTML entities and strips the strange prefixes that the web learning
 /// backend sometimes prepends to text fields.
-///
-/// We use a simple entity replacement approach instead of pulling in a
-/// full HTML parser dependency.
 String decodeHTML(String? html) {
   if (html == null || html.isEmpty) return '';
-  String text = html;
-
-  // Decode common HTML entities
-  text = text
-      .replaceAll('&amp;', '&')
-      .replaceAll('&lt;', '<')
-      .replaceAll('&gt;', '>')
-      .replaceAll('&quot;', '"')
-      .replaceAll('&#39;', "'")
-      .replaceAll('&apos;', "'")
-      .replaceAll('&nbsp;', ' ');
-
-  // Decode numeric entities: &#NNN; and &#xHHHH;
-  text = text.replaceAllMapped(RegExp(r'&#(\d+);'), (m) {
-    final code = int.tryParse(m.group(1)!);
-    return code != null ? String.fromCharCode(code) : m.group(0)!;
-  });
-  text = text.replaceAllMapped(RegExp(r'&#x([0-9a-fA-F]+);'), (m) {
-    final code = int.tryParse(m.group(1)!, radix: 16);
-    return code != null ? String.fromCharCode(code) : m.group(0)!;
-  });
+  final text = decodeHtmlEntities(html);
 
   // Remove strange prefixes returned by web learning.
   // Original JS checks for byte sequences that appear as mojibake.

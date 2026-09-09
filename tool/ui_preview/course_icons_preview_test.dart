@@ -199,6 +199,17 @@ void main() {
     );
     await tester.pumpAndSettle();
     await capture('courses_android_final', 3);
+    await tester.drag(
+      find.byType(CustomScrollView).first,
+      const Offset(0, -500),
+    );
+    await tester.pumpAndSettle();
+    await capture('courses_android_scrolled', 3);
+    await tester.drag(
+      find.byType(CustomScrollView).first,
+      const Offset(0, 1500),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('编辑课程'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('更换图标').first);

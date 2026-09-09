@@ -160,14 +160,17 @@ class _SceneLight {
   final bool dark;
   static Offset source(Size size) =>
       Offset(size.width * .02, -size.height * .3);
-  void paint(Canvas canvas, Size size) {
+  void paint(Canvas canvas, Size size, {Rect? coverage}) {
     final bounds = Offset.zero & size;
+    // Cards can be painted outside the viewport (scroll cache / refraction).
+    // Extend the same light field there instead of cutting it at the viewport.
+    final paintBounds = coverage ?? bounds;
     canvas.drawRect(
-      bounds,
+      paintBounds,
       Paint()..color = dark ? const Color(0xFF171C27) : const Color(0xFFEFF3F8),
     );
     canvas.drawRect(
-      bounds,
+      paintBounds,
       Paint()
         ..shader = RadialGradient(
           center: const Alignment(-.96, -1.6),
@@ -229,7 +232,15 @@ class _GlassOptics {
     canvas.translate(center.dx, center.dy);
     canvas.scale(1.04);
     canvas.translate(-center.dx - origin.dx, -center.dy - origin.dy);
-    _SceneLight(dark: dark).paint(canvas, sceneSize);
+    _SceneLight(dark: dark).paint(
+      canvas,
+      sceneSize,
+      coverage: Rect.fromCenter(
+        center: origin + center,
+        width: size.width / 1.04,
+        height: size.height / 1.04,
+      ),
+    );
     canvas.restore();
     canvas.drawRRect(outer, Paint()..color = tint.withAlpha(dark ? 24 : 17));
     canvas.save();
@@ -242,7 +253,7 @@ class _GlassOptics {
     canvas.save();
     canvas.clipRRect(inner);
     canvas.translate(-origin.dx, -origin.dy);
-    _SceneLight(dark: dark).paint(canvas, sceneSize);
+    _SceneLight(dark: dark).paint(canvas, sceneSize, coverage: origin & size);
     canvas.translate(origin.dx, origin.dy);
     canvas.drawRect(
       bounds,

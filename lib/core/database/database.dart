@@ -4,6 +4,7 @@
 // Run `dart run build_runner build` to generate `database.g.dart`.
 import 'package:drift/drift.dart';
 
+import '../utils/html_entities.dart';
 import 'app_state_keys.dart';
 
 part 'database.g.dart';
@@ -217,7 +218,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -266,6 +267,25 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 6) {
         await m.createTable(courseDisplayPrefs);
+      }
+      if (from < 7) {
+        // Repair previously cached titles once, including historical semesters
+        // that may no longer be refreshed by the school API.
+        final encoded = await (select(
+          homeworks,
+        )..where((row) => row.title.contains('&'))).get();
+        await batch((batch) {
+          for (final homework in encoded) {
+            final title = decodeHtmlEntities(homework.title);
+            if (title != homework.title) {
+              batch.update(
+                homeworks,
+                HomeworksCompanion(title: Value(title)),
+                where: (row) => row.id.equals(homework.id),
+              );
+            }
+          }
+        });
       }
     },
   );

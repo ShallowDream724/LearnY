@@ -112,23 +112,52 @@ class AssignmentListItem extends StatelessWidget {
         fontFeatures: const [FontFeature.tabularFigures()],
       ),
     );
-    Widget statusBadge() => Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: state.fill,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        homework.graded && grade.hasDisplayValue
-            ? '$status · ${grade.primaryLabel}'
-            : status,
-        style: AppTypography.labelSmall.copyWith(
-          color: state.accent,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
+    Widget outcome() {
+      final hasGrade = homework.graded && grade.hasDisplayValue;
+      final content = Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            hasGrade ? grade.primaryLabel! : status,
+            textAlign: TextAlign.right,
+            style: AppTypography.titleMedium.copyWith(
+              color: state.accent,
+              fontSize: hasGrade && grade.isNumeric ? 30 : 15,
+              height: 1.2,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+          if (hasGrade) ...[
+            const SizedBox(height: 4),
+            Text(
+              status,
+              style: AppTypography.labelSmall.copyWith(color: c.subtitle),
+            ),
+          ] else if (hasReminder) ...[
+            const SizedBox(height: 4),
+            Icon(Icons.keyboard_arrow_down, size: 14, color: c.subtitle),
+          ],
+        ],
+      );
+      if (!hasReminder) return content;
+      return Builder(
+        builder: (buttonContext) => Tooltip(
+          message: '作业提醒设置',
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: () {
+              final box = buttonContext.findRenderObject()! as RenderBox;
+              onReminder!(box.localToGlobal(box.size.center(Offset.zero)));
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+              child: content,
+            ),
+          ),
         ),
-      ),
-    );
+      );
+    }
 
     return GestureDetector(
       onSecondaryTapDown: hasReminder
@@ -144,35 +173,33 @@ class AssignmentListItem extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 13, 8, 13),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final wide =
                     constraints.maxWidth >= 660 &&
                     MediaQuery.textScalerOf(context).scale(14) < 20;
-                final menu = hasReminder
-                    ? Builder(
-                        builder: (buttonContext) => IconButton(
-                          tooltip: '作业提醒设置',
-                          icon: Icon(
-                            Icons.more_horiz,
-                            size: 20,
-                            color: c.subtitle,
-                          ),
-                          onPressed: () {
-                            final box =
-                                buttonContext.findRenderObject()! as RenderBox;
-                            onReminder!(
-                              box.localToGlobal(box.size.center(Offset.zero)),
-                            );
-                          },
-                        ),
-                      )
-                    : SizedBox(width: wide ? 40 : 0);
+                final stacked =
+                    constraints.maxWidth < 300 ||
+                    MediaQuery.textScalerOf(context).scale(14) >= 23;
+                if (stacked) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      title(),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(child: deadlineText()),
+                          const SizedBox(width: 16),
+                          Flexible(child: outcome()),
+                        ],
+                      ),
+                    ],
+                  );
+                }
                 return Row(
-                  crossAxisAlignment: wide
-                      ? CrossAxisAlignment.center
-                      : CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Expanded(
                       child: wide
@@ -182,28 +209,22 @@ class AssignmentListItem extends StatelessWidget {
                               children: [
                                 title(),
                                 const SizedBox(height: 10),
-                                Wrap(
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  spacing: 12,
-                                  runSpacing: 6,
-                                  children: [deadlineText(), statusBadge()],
-                                ),
+                                deadlineText(),
                               ],
                             ),
                     ),
                     if (wide) ...[
                       const SizedBox(width: 24),
                       SizedBox(width: 152, child: deadlineText()),
-                      const SizedBox(width: 16),
-                      SizedBox(
-                        width: 116,
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: statusBadge(),
-                        ),
-                      ),
                     ],
-                    menu,
+                    const SizedBox(width: 18),
+                    SizedBox(
+                      width: wide ? 104 : 78,
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: outcome(),
+                      ),
+                    ),
                   ],
                 );
               },
