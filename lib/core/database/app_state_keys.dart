@@ -6,6 +6,8 @@ abstract final class AppStateKeys {
   static const String currentSemesterId = 'current_semester_id';
   static const String serverCurrentSemesterId = 'server_current_semester_id';
   static const String themeMode = 'theme_mode';
+  static const String wallpaper = 'wallpaper';
+  static String wallpaperIntensity(String id) => 'wallpaper_intensity::$id';
   static const String deadlineThresholdHours = 'deadline_threshold_hours';
   static const String fileCacheLimitMb = 'file_cache_limit_mb';
   static const String autoReloginEnabled = 'auto_relogin_enabled';

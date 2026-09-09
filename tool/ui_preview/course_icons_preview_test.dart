@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:io';
-import 'package:learn_y/core/database/database.dart' show CourseDao;
+import 'package:learn_y/core/database/database.dart'
+    show CourseDao, AppStateDao;
 import 'package:learn_y/core/design/app_materials.dart';
 import 'package:learn_y/features/courses/providers/course_workbench_models.dart';
 import 'dart:ui' as ui;
@@ -12,6 +14,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:learn_y/core/design/app_font.dart';
 import 'package:learn_y/core/design/app_light_scene.dart';
+import 'package:learn_y/core/design/wallpaper.dart';
+import 'package:learn_y/core/providers/wallpaper_provider.dart';
+import 'package:learn_y/core/database/app_state_keys.dart';
 import 'package:learn_y/core/design/theme.dart';
 import 'package:learn_y/core/design/typography.dart';
 import 'package:learn_y/core/router/router.dart';
@@ -143,6 +148,10 @@ void main() {
       child: ProviderScope(
         overrides: [
           ...demo!.overrides,
+          mobileWallpapersProvider.overrideWithValue(
+            theme.platform == TargetPlatform.android ||
+                theme.platform == TargetPlatform.iOS,
+          ),
           resolvedCourseCardsProvider.overrideWithValue(
             AsyncData(previewCards),
           ),
@@ -165,18 +174,77 @@ void main() {
       );
     }
     expect(tester.takeException(), isNull);
+    Future<void> settleStorage() async {
+      // SQLite completes outside the widget test's fake clock. Pump its queued
+      // callbacks before awaiting another write in runAsync.
+      for (var i = 0; i < 8; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> pumpAsyncWork(Future<void> Function() action) async {
+      var done = false;
+      Object? failure;
+      StackTrace? failureStack;
+      await tester.runAsync(() async {
+        unawaited(
+          action().then<void>(
+            (_) {
+              done = true;
+            },
+            onError: (Object error, StackTrace stack) {
+              failure = error;
+              failureStack = stack;
+              done = true;
+            },
+          ),
+        );
+      });
+      // Database invalidation and image decoding also schedule frame work.
+      // Let real I/O and the widget test's clock both advance.
+      for (var i = 0; i < 100 && !done; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      if (failure != null) Error.throwWithStackTrace(failure!, failureStack!);
+      expect(
+        done,
+        isTrue,
+        reason: 'Async work should finish while frames advance',
+      );
+    }
+
     Future<void> capture(String name, double ratio) async {
       final sceneContext = find.byType(CoursesScreen);
       if (sceneContext.evaluate().isNotEmpty) {
         final context = tester.element(sceneContext);
-        await tester.runAsync(
-          () => precacheImage(
+        final wallpaper = ProviderScope.containerOf(
+          context,
+        ).read(wallpaperProvider);
+        await pumpAsyncWork(() async {
+          await precacheImage(
             AssetImage(
-              StudyLightBackdrop.assetFor(Theme.of(context).brightness),
+              StudyLightBackdrop.assetFor(
+                Theme.of(context).brightness,
+                wallpaper: wallpaper,
+                forMobile: ProviderScope.containerOf(
+                  context,
+                ).read(mobileWallpapersProvider),
+              ),
             ),
             context,
-          ),
-        );
+          );
+          await Future.wait([
+            for (final widget in tester.widgetList<Image>(find.byType(Image)))
+              precacheImage(widget.image, context),
+          ]);
+        });
         await tester.pumpAndSettle();
       }
       expect(tester.takeException(), isNull);
@@ -196,6 +264,45 @@ void main() {
     }
 
     await capture('courses_windows_final', 2);
+    if (sceneStudy) {
+      await tester.tap(find.byTooltip('更换背景'));
+      await tester.pumpAndSettle();
+      await capture('wallpaper_picker_windows', 2);
+      await tester.tap(find.text('澄光'));
+      await settleStorage();
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(AppShell)),
+      );
+      expect(container.read(wallpaperProvider), StudyWallpaper.prism);
+      await pumpAsyncWork(() async {
+        final preference = container.read(wallpaperProvider.notifier);
+        await Future.wait([
+          preference.select(StudyWallpaper.alpine),
+          preference.select(StudyWallpaper.glow),
+          preference.select(StudyWallpaper.dunes),
+        ]);
+        expect(await demo!.database.getState(AppStateKeys.wallpaper), 'dunes');
+        final intensity = container.read(wallpaperIntensitiesProvider.notifier);
+        intensity.preview(StudyWallpaper.dunes, 20);
+        await intensity.save(StudyWallpaper.dunes);
+        intensity.preview(StudyWallpaper.prism, 45);
+        await intensity.save(StudyWallpaper.prism);
+        expect(
+          await demo.database.getState(
+            AppStateKeys.wallpaperIntensity('dunes'),
+          ),
+          '20',
+        );
+        expect(
+          await demo.database.getState(
+            AppStateKeys.wallpaperIntensity('prism'),
+          ),
+          '45',
+        );
+      });
+      await tester.tap(find.byTooltip('关闭'));
+      await tester.pumpAndSettle();
+    }
     if (!sceneStudy) {
       await tester.tap(find.byTooltip('编辑课程'));
       await tester.pumpAndSettle();
@@ -219,6 +326,62 @@ void main() {
     );
     await tester.pumpAndSettle();
     await capture('courses_android_final', 3);
+    if (sceneStudy) {
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(AppShell)),
+      );
+      // A saved desktop-only choice migrates to the phone's own default.
+      expect(container.read(wallpaperProvider), StudyWallpaper.warmHills);
+      await tester.tap(find.byTooltip('更换背景'));
+      await tester.pumpAndSettle();
+      await capture('wallpaper_picker_android', 3);
+      expect(find.text('晴岚'), findsNothing);
+      expect(find.text('微光'), findsNothing);
+      for (final wallpaper in StudyWallpaper.mobileChoices) {
+        await tester.tap(find.text(wallpaper.label));
+        await settleStorage();
+        expect(container.read(wallpaperProvider), wallpaper);
+        await tester.runAsync(
+          () => precacheImage(
+            AssetImage(wallpaper.assetFor(Brightness.dark, forMobile: true)),
+            tester.element(find.byType(AppShell)),
+          ),
+        );
+      }
+      final sliderRect = tester.getRect(find.byType(Slider));
+      await tester.tapAt(
+        Offset(sliderRect.left + sliderRect.width * .68, sliderRect.center.dy),
+      );
+      await tester.pumpAndSettle();
+      final coveIntensity = container.read(wallpaperIntensityProvider);
+      expect(coveIntensity, greaterThan(50));
+      await tester.tap(find.text('暖丘'));
+      await tester.pumpAndSettle();
+      expect(container.read(wallpaperIntensityProvider), 30);
+      await tester.tap(find.text('碧潭'));
+      await tester.pumpAndSettle();
+      expect(container.read(wallpaperIntensityProvider), coveIntensity);
+      await settleStorage();
+      await pumpAsyncWork(() async {
+        expect(await demo!.database.getState(AppStateKeys.wallpaper), 'cove');
+        expect(
+          await demo.database.getState(AppStateKeys.wallpaperIntensity('cove')),
+          '$coveIntensity',
+        );
+      });
+      await tester.tap(find.byTooltip('关闭'));
+      await tester.pumpAndSettle();
+      await capture('courses_android_cove', 3);
+      await tester.pumpWidget(
+        app(AppTheme.dark.copyWith(platform: TargetPlatform.android)),
+      );
+      await tester.pumpAndSettle();
+      await capture('courses_android_dark', 3);
+      await tester.pumpWidget(
+        app(AppTheme.light.copyWith(platform: TargetPlatform.android)),
+      );
+      await tester.pumpAndSettle();
+    }
     await tester.drag(
       find.byType(CustomScrollView).first,
       const Offset(0, -500),

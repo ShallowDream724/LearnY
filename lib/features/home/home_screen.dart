@@ -11,6 +11,8 @@ import '../../core/design/cooldown_toast.dart';
 import '../../core/design/shimmer.dart';
 import '../../core/design/typography.dart';
 import '../../core/design/responsive.dart';
+import '../../core/design/wallpaper_picker.dart';
+import '../../core/design/app_light_scene.dart';
 import '../../core/providers/providers.dart';
 import '../../core/providers/sync_models.dart';
 import '../../core/shell/shell_layout_metrics.dart';
@@ -122,6 +124,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
 
     return Scaffold(
+      backgroundColor: Colors.transparent,
       body: LayoutBuilder(
         builder: (context, constraints) {
           final gutter = pageGutterForWidth(constraints.maxWidth);
@@ -134,12 +137,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
                 SliverAppBar(
+                  backgroundColor: Colors.transparent,
+                  surfaceTintColor: Colors.transparent,
+                  flexibleSpace: const StudyLightSurface(),
                   toolbarHeight: semesterToolbarHeight(context),
                   titleSpacing: gutter,
                   title: SemesterPageTitle(
                     title: '${_greeting()}，${authState.username ?? "LearnY"}',
                   ),
                   actions: [
+                    const WallpaperButton(),
                     IconButton(
                       tooltip: '课程文件',
                       icon: const Icon(Icons.folder_open_outlined),

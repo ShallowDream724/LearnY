@@ -62,7 +62,9 @@ For the shared background study with the representative course collection:
 flutter test --no-pub --dart-define=LEARNY_PREVIEW_SCENE_ONLY=true tool/ui_preview/course_icons_preview_test.dart
 ```
 
-This produces Windows light/dark (2534 × 1369) and Android light/scroll
-(1080 × 2340) PNGs in `build/ui_preview/light_scene/`. It waits for the actual
-background asset to decode before capture and skips the picker/icon atlas.
+This produces Windows light/dark (2534 × 1369), Android light/dark/scroll
+(1080 × 2340), and wallpaper picker PNGs in `build/ui_preview/light_scene/`.
+It selects each platform's own artwork collection, waits for assets to decode,
+checks all four mobile choices and independent intensity persistence, and skips
+the course icon picker/atlas.
 This is a visual study using demo course data, not campus-service validation.

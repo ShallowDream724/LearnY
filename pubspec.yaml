@@ -1,7 +1,7 @@
 name: learn_y
 description: "LearnY - A premium client for Tsinghua University Web Learning"
 publish_to: 'none'
-version: 0.1.4+15
+version: 0.1.4+18
 
 environment:
   sdk: ^3.11.1
@@ -102,6 +102,28 @@ flutter:
     - assets/brand/app_icon.png
     - assets/artwork/landscape_light.webp
     - assets/artwork/landscape_dark.webp
+    - assets/artwork/landscape_thumbnail.webp
+    - assets/artwork/prism_light.webp
+    - assets/artwork/prism_dark.webp
+    - assets/artwork/prism_thumbnail.webp
+    - assets/artwork/dunes_light.webp
+    - assets/artwork/dunes_dark.webp
+    - assets/artwork/dunes_thumbnail.webp
+    - assets/artwork/alpine_light.webp
+    - assets/artwork/alpine_dark.webp
+    - assets/artwork/alpine_thumbnail.webp
+    - assets/artwork/warm_hills_mobile_light.webp
+    - assets/artwork/warm_hills_mobile_dark.webp
+    - assets/artwork/warm_hills_mobile_thumbnail.webp
+    - assets/artwork/prism_mobile_light.webp
+    - assets/artwork/prism_mobile_dark.webp
+    - assets/artwork/prism_mobile_thumbnail.webp
+    - assets/artwork/alpine_mobile_light.webp
+    - assets/artwork/alpine_mobile_dark.webp
+    - assets/artwork/alpine_mobile_thumbnail.webp
+    - assets/artwork/cove_mobile_light.webp
+    - assets/artwork/cove_mobile_dark.webp
+    - assets/artwork/cove_mobile_thumbnail.webp
   fonts:
     - family: LXGW WenKai GB Screen
       fonts:

@@ -11,6 +11,7 @@ import '../design/responsive.dart';
 import '../design/typography.dart';
 import '../providers/connectivity_provider.dart';
 import '../providers/providers.dart';
+import '../providers/wallpaper_provider.dart';
 import '../router/router.dart';
 import '../semester/semester_switcher.dart';
 import 'app_bottom_navigation.dart';
@@ -80,6 +81,9 @@ class AppShell extends ConsumerWidget {
       ),
     );
     return StudyLightBackdrop(
+      wallpaper: ref.watch(wallpaperProvider),
+      mobileArtwork: ref.watch(mobileWallpapersProvider),
+      strength: ref.watch(wallpaperIntensityProvider) / 100,
       child: Scaffold(
         backgroundColor: Colors.transparent,
         body: rail

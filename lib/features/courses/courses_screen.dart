@@ -13,6 +13,8 @@ import '../../core/design/colors.dart';
 import '../../core/design/cooldown_toast.dart';
 import '../../core/design/shimmer.dart';
 import '../../core/design/typography.dart';
+import '../../core/design/wallpaper_picker.dart';
+import '../../core/design/app_light_scene.dart';
 import '../../core/providers/sync_models.dart';
 import '../../core/router/router.dart';
 import '../../core/semester/semester_switcher.dart';
@@ -361,6 +363,7 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
               SliverAppBar(
                 backgroundColor: Colors.transparent,
                 surfaceTintColor: Colors.transparent,
+                flexibleSpace: const StudyLightSurface(),
                 toolbarHeight: semesterToolbarHeight(context),
                 titleSpacing: pageGutter(context),
                 floating: true,
@@ -409,6 +412,7 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
                         ),
                       ]
                     : [
+                        const WallpaperButton(),
                         if (cardsAsync.valueOrNull?.isNotEmpty == true)
                           Tooltip(
                             message: '编辑课程',

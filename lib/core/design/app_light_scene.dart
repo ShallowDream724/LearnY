@@ -4,16 +4,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 import 'app_theme_colors.dart';
+import 'wallpaper.dart';
 
 /// One authored landscape spans the shell. Glass samples this same scene at
 /// paint time, so scrolling does not need measurements or per-card image loads.
 class StudyLightBackdrop extends StatefulWidget {
-  const StudyLightBackdrop({super.key, required this.child});
+  const StudyLightBackdrop({
+    super.key,
+    required this.child,
+    this.wallpaper = StudyWallpaper.dunes,
+    this.mobileArtwork = false,
+    this.strength = .3,
+  });
 
   final Widget child;
+  final StudyWallpaper wallpaper;
+  final bool mobileArtwork;
+  final double strength;
 
-  static String assetFor(Brightness brightness) =>
-      'assets/artwork/landscape_${brightness == Brightness.dark ? 'dark' : 'light'}.webp';
+  static String assetFor(
+    Brightness brightness, {
+    StudyWallpaper wallpaper = StudyWallpaper.dunes,
+    bool forMobile = false,
+  }) => wallpaper.assetFor(brightness, forMobile: forMobile);
 
   static StudyLightScene? sceneOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<_SceneScope>()?.scene;
@@ -47,27 +60,75 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop> {
   ImageStream? _stream;
   ImageInfo? _image;
   String? _asset;
-  late final _listener = ImageStreamListener(_onImage);
+  ImageStreamListener? _listener;
   late StudyLightScene _scene;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final dark = context.isDark;
-    final asset = StudyLightBackdrop.assetFor(Theme.of(context).brightness);
-    if (_asset == asset) return;
-    _asset = asset;
-    _stream?.removeListener(_listener);
-    _replaceImage(null);
-    _scene = StudyLightScene(dark: dark);
-    _stream = AssetImage(asset).resolve(createLocalImageConfiguration(context));
-    _stream!.addListener(_listener);
+    _resolveImage();
   }
 
-  void _onImage(ImageInfo image, bool synchronousCall) {
+  @override
+  void didUpdateWidget(StudyLightBackdrop oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.wallpaper != widget.wallpaper ||
+        oldWidget.mobileArtwork != widget.mobileArtwork) {
+      _resolveImage();
+    }
+    if (oldWidget.strength != widget.strength) {
+      _scene = _scene.withStrength(widget.strength);
+    }
+  }
+
+  void _resolveImage() {
+    final dark = context.isDark;
+    final wallpaper = widget.wallpaper;
+    final mobile = widget.mobileArtwork;
+    final asset = wallpaper.assetFor(
+      Theme.of(context).brightness,
+      forMobile: mobile,
+    );
+    if (_asset == asset) return;
+    _asset = asset;
+    if (_listener != null) _stream?.removeListener(_listener!);
+    // Keep the current landscape visible while a new selection decodes.
+    if (_image == null || _scene.dark != dark) {
+      _replaceImage(null);
+      _scene = StudyLightScene(
+        dark: dark,
+        wallpaper: wallpaper,
+        mobileArtwork: mobile,
+        strength: widget.strength,
+      );
+    }
+    _listener = ImageStreamListener((image, synchronousCall) {
+      if (!mounted || _asset != asset) {
+        image.dispose();
+        return;
+      }
+      _onImage(image, synchronousCall, wallpaper, dark, mobile);
+    });
+    _stream = AssetImage(asset).resolve(createLocalImageConfiguration(context));
+    _stream!.addListener(_listener!);
+  }
+
+  void _onImage(
+    ImageInfo image,
+    bool synchronousCall,
+    StudyWallpaper wallpaper,
+    bool dark,
+    bool mobile,
+  ) {
     void update() {
       _replaceImage(image);
-      _scene = StudyLightScene(dark: context.isDark, image: image.image);
+      _scene = StudyLightScene(
+        dark: dark,
+        image: image.image,
+        wallpaper: wallpaper,
+        mobileArtwork: mobile,
+        strength: widget.strength,
+      );
     }
 
     if (synchronousCall) {
@@ -89,7 +150,7 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop> {
 
   @override
   void dispose() {
-    _stream?.removeListener(_listener);
+    if (_listener != null) _stream?.removeListener(_listener!);
     _replaceImage(null);
     super.dispose();
   }
@@ -144,14 +205,86 @@ class _LightBackdrop extends RenderProxyBox {
   }
 }
 
+/// An opaque slice of the same scene for scrolling page headers: the wallpaper
+/// remains continuous while scrolled text cannot show through the toolbar.
+class StudyLightSurface extends LeafRenderObjectWidget {
+  const StudyLightSurface({super.key});
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _SceneSurfaceBox(StudyLightBackdrop.sceneOf(context), context.isDark);
+
+  @override
+  void updateRenderObject(BuildContext context, RenderObject renderObject) {
+    (renderObject as _SceneSurfaceBox).update(
+      StudyLightBackdrop.sceneOf(context),
+      context.isDark,
+    );
+  }
+}
+
+class _SceneSurfaceBox extends RenderBox {
+  _SceneSurfaceBox(this.scene, this.dark);
+  StudyLightScene? scene;
+  bool dark;
+
+  void update(StudyLightScene? next, bool nextDark) {
+    if (identical(scene, next) && dark == nextDark) return;
+    scene = next;
+    dark = nextDark;
+    markNeedsPaint();
+  }
+
+  @override
+  bool get sizedByParent => true;
+  @override
+  Size computeDryLayout(BoxConstraints constraints) => constraints.biggest;
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    final backdrop = StudyLightBackdrop.locate(this, dark: dark);
+    context.canvas.save();
+    context.canvas.translate(
+      offset.dx - backdrop.origin.dx,
+      offset.dy - backdrop.origin.dy,
+    );
+    backdrop.scene.paint(
+      context.canvas,
+      backdrop.size,
+      coverage: backdrop.origin & size,
+    );
+    context.canvas.restore();
+  }
+}
+
 /// Texture and cover transform are shared by the background and every pane.
 /// Clamp sampling also covers offscreen scroll-cache and refracted edge pixels.
 class StudyLightScene {
-  StudyLightScene({required this.dark, this.image});
+  StudyLightScene({
+    required this.dark,
+    this.image,
+    this.wallpaper = StudyWallpaper.dunes,
+    this.mobileArtwork = false,
+    this.strength = .3,
+  });
   final bool dark;
   final ui.Image? image;
+  final StudyWallpaper wallpaper;
+  final bool mobileArtwork;
+  final double strength;
   ui.Shader? _shader;
   Size? _shaderSize;
+
+  StudyLightScene withStrength(double strength) =>
+      StudyLightScene(
+          dark: dark,
+          image: image,
+          wallpaper: wallpaper,
+          mobileArtwork: mobileArtwork,
+          strength: strength,
+        )
+        .._shader = _shader
+        .._shaderSize = _shaderSize;
 
   static Offset source(Size size) =>
       Offset(-size.width * .12, -size.height * .3);
@@ -159,38 +292,47 @@ class StudyLightScene {
   void paint(Canvas canvas, Size size, {Rect? coverage}) {
     final bounds = Offset.zero & size;
     final texture = image;
+    final paintBounds = coverage ?? bounds;
+    canvas.drawRect(
+      paintBounds,
+      Paint()..color = dark ? const Color(0xFF1B1D20) : const Color(0xFFF7F8FB),
+    );
+    if (texture == null || strength <= 0) return;
     final paint = Paint()
-      ..color = dark ? const Color(0xFF1B1D20) : const Color(0xFFF0F2F2);
-    if (texture != null) {
-      if (_shader == null || _shaderSize != size) {
-        final textureSize = Size(
-          texture.width.toDouble(),
-          texture.height.toDouble(),
-        );
-        final fitted = applyBoxFit(BoxFit.cover, textureSize, size);
-        // Move the main curve toward the lower/right periphery with one shared
-        // camera crop. Portrait framing keeps it below the initial reading area.
-        final scale = fitted.destination.width / fitted.source.width * 1.16;
-        final framing = ((1 - size.aspectRatio) / .45).clamp(0.0, 1.0);
-        final matrix = Matrix4.identity()
-          ..translateByDouble(
-            (size.width - texture.width * scale) * (.12 + .42 * framing),
-            (size.height - texture.height * scale) * .08,
-            0,
-            1,
-          )
-          ..scaleByDouble(scale, scale, 1, 1);
-        _shader = ui.ImageShader(
-          texture,
-          TileMode.clamp,
-          TileMode.clamp,
-          matrix.storage,
-          filterQuality: FilterQuality.medium,
-        );
-        _shaderSize = size;
-      }
-      paint.shader = _shader;
+      ..color = Colors.white.withValues(alpha: strength.clamp(0, 1));
+    if (_shader == null || _shaderSize != size) {
+      final textureSize = Size(
+        texture.width.toDouble(),
+        texture.height.toDouble(),
+      );
+      final fitted = applyBoxFit(BoxFit.cover, textureSize, size);
+      final artwork = wallpaper.artwork(forMobile: mobileArtwork);
+      final scale =
+          fitted.destination.width / fitted.source.width * artwork.zoom;
+      final framing = ((1 - size.aspectRatio) / .45).clamp(0.0, 1.0);
+      final alignment = Alignment.lerp(
+        artwork.wideAlignment,
+        artwork.tallAlignment,
+        framing,
+      )!;
+      final matrix = Matrix4.identity()
+        ..translateByDouble(
+          (size.width - texture.width * scale) * (1 + alignment.x) / 2,
+          (size.height - texture.height * scale) * (1 + alignment.y) / 2,
+          0,
+          1,
+        )
+        ..scaleByDouble(scale, scale, 1, 1);
+      _shader = ui.ImageShader(
+        texture,
+        TileMode.clamp,
+        TileMode.clamp,
+        matrix.storage,
+        filterQuality: FilterQuality.medium,
+      );
+      _shaderSize = size;
     }
-    canvas.drawRect(coverage ?? bounds, paint);
+    paint.shader = _shader;
+    canvas.drawRect(paintBounds, paint);
   }
 }

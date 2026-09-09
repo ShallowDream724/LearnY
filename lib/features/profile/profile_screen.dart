@@ -12,6 +12,9 @@ import '../../core/design/app_theme_colors.dart';
 import '../../core/design/app_surfaces.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/typography.dart';
+import '../../core/design/wallpaper_picker.dart';
+import '../../core/design/app_light_scene.dart';
+import '../../core/providers/wallpaper_provider.dart';
 import '../../core/providers/providers.dart';
 import '../../core/router/router.dart';
 import '../../core/shell/shell_layout_metrics.dart';
@@ -48,11 +51,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final profileIdentity = ref.watch(profileIdentityProvider).valueOrNull;
     final buildInfo = ref.watch(appBuildInfoProvider).valueOrNull;
     final updateInfo = ref.watch(appUpdateInfoProvider).valueOrNull;
+    final wallpaper = ref.watch(wallpaperProvider);
+    final mobileWallpaper = ref.watch(mobileWallpapersProvider);
 
     return Scaffold(
+      backgroundColor: Colors.transparent,
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
+            backgroundColor: Colors.transparent,
+            surfaceTintColor: Colors.transparent,
+            flexibleSpace: const StudyLightSurface(),
             pinned: true,
             titleSpacing: pageGutter(context, maxWidth: 880),
             title: Text(
@@ -144,6 +153,24 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               trailing: AppearanceMenu(
                                 value: themeMode,
                                 onChanged: _changeTheme,
+                              ),
+                            ),
+                            SettingsRow(
+                              title: '背景',
+                              subtitle:
+                                  '${wallpaper.label} · ${ref.watch(wallpaperIntensityProvider)}%',
+                              onTap: () => showWallpaperPicker(context),
+                              trailing: ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.asset(
+                                  wallpaper
+                                      .artwork(forMobile: mobileWallpaper)
+                                      .thumbnail,
+                                  width: mobileWallpaper ? 28 : 64,
+                                  height: mobileWallpaper ? 56 : 40,
+                                  fit: BoxFit.cover,
+                                  excludeFromSemantics: true,
+                                ),
                               ),
                             ),
                             SettingsSwitchRow(

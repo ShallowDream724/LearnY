@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/design/app_surfaces.dart';
+import '../../core/design/app_light_scene.dart';
 import '../../core/design/app_materials.dart';
 import '../../core/design/app_theme_colors.dart';
 import '../../core/design/app_toast.dart';
@@ -114,6 +115,7 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
     final sync = ref.watch(syncStateProvider);
     final syncing = sync.status == SyncStatus.syncing;
     return Scaffold(
+      backgroundColor: Colors.transparent,
       body: LayoutBuilder(
         builder: (context, constraints) {
           final gutter = pageGutterForWidth(
@@ -128,6 +130,9 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
                 SliverAppBar(
+                  backgroundColor: Colors.transparent,
+                  surfaceTintColor: Colors.transparent,
+                  flexibleSpace: const StudyLightSurface(),
                   toolbarHeight: semesterToolbarHeight(context),
                   title: const SemesterPageTitle(title: '作业'),
                   titleSpacing: gutter,
