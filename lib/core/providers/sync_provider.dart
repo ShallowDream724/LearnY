@@ -18,10 +18,6 @@ import 'course_catalog_provider.dart';
 export 'sync_models.dart';
 export 'home_data_provider.dart';
 
-final syncTimeoutProvider = Provider<Duration>(
-  (ref) => const Duration(seconds: 90),
-);
-
 final _syncEngineProvider = Provider<SyncEngine>((ref) {
   return SyncEngine(
     apiClient: ref.watch(learningReadApiProvider),
@@ -233,11 +229,10 @@ class SyncNotifier extends StateNotifier<SyncState> {
         );
       }
       state = SyncState(status: SyncStatus.syncing, lastSynced: previousSync);
-      final result = await _execute(
-        kind,
-        courseId,
-        operation,
-      ).timeout(_ref.read(syncTimeoutProvider));
+      // Each HTTP request has a transport timeout. An aggregate deadline would
+      // abandon a progressing sync (including relogin) and release the queue
+      // while its underlying requests were still running.
+      final result = await _execute(kind, courseId, operation);
       operation.ensureActive();
       final finishedAt = DateTime.now();
       if (result.warnings.isEmpty) {

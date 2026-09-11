@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/api_client_provider.dart';
+import '../providers/connectivity_provider.dart';
 import '../providers/sync_provider.dart';
 import 'auth_controller.dart';
 import 'session_recovery_coordinator.dart';
@@ -70,6 +71,7 @@ class AppSessionCoordinator {
   DateTime? _pausedAt;
   bool _postAuthSyncScheduled = false;
   Future<void>? _recoveryTask;
+  SyncStatus _lastSyncStatus = SyncStatus.idle;
 
   static Future<void> _defaultScheduleTask(
     Duration delay,
@@ -130,6 +132,7 @@ class AppSessionCoordinator {
   }
 
   void handleSyncStateChanged(SyncState? previous, SyncState next) {
+    _lastSyncStatus = next.status;
     if (next.status == SyncStatus.success &&
         previous?.status != SyncStatus.success) {
       _delegate.markSessionHealthy();
@@ -150,17 +153,32 @@ class AppSessionCoordinator {
       return;
     }
 
-    if (_now().difference(pausedAt) < resumeSyncThreshold) {
+    final auth = _delegate.authState;
+    if (auth.requiresReauthentication) {
+      await _triggerRecoveryAfterSyncFailure(auth.errorMessage);
       return;
     }
 
-    final auth = _delegate.authState;
-    if (auth.requiresReauthentication) {
-      await _recoverSession(resyncOnSuccess: true);
+    if (_lastSyncStatus != SyncStatus.error &&
+        _now().difference(pausedAt) < resumeSyncThreshold) {
       return;
     }
 
     await _runForegroundSyncIfEligible();
+  }
+
+  void handleConnectivityChanged(
+    ConnectivityState? previous,
+    ConnectivityState next,
+  ) {
+    if (previous == null || next.status != NetworkStatus.online) return;
+    final auth = _delegate.authState;
+    if (!auth.canAccessCachedData || auth.isRestoring) return;
+    if (auth.requiresReauthentication) {
+      _triggerRecoveryAfterSyncFailure(auth.errorMessage);
+    } else if (_lastSyncStatus == SyncStatus.error) {
+      _scheduleForegroundSync();
+    }
   }
 
   Future<void> _runForegroundSyncIfEligible() async {
@@ -172,8 +190,8 @@ class AppSessionCoordinator {
     await _delegate.syncAll();
   }
 
-  void _triggerRecoveryAfterSyncFailure(String? message) {
-    _recoveryTask ??=
+  Future<void> _triggerRecoveryAfterSyncFailure(String? message) {
+    return _recoveryTask ??=
         _recoverSession(
           errorMessage: message,
           resyncOnSuccess: true,
@@ -230,6 +248,10 @@ final appSessionCoordinatorProvider = Provider<AppSessionCoordinator>((ref) {
 
   ref.listen<AuthState>(authProvider, coordinator.handleAuthStateChanged);
   ref.listen<SyncState>(syncStateProvider, coordinator.handleSyncStateChanged);
+  ref.listen<ConnectivityState>(
+    connectivityProvider,
+    coordinator.handleConnectivityChanged,
+  );
   coordinator.scheduleInitialForegroundSyncIfNeeded();
 
   return coordinator;

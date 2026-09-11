@@ -24,14 +24,11 @@ class CourseCatalogRepository {
     if (request == null ||
         !request.operations.any((operation) => operation.isActive)) {
       final started = _CourseCatalogRequest();
-      started.future = apiClient
-          .getCourseList(semesterId)
-          .timeout(const Duration(seconds: 30))
-          .whenComplete(() {
-            if (identical(_requests[semesterId], started)) {
-              _requests.remove(semesterId);
-            }
-          });
+      started.future = apiClient.getCourseList(semesterId).whenComplete(() {
+        if (identical(_requests[semesterId], started)) {
+          _requests.remove(semesterId);
+        }
+      });
       _requests[semesterId] = started;
       request = started;
     }

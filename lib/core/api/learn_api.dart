@@ -102,6 +102,25 @@ bool looksLikeIdentityLoginPage(String pageSource) {
       normalized.contains('统一身份认证');
 }
 
+/// Learn also serves its own expiry/error pages with HTTP 200 at the original
+/// protected URL. Detect the page structure, not words in a course's JSON data.
+@visibleForTesting
+bool looksLikeLearnSessionExpiredPage(String pageSource) {
+  if (!pageSource.trimLeft().startsWith('<')) return false;
+  final document = html_parser.parse(pageSource);
+  if (document.querySelector('title')?.text.trim() == '登录超时') {
+    return true;
+  }
+  final panel = document.querySelector('.bground');
+  if (panel == null) return false;
+  if (panel.querySelector('.infoo')?.text.trim() == '您未登录或登录失效') {
+    return true;
+  }
+  return panel.querySelector(r'img[src$="/log_fail.png"]') != null &&
+      panel.querySelector('.chongxin')?.text.trim() == '登录网络学堂' &&
+      RegExp(r'错误码为\s*[:：]\s*(401|403)\b').hasMatch(panel.text);
+}
+
 @visibleForTesting
 bool isAuthenticatedLearnPage({
   required Uri? pageUri,
@@ -112,7 +131,9 @@ bool isAuthenticatedLearnPage({
     return false;
   }
 
-  if (isIdentityLoginUri(pageUri) || looksLikeIdentityLoginPage(pageSource)) {
+  if (isIdentityLoginUri(pageUri) ||
+      looksLikeIdentityLoginPage(pageSource) ||
+      looksLikeLearnSessionExpiredPage(pageSource)) {
     return false;
   }
 
@@ -234,7 +255,8 @@ class Learn2018Helper implements LearningReadApi {
     }
 
     final body = resp.data?.toString() ?? '';
-    return looksLikeIdentityLoginPage(body);
+    return looksLikeIdentityLoginPage(body) ||
+        looksLikeLearnSessionExpiredPage(body);
   }
 
   Future<bool>? _sessionRecoveryFuture;
@@ -266,7 +288,7 @@ class Learn2018Helper implements LearningReadApi {
     return future;
   }
 
-  /// Fetch wrapper with automatic session recovery on timeout.
+  /// Retry once after a confirmed expired session, using the refreshed CSRF.
   Future<Response> _myFetch(
     String url, {
     String method = 'GET',
@@ -290,9 +312,14 @@ class Learn2018Helper implements LearningReadApi {
       );
     }
 
+    final requestToken = _csrfToken;
     final resp = await doFetch();
     if (_isLoginTimeout(resp)) {
-      final recovered = await _attemptConfiguredSessionRecovery();
+      // A parallel request may already have restored this session while this
+      // old response was in transit. Do not invalidate that new session again.
+      final recovered =
+          (_csrfToken.isNotEmpty && _csrfToken != requestToken) ||
+          await _attemptConfiguredSessionRecovery();
       if (recovered) {
         final retryUrl = Uri.parse(url).queryParameters.containsKey('_csrf')
             ? urls.addCSRFTokenToUrl(url, _csrfToken)
@@ -480,8 +507,12 @@ class Learn2018Helper implements LearningReadApi {
       throw const ApiError(reason: FailReason.errorRoaming);
     }
 
-    // Extract CSRF token and language from course list page.
-    await _extractCSRFToken();
+    if (!_applyAuthenticatedPageContext(
+      pageUri: loginResp.realUri,
+      pageSource: loginResp.data?.toString() ?? '',
+    )) {
+      await _extractCSRFToken();
+    }
   }
 
   /// Login using an SSO ticket obtained from WebView.
@@ -500,7 +531,12 @@ class Learn2018Helper implements LearningReadApi {
     if (roamResp.statusCode != 200) {
       throw const ApiError(reason: FailReason.errorRoaming);
     }
-    await _extractCSRFToken();
+    if (!_applyAuthenticatedPageContext(
+      pageUri: roamResp.realUri,
+      pageSource: roamResp.data?.toString() ?? '',
+    )) {
+      await _extractCSRFToken();
+    }
     debugPrint('[LearnX] loginWithTicket: complete');
   }
 
@@ -542,32 +578,20 @@ class Learn2018Helper implements LearningReadApi {
 
   /// Manually follow a 302 redirect chain, capturing cookies at each hop.
   ///
-  /// Uses a separate bare Dio with only CookieManager (no other
-  /// interceptors). This mimics the behavior of `fetch-cookie` from
-  /// the original thu-learn-lib: every 302 response's Set-Cookie is
-  /// saved to the shared CookieJar before following the redirect.
-  ///
-  /// Why not use the main Dio?
-  /// - `followRedirects: true` → HttpClient handles 302 internally,
-  ///   CookieManager never sees intermediate Set-Cookie headers.
-  /// - `followRedirects: false` + redirect interceptor → calling
-  ///   `_dio.get()` inside an interceptor deadlocks the queue.
+  /// Runs outside interceptors, using the same transport configuration as API
+  /// requests. CookieManager saves each hop before the next request starts.
   Future<Response> _followRedirectsManually(String url) async {
-    final bareDio = Dio(
-      BaseOptions(
-        followRedirects: false,
-        validateStatus: (_) => true, // accept all status codes
-        responseType: ResponseType.plain,
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 30),
-      ),
-    );
-    bareDio.interceptors.add(CookieManager(_cookieJar));
-
     var currentUrl = url;
     late Response resp;
     for (int i = 0; i < 10; i++) {
-      resp = await bareDio.get(currentUrl);
+      resp = await _dio.get(
+        currentUrl,
+        options: Options(
+          followRedirects: false,
+          validateStatus: (_) => true,
+          responseType: ResponseType.plain,
+        ),
+      );
       debugPrint(
         '[LearnX] _followRedirects: hop $i '
         'status=${resp.statusCode} host=${Uri.parse(currentUrl).host}',
@@ -583,7 +607,6 @@ class Learn2018Helper implements LearningReadApi {
       }
       break; // non-redirect response
     }
-    bareDio.close();
     return resp;
   }
 
@@ -594,14 +617,22 @@ class Learn2018Helper implements LearningReadApi {
   /// Obtain CSRF token without needing credentials.
   /// Relies on PersistCookieJar's session cookies. If cookies are
   /// expired the page redirects to login → no token found → throws.
-  Future<void> _ensureCSRFToken() async {
+  Future<void>? _csrfTokenFuture;
+
+  Future<void> _ensureCSRFToken() {
+    return _csrfTokenFuture ??= _loadCSRFToken().whenComplete(() {
+      _csrfTokenFuture = null;
+    });
+  }
+
+  Future<void> _loadCSRFToken() async {
     try {
       await _extractCSRFToken();
     } on ApiError catch (e) {
       if (e.reason != FailReason.notLoggedIn) rethrow;
       final recovered = await _attemptConfiguredSessionRecovery();
       if (recovered) {
-        await _extractCSRFToken();
+        if (_csrfToken.isEmpty) await _extractCSRFToken();
         return;
       }
       throw const ApiError(reason: FailReason.notLoggedIn);
@@ -616,12 +647,8 @@ class Learn2018Helper implements LearningReadApi {
   /// Also detects the current language setting.
   Future<void> _extractCSRFToken() async {
     debugPrint('[LearnX] _extractCSRFToken: fetching course list...');
-    final courseListResp = await _dio.get(
+    final courseListResp = await _followRedirectsManually(
       urls.learnStudentCourseListPage(),
-      options: Options(
-        validateStatus: (status) =>
-            status != null && (status < 400 || status == 401 || status == 403),
-      ),
     );
     if (_isLoginTimeout(courseListResp)) {
       throw const ApiError(reason: FailReason.notLoggedIn);
@@ -631,10 +658,6 @@ class Learn2018Helper implements LearningReadApi {
       '[LearnX] _extractCSRFToken: page length=${pageSource.length}, '
       'status=${courseListResp.statusCode}, url=${courseListResp.realUri}',
     );
-    debugPrint(
-      '[LearnX] _extractCSRFToken: preview=${pageSource.substring(0, pageSource.length.clamp(0, 300))}',
-    );
-
     if (!_applyAuthenticatedPageContext(
       pageUri: courseListResp.realUri,
       pageSource: pageSource,

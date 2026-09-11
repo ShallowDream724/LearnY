@@ -4,10 +4,39 @@ import 'package:learn_y/core/auth/app_session_coordinator.dart';
 import 'package:learn_y/core/auth/auth_relogin_models.dart';
 import 'package:learn_y/core/auth/auth_controller.dart';
 import 'package:learn_y/core/auth/session_recovery_coordinator.dart';
+import 'package:learn_y/core/providers/connectivity_provider.dart';
 import 'package:learn_y/core/providers/sync_models.dart';
 
 void main() {
   group('AppSessionCoordinator', () {
+    test(
+      'expired sessions recover on a quick resume or network return',
+      () async {
+        for (final networkReturn in [false, true]) {
+          final delegate = _FakeCoordinatorDelegate(
+            authState: const AuthState.sessionExpired(username: 'demo'),
+            recoveryResult: const SessionRecoveryResult.success(
+              SessionRecoveryMethod.secureCredential,
+            ),
+          );
+          final coordinator = AppSessionCoordinator(delegate);
+          if (networkReturn) {
+            coordinator.handleConnectivityChanged(
+              const ConnectivityState(status: NetworkStatus.offline),
+              const ConnectivityState(status: NetworkStatus.online),
+            );
+          } else {
+            coordinator.handleLifecycleStateChanged(AppLifecycleState.paused);
+            coordinator.handleLifecycleStateChanged(AppLifecycleState.resumed);
+          }
+          await Future<void>.delayed(Duration.zero);
+          expect(delegate.recoveryCalls, 1);
+          expect(delegate.syncCalls, 1);
+          expect(delegate.markHealthyCalls, 1);
+        }
+      },
+    );
+
     test(
       'schedules a foreground sync for bootstrapped cached identity',
       () async {

@@ -75,3 +75,5 @@ flutter analyze --no-pub lib test
 0.1.4+10（2026-09-09）包含 100 个课程矢量图形、课程玻璃样式与图标选择器。两端 Release 已构建，Windows 安装包位于 `dist/windows/LearnY-Setup-0.1.4-build10.exe`，完整运行目录位于 `dist/windows/LearnY-0.1.4-build10/`，通用 Android 包位于 `dist/android/LearnY-0.1.4+10.apk`。文件清单与 SHA-256 见 `dist/LearnY-0.1.4-build10-manifest.json`。
 
 此轮检查覆盖旧图标编号兼容、选择/取消/保存/恢复、账号学期隔离、鼠标与触屏排序、手机键盘选择器，以及真实 Flutter 明暗与两端页面渲染；使用方式和维护入口见 [COURSE_ICONS.md](COURSE_ICONS.md)。
+
+0.1.4+20（2026-09-12）修复网络学堂 HTTP 200 失效页漏触发自动重连，以及同步/课程目录总期限截断正在进行的恢复。Windows 免安装入口为 `dist/windows/LearnY-0.1.4-build20/learn_y.exe`，便携包为 `dist/windows/LearnY-0.1.4-build20-portable.zip`，Android 为 `dist/android/LearnY-0.1.4+20.apk`。学校未登录响应已直接核对；恢复、同步的针对性回归、改动范围静态分析和两端 Release 构建通过，未使用真实账号执行校外复登验收。

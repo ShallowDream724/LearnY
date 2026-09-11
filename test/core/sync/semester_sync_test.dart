@@ -166,20 +166,26 @@ void main() {
   );
 
   test(
-    'timeout ends loading, prevents late writes, and permits retry',
+    'a slow successful sync keeps retries queued until its requests settle',
     () async {
-      final fixture = Fixture(timeout: const Duration(milliseconds: 100));
+      final fixture = Fixture();
       addTearDown(fixture.dispose);
       final gate = Completer<List<api.CourseInfo>>();
       fixture.client.courseGate = gate;
       final task = fixture.sync.syncAll();
       await fixture.client.courseStarted.future;
-      expect((await task).status, SyncStatus.error);
-      fixture.client.courseGate = null;
-      expect((await fixture.sync.syncAll()).status, SyncStatus.success);
-      gate.complete([course('timed-out-course')]);
+      final retry = fixture.sync.syncAll(force: true);
       await Future<void>.delayed(const Duration(milliseconds: 20));
-      expect(await fixture.db.getCourseById('timed-out-course'), isNull);
+      expect(
+        fixture.container.read(syncStateProvider).status,
+        SyncStatus.syncing,
+      );
+      expect(fixture.client.requestedTerms, [oldTerm]);
+      fixture.client.courseGate = null;
+      gate.complete([course('course-$oldTerm')]);
+      expect((await task).status, SyncStatus.success);
+      expect((await retry).status, SyncStatus.success);
+      expect(fixture.client.requestedTerms, [oldTerm, oldTerm]);
       expect(
         fixture.container.read(syncStateProvider).status,
         SyncStatus.success,
@@ -296,10 +302,7 @@ void main() {
 }
 
 class Fixture {
-  Fixture({
-    String? selected = oldTerm,
-    Duration timeout = const Duration(seconds: 5),
-  }) {
+  Fixture({String? selected = oldTerm}) {
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
@@ -307,7 +310,6 @@ class Fixture {
         initialAuthUsernameProvider.overrideWithValue('test-owner'),
         didBootstrapAppSessionProvider.overrideWithValue(true),
         initialCurrentSemesterIdProvider.overrideWithValue(selected),
-        syncTimeoutProvider.overrideWithValue(timeout),
       ],
     );
   }
