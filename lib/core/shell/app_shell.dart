@@ -17,6 +17,7 @@ import '../router/router.dart';
 import '../semester/semester_switcher.dart';
 import '../../features/home/providers/home_schedule_provider.dart';
 import 'app_bottom_navigation.dart';
+import 'shell_navigation_progress.dart';
 
 const _destinations = <ShellNavDestinationData>[
   ShellNavDestinationData(
@@ -41,16 +42,33 @@ const _destinations = <ShellNavDestinationData>[
   ),
 ];
 
-class AppShell extends ConsumerWidget {
+class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key, required this.navigationShell});
   final StatefulNavigationShell navigationShell;
 
+  @override
+  ConsumerState<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends ConsumerState<AppShell> {
+  late final _navigationProgress = ShellNavigationProgress(
+    widget.navigationShell.currentIndex.toDouble(),
+  );
+
+  @override
+  void dispose() {
+    _navigationProgress.dispose();
+    super.dispose();
+  }
+
   void _select(int index) {
-    if (index != navigationShell.currentIndex) navigationShell.goBranch(index);
+    if (index != widget.navigationShell.currentIndex) {
+      widget.navigationShell.goBranch(index);
+    }
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final rail = shouldShowRail(context);
     final auth = ref.watch(authProvider);
     final offline =
@@ -91,7 +109,7 @@ class AppShell extends ConsumerWidget {
               icon: Icons.wifi_off_outlined,
               message: '当前离线，正在显示已保存的内容',
             ),
-          Expanded(child: navigationShell),
+          Expanded(child: widget.navigationShell),
         ],
       ),
     );
@@ -102,28 +120,33 @@ class AppShell extends ConsumerWidget {
       ),
       mobileArtwork: ref.watch(mobileWallpapersProvider),
       strength: ref.watch(wallpaperIntensityProvider) / 100,
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        extendBody: !rail,
-        body: rail
-            ? Row(
-                children: [
-                  _Sidebar(
-                    index: navigationShell.currentIndex,
-                    onSelected: _select,
-                    onRefresh: refreshAll,
-                  ),
-                  Expanded(child: content),
-                ],
-              )
-            : content,
-        bottomNavigationBar: rail || MediaQuery.viewInsetsOf(context).bottom > 0
-            ? null
-            : AppBottomNavigation(
-                destinations: _destinations,
-                selectedIndex: navigationShell.currentIndex,
-                onTap: _select,
-              ),
+      child: ShellNavigationProgressScope(
+        progress: _navigationProgress,
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          extendBody: !rail,
+          body: rail
+              ? Row(
+                  children: [
+                    _Sidebar(
+                      index: widget.navigationShell.currentIndex,
+                      onSelected: _select,
+                      onRefresh: refreshAll,
+                    ),
+                    Expanded(child: content),
+                  ],
+                )
+              : content,
+          bottomNavigationBar:
+              rail || MediaQuery.viewInsetsOf(context).bottom > 0
+              ? null
+              : AppBottomNavigation(
+                  destinations: _destinations,
+                  selectedIndex: widget.navigationShell.currentIndex,
+                  progress: _navigationProgress,
+                  onTap: _select,
+                ),
+        ),
       ),
     );
   }
@@ -285,6 +308,8 @@ class _BranchPager extends StatefulWidget {
 
 class _BranchPagerState extends State<_BranchPager> {
   late final PageController _controller;
+  ShellNavigationProgress? _progress;
+  bool _jumping = false;
   int? _selectionFromPager;
 
   @override
@@ -292,7 +317,25 @@ class _BranchPagerState extends State<_BranchPager> {
     super.initState();
     _controller = PageController(
       initialPage: widget.navigationShell.currentIndex,
-    );
+    )..addListener(_publishPage);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _progress = ShellNavigationProgressScope.of(context);
+  }
+
+  void _publishPage() {
+    if (_jumping ||
+        !_controller.hasClients ||
+        !_controller.position.hasContentDimensions) {
+      return;
+    }
+    final page = _controller.page;
+    if (page != null) {
+      _progress?.follow(page.clamp(0, widget.children.length - 1).toDouble());
+    }
   }
 
   @override
@@ -310,7 +353,15 @@ class _BranchPagerState extends State<_BranchPager> {
           return;
         }
         // Pager-driven changes keep their physics; explicit navigation cancels it.
-        if (!fromPager) _controller.jumpToPage(target);
+        if (!fromPager) {
+          _progress?.select(target);
+          _jumping = true;
+          try {
+            _controller.jumpToPage(target);
+          } finally {
+            _jumping = false;
+          }
+        }
       });
     }
   }

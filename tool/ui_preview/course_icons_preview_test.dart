@@ -267,8 +267,13 @@ void main() {
     }
 
     await capture('courses_windows_final', 2);
+    Future<void> selectPage(String label) => tester.tap(
+      find.byType(NavigationBar).evaluate().isNotEmpty
+          ? find.byTooltip(label)
+          : find.text(label),
+    );
     Future<void> openWallpaperPicker() async {
-      await tester.tap(find.text('我的'));
+      await selectPage('我的');
       await settleStorage();
       await tester.ensureVisible(find.text('背景'));
       await tester.tap(find.text('背景'));
@@ -278,7 +283,7 @@ void main() {
     Future<void> returnToCourses() async {
       await tester.tap(find.byTooltip('关闭'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('课程'));
+      await selectPage('课程');
       await tester.pumpAndSettle();
     }
 

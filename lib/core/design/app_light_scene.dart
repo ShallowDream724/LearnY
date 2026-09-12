@@ -468,13 +468,34 @@ class StudyLightScene {
 
   void paint(Canvas canvas, Size size, {Rect? coverage}) {
     final bounds = Offset.zero & size;
-    final texture = image;
     final paintBounds = coverage ?? bounds;
     canvas.drawRect(
       paintBounds,
       Paint()..color = dark ? const Color(0xFF1B1D20) : const Color(0xFFF7F8FB),
     );
-    if (texture == null || strength <= 0) return;
+    final paint = _texturePaint(size);
+    if (paint != null) canvas.drawRect(paintBounds, paint);
+  }
+
+  /// Samples the same wallpaper and cover transform at explicit mesh coordinates.
+  /// Used for a bounded refracting rim; no screen capture or pixel readback.
+  void paintMesh(Canvas canvas, Size sceneSize, ui.Vertices mesh) {
+    canvas.drawVertices(
+      mesh,
+      BlendMode.srcOver,
+      Paint()
+        ..isAntiAlias = false
+        ..color = dark ? const Color(0xFF1B1D20) : const Color(0xFFF7F8FB),
+    );
+    final paint = _texturePaint(sceneSize);
+    if (paint != null) {
+      canvas.drawVertices(mesh, BlendMode.srcOver, paint..isAntiAlias = false);
+    }
+  }
+
+  Paint? _texturePaint(Size size) {
+    final texture = image;
+    if (texture == null || strength <= 0) return null;
     final paint = Paint()
       ..color = Colors.white.withValues(alpha: strength.clamp(0, 1));
     if (dark && wallpaper == StudyWallpaper.custom) {
@@ -513,7 +534,7 @@ class StudyLightScene {
       _shaderSize = size;
     }
     paint.shader = _shader;
-    canvas.drawRect(paintBounds, paint);
+    return paint;
   }
 }
 

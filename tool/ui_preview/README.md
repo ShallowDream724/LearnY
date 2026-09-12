@@ -44,6 +44,12 @@ the logical viewport. `LEARNY_PREVIEW_WALLPAPER=warm_hills` and
 `LEARNY_PREVIEW_INTENSITY=65` select a saved wallpaper/intensity in the isolated
 preview database; they do not change application defaults or the user's settings.
 
+Use `--plain-name 'render floating navigation motion'` for the mobile glass and
+navigation study. It captures actual light/dark course pages and frame sequences
+under `build/ui_preview/liquid_navigation/`, exercising a partial horizontal drag,
+reversal/cancellation, and a direct tab selection. The selected indicator follows
+the real pager; the capture does not animate a mock indicator.
+
 Detail routes are pushed from the shell so captures include real return controls.
 The editor is opened through its real homework detail action; no submission is
 sent. Screenshots complement targeted behavioral assertions and do not replace

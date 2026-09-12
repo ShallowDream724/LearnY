@@ -19,6 +19,7 @@ import 'package:learn_y/core/database/database.dart'
     show Semester, CourseDao, HomeworkDao, AppStateDao;
 import 'package:learn_y/core/router/router.dart';
 import 'package:learn_y/features/home/home_screen.dart';
+import 'package:learn_y/core/shell/app_bottom_navigation.dart';
 
 import '../../test/support/schedule_fixture.dart';
 
@@ -109,6 +110,94 @@ void main() {
     });
   }
 
+  Widget previewApp(GlobalKey key) => RepaintBoundary(
+    key: key,
+    child: ProviderScope(
+      overrides: [
+        ...demo.overrides,
+        connectivityProvider.overrideWith((ref) => _Connected()),
+        appSessionCoordinatorProvider.overrideWith(
+          (ref) => AppSessionCoordinator(
+            RiverpodAppSessionCoordinatorDelegate(ref),
+            scheduleTask: (_, _) async {},
+          ),
+        ),
+      ],
+      child: const LearnYApp(),
+    ),
+  );
+
+  testWidgets(
+    'render floating navigation motion',
+    (tester) => withShadows(() async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      final key = GlobalKey();
+      await tester.pumpWidget(previewApp(key));
+      Future<void> settle() async {
+        for (var i = 0; i < 8; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 30)),
+          );
+        }
+      }
+
+      await settle();
+      final context = tester.element(find.byType(HomeScreen));
+      final router = GoRouter.of(context);
+      final container = ProviderScope.containerOf(context);
+      router.go(Routes.courses);
+      await settle();
+      await capture(tester, key, 'liquid_navigation/courses_light');
+      final progress = tester
+          .widget<AppBottomNavigation>(find.byType(AppBottomNavigation))
+          .progress;
+      var frame = 0;
+      Future<void> captureMotion() => capture(
+        tester,
+        key,
+        'liquid_navigation/frames/${(frame++).toString().padLeft(3, '0')}',
+      );
+      await captureMotion();
+      final drag = await tester.startGesture(const Offset(330, 500));
+      for (var i = 0; i < 7; i++) {
+        await drag.moveBy(const Offset(-25, 0));
+        await tester.pump(const Duration(milliseconds: 40));
+        await captureMotion();
+      }
+      expect(progress.value, greaterThan(2.25));
+      expect(progress.value, lessThan(3));
+      for (var i = 0; i < 7; i++) {
+        await drag.moveBy(const Offset(25, 0));
+        await tester.pump(const Duration(milliseconds: 40));
+        await captureMotion();
+      }
+      await drag.up();
+      await tester.pumpAndSettle();
+      expect(progress.value, closeTo(2, .01));
+      await captureMotion();
+      await tester.tap(find.byTooltip('首页'));
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 35));
+        await captureMotion();
+      }
+      expect(progress.value, 0);
+      expect(tester.takeException(), isNull);
+      router.go(Routes.courses);
+      await settle();
+      await tester.runAsync(
+        () => container.read(themeModeProvider.notifier).setTheme('dark'),
+      );
+      await settle();
+      await capture(tester, key, 'liquid_navigation/courses_dark');
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+    }),
+  );
+
   testWidgets(
     'render sparse dense and empty schedules with actual fonts',
     (tester) => withShadows(() async {
@@ -190,24 +279,7 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       tester.view.devicePixelRatio = 1;
       final key = GlobalKey();
-      await tester.pumpWidget(
-        RepaintBoundary(
-          key: key,
-          child: ProviderScope(
-            overrides: [
-              ...demo.overrides,
-              connectivityProvider.overrideWith((ref) => _Connected()),
-              appSessionCoordinatorProvider.overrideWith(
-                (ref) => AppSessionCoordinator(
-                  RiverpodAppSessionCoordinatorDelegate(ref),
-                  scheduleTask: (_, _) async {},
-                ),
-              ),
-            ],
-            child: const LearnYApp(),
-          ),
-        ),
-      );
+      await tester.pumpWidget(previewApp(key));
       Future<void> settleData() async {
         for (var i = 0; i < 8; i++) {
           await tester.pump(const Duration(milliseconds: 100));

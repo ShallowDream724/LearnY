@@ -92,7 +92,7 @@ Android 和 Windows 共用 Dart 业务逻辑、数据库协议与主要界面。
 - 设置分组、行内边距和控制项布局由 `settings_rows.dart` 统一管理；`AppearanceMenu` 使用 `MenuAnchor`，独立持有菜单触发器焦点，区分鼠标关闭与键盘返回。页面继续负责偏好持久化与失败反馈；自动登录摘要和详情复用同一状态快照。
 - `ContentLayout` 用实际分配给页面的宽度计算边距，不改写窗口级 `MediaQuery`。`ReadingWidth` 只约束阅读宽度；根详情页按窗口宽度布局。页面中的分栏由局部 `LayoutBuilder` 决定。
 - `AppShell` 保留同一 `PageView` 和分支导航器，缩放窗口不重建浏览状态。窄屏使用 `NavigationBar`，顶层页面支持触控翻页；点击导航直接切换并可打断正在进行的滑动。宽屏使用侧栏，详情浏览不参与主页面滑动。
-- 手机 `Scaffold.extendBody` 让内容与壁纸延伸到悬浮导航下面；`NavigationBar` 保留原生焦点、语义和点击行为，`FrostedNavigationSurface` 单独负责胶囊的有界模糊、明暗材质和边缘。`shell_layout_metrics.dart` 管理导航留空与拖拽遮挡高度；列表使用 Scaffold 注入的底部 inset，避免重复计算。系统栏只在壁纸或视口变化时采样上下边缘，不逐帧读回像素。
+- 手机 `Scaffold.extendBody` 让内容与壁纸延伸到悬浮导航下面；`NavigationBar` 保留原生焦点、语义、提示和点击行为，常驻标签隐藏。`ShellNavigationProgress` 在外壳范围传递分页器的真实小数页位置，更新只驱动导航透镜绘制；路由提交与页面状态仍归分页器和 GoRouter。拖动直接跟随，显式分支跳转只平滑移动指示，不让中间页面依次触发路由。`FrostedNavigationSurface` 单独负责有界模糊、明暗材质和弧面边缘；折射网格按尺寸与位置缓存，通过 `StudyLightScene.paintMesh` 复用壁纸取景，不逐帧截屏。`shell_layout_metrics.dart` 管理导航留空与拖拽遮挡高度；列表使用 Scaffold 注入的底部 inset，避免重复计算。系统栏只在壁纸或视口变化时采样上下边缘，不逐帧读回像素。
 - `AppToast` 委托 `ScaffoldMessenger` 管理提示生命周期；`AppActionSheet` 在窄屏使用底部弹层、宽屏使用对话框；作业提醒使用锚定菜单。`SwipeToRead` 统一负责列表的已读操作：手机仅未读项左滑，桌面单个按钮，子卡片不再重复放置已读控件。回调必须返回 `Future<void>`，组件负责等待、防重复与失败反馈，列表数据决定项目是否移除。详情页的状态切换独立保留。
 - `AnimatedDataList` 用 Flutter 的 `SliverAnimatedList` 惰性构建数据列表，只保存呈现所需的条目快照和身份；数据写入不等待动画。移除项保留手势状态并淡出收拢，新增项展开，初次加载直接呈现，空态等退出完成后出现。`ReadActionFeedback` 独立于行的生命周期，按列表范围合并最近的已读操作与撤销回调；8 秒无新操作后收起，悬停、键盘焦点及辅助导航保留操作时间。列表筛选或学期变更重建对应反馈范围，避免撤销入口指向旧范围；失败才使用错误提示。
 - 作业总览从纯展示分组函数生成逾期、本周、下周、稍后和完成分组；筛选状态随学期重置，详情返回保留滚动位置。提交状态由 `HomeworkSubmissionController` 和协调器负责，界面负责编辑、确认和草稿退出提示；成功回执等待用户主动返回，不用定时关闭模拟完成。
