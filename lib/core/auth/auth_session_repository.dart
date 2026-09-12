@@ -1,21 +1,20 @@
 import 'package:cookie_jar/cookie_jar.dart';
 
-import '../api/learn_api.dart';
 import '../database/database.dart';
 import 'auth_session_store.dart';
 
 class AuthSessionRepository {
-  final Learn2018Helper _apiClient;
+  final Future<void> Function() _logoutRemote;
   final AuthSessionStore _sessionStore;
   final AppDatabase _database;
   final CookieJar _cookieJar;
 
   const AuthSessionRepository({
-    required Learn2018Helper apiClient,
+    required Future<void> Function() logoutRemote,
     required AuthSessionStore sessionStore,
     required AppDatabase database,
     required CookieJar cookieJar,
-  }) : _apiClient = apiClient,
+  }) : _logoutRemote = logoutRemote,
        _sessionStore = sessionStore,
        _database = database,
        _cookieJar = cookieJar;
@@ -39,7 +38,7 @@ class AuthSessionRepository {
 
   Future<void> logout() async {
     try {
-      await _apiClient.logout();
+      await _logoutRemote();
     } catch (_) {
       // Server logout failure should not block local cleanup.
     }

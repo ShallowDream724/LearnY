@@ -221,7 +221,9 @@ final authSessionStoreProvider = Provider<AuthSessionStore>((ref) {
 
 final authSessionRepositoryProvider = Provider<AuthSessionRepository>((ref) {
   return AuthSessionRepository(
-    apiClient: ref.watch(apiClientProvider),
+    // Auth owns the account epoch. Watching its API client here would dispose
+    // AuthController in the middle of its own login/logout mutation.
+    logoutRemote: () => ref.read(apiClientProvider).logout(),
     sessionStore: ref.watch(authSessionStoreProvider),
     database: ref.watch(databaseProvider),
     cookieJar: ref.watch(cookieJarProvider),

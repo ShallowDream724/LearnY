@@ -2,6 +2,12 @@
 
 这里记录 LearnY 对外发布过的主要版本变化。更详细的下载记录可在 [GitHub Releases](https://github.com/ShallowDream724/LearnY/releases) 查看。
 
+## 未发布 · 0.1.4 Beta build 24
+
+- 修复登录/退出刷新 API 时销毁认证控制器，导致认证或退出报错的问题
+- 校园访问接续支持已保存凭据自动恢复，网页验证从 WebVPN/OAuth 入口建立完整会话
+- 手机通知、作业要求、反馈及图片附件支持长按保存原图到相册
+
 ## v0.1.4 Beta
 
 - 提供 Windows 免安装版与 Android APK

@@ -9,6 +9,8 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/design/app_toast.dart';
 import '../../../core/design/app_theme_colors.dart';
 import '../../../core/design/file_type_utils.dart';
+import '../../../core/design/saveable_image.dart';
+import '../../../core/files/image_gallery_service.dart';
 import '../../../core/files/file_access_resolver.dart';
 import '../../../core/files/file_models.dart';
 import '../../../core/files/preview/archive_preview_service.dart';
@@ -1086,17 +1088,20 @@ class _ImagePreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InteractiveViewer(
-      minScale: 0.6,
-      maxScale: 5,
-      child: Center(
-        child: Image.file(
-          File(filePath),
-          fit: BoxFit.contain,
-          errorBuilder: (context, error, stackTrace) => const Icon(
-            Icons.broken_image_rounded,
-            size: 56,
-            color: Colors.grey,
+    return SaveableImage(
+      onSave: () => ImageGalleryService.saveFile(filePath),
+      child: InteractiveViewer(
+        minScale: 0.6,
+        maxScale: 5,
+        child: Center(
+          child: Image.file(
+            File(filePath),
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) => const Icon(
+              Icons.broken_image_rounded,
+              size: 56,
+              color: Colors.grey,
+            ),
           ),
         ),
       ),

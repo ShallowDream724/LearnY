@@ -12,6 +12,42 @@ import 'package:learn_y/core/api/utils.dart';
 
 void main() {
   test(
+    'campus challenge preserves WebVPN entry for browser OAuth state',
+    () async {
+      final dio = Dio();
+      addTearDown(() => dio.close());
+      dio.httpClientAdapter = _Adapter((options, _) {
+        if (options.uri.host == 'zhjw.cic.tsinghua.edu.cn') {
+          return _redirect('https://webvpn.tsinghua.edu.cn/login');
+        }
+        if (options.uri.host == 'webvpn.tsinghua.edu.cn') {
+          return _redirect('https://oauth.tsinghua.edu.cn/thu-oauth/auth');
+        }
+        if (options.uri.host == 'oauth.tsinghua.edu.cn') {
+          return _redirect(
+            'https://id.tsinghua.edu.cn/do/off/ui/auth/login/form/campus/0',
+          );
+        }
+        return _response(_passwordForm);
+      });
+      final api = RegistrarCalendarApi(
+        dio: dio,
+        fetchTicket: () async => 'ticket',
+      );
+      await expectLater(
+        api.establishSession(),
+        throwsA(
+          isA<RegistrarException>().having(
+            (error) => error.browserEntryUri.toString(),
+            'browser entry',
+            'https://webvpn.tsinghua.edu.cn/login',
+          ),
+        ),
+      );
+    },
+  );
+
+  test(
     'Learn and campus password submissions share the same rate limit',
     () async {
       final dio = Dio();

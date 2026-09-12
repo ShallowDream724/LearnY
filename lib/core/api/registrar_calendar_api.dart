@@ -19,9 +19,15 @@ enum RegistrarFailure {
 }
 
 class RegistrarException implements Exception {
-  const RegistrarException(this.failure, {this.loginUri, this.retryAfter});
+  const RegistrarException(
+    this.failure, {
+    this.loginUri,
+    this.browserEntryUri,
+    this.retryAfter,
+  });
   final RegistrarFailure failure;
   final Uri? loginUri;
+  final Uri? browserEntryUri;
   final Duration? retryAfter;
   @override
   String toString() => 'RegistrarException(${failure.name})';
@@ -41,6 +47,7 @@ class RegistrarCalendarApi {
   String? _gatewayPrefix;
   bool _didAuthenticateIdentity = false;
   Uri? _identityLoginUri;
+  Uri? _browserEntryUri;
   bool _sessionEstablished = false;
   Future<void> _tail = Future.value();
 
@@ -66,6 +73,7 @@ class RegistrarCalendarApi {
     if (_sessionEstablished) return;
     _gatewayPrefix = null;
     _identityLoginUri = null;
+    _browserEntryUri = null;
     final ticket = parseRegistrarTicket(await fetchTicket());
     _verify(
       await _follow(_throughGateway(urls.registrarAuth(ticket))),
@@ -158,6 +166,15 @@ class RegistrarCalendarApi {
       if (!allowedHosts.contains(uri.host) || uri.scheme != 'https') {
         throw const RegistrarException(RegistrarFailure.authorization);
       }
+      // A browser has a separate cookie store. Re-enter the service login so
+      // its OAuth state/return target is established in that same browser.
+      if (uri.host == 'webvpn.tsinghua.edu.cn' && uri.path == '/login') {
+        _browserEntryUri = uri;
+      } else if (_browserEntryUri == null &&
+          uri.host == 'oauth.tsinghua.edu.cn' &&
+          uri.path == '/thu-oauth/auth') {
+        _browserEntryUri = uri;
+      }
       var response = await dio.get<String>(
         uri.toString(),
         options: Options(
@@ -230,6 +247,7 @@ class RegistrarCalendarApi {
           throw RegistrarException(
             RegistrarFailure.identityVerification,
             loginUri: _identityLoginUri,
+            browserEntryUri: _browserEntryUri,
           );
         }
         throw RegistrarException(

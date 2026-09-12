@@ -18,7 +18,7 @@ void main() {
 
         final cookieJar = CookieJar();
         final repo = AuthSessionRepository(
-          apiClient: _RecordingLearnHelper(),
+          logoutRemote: _RecordingLearnHelper().logout,
           sessionStore: AuthSessionStore(db),
           database: db,
           cookieJar: cookieJar,
@@ -60,7 +60,7 @@ void main() {
       addTearDown(db.close);
 
       final repo = AuthSessionRepository(
-        apiClient: _RecordingLearnHelper(),
+        logoutRemote: _RecordingLearnHelper().logout,
         sessionStore: AuthSessionStore(db),
         database: db,
         cookieJar: CookieJar(),
@@ -90,7 +90,7 @@ void main() {
         addTearDown(db.close);
 
         final repo = AuthSessionRepository(
-          apiClient: _RecordingLearnHelper(),
+          logoutRemote: _RecordingLearnHelper().logout,
           sessionStore: AuthSessionStore(db),
           database: db,
           cookieJar: CookieJar(),

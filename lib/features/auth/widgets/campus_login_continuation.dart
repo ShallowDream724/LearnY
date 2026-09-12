@@ -27,10 +27,12 @@ class CampusLoginContinuation {
   Future<void> prepare() async {
     Uri? loginUri;
     try {
-      await _connect();
+      // Enrollment has already persisted the credential. Use it for the
+      // campus service too before asking the student to interact again.
+      await _connect(allowCredentialRecovery: true);
     } on RegistrarException catch (error) {
       if (error.failure == RegistrarFailure.identityVerification) {
-        loginUri = error.loginUri;
+        loginUri = error.browserEntryUri ?? error.loginUri;
       }
     } catch (_) {
       // A service outage must not block access to Learn and cached coursework.
@@ -65,19 +67,27 @@ class CampusLoginContinuation {
     _latestPage = url;
     if (!isActive || _verifying || shouldBlockNavigation(url)) return;
     final uri = Uri.parse(url);
-    if (uri.host == 'id.tsinghua.edu.cn') return;
+    if (uri.host == 'id.tsinghua.edu.cn' || uri.host == 'oauth.tsinghua.edu.cn') {
+      return;
+    }
     _verifying = true;
     try {
-      final header = await surface.getCookieHeaderForUrl(url);
-      final identityHeader = await surface.getCookieHeaderForUrl(
-        urls.idLogin(),
-      );
+      final headers = <Uri, String>{};
+      // The callback can cross all four services. Export their current browser
+      // cookies together, including HttpOnly OAuth/WebVPN session cookies.
+      for (final host in CampusCookieBridge.hosts) {
+        final destination = host == uri.host
+            ? uri
+            : host == 'id.tsinghua.edu.cn'
+            ? Uri.parse(urls.idLogin())
+            : Uri.https(host, '/');
+        final header = await surface.getCookieHeaderForUrl(
+          destination.toString(),
+        );
+        if (header?.isNotEmpty == true) headers[destination] = header!;
+      }
       if (_disposed || !isActive) return;
-      await CampusCookieBridge(api.cookieJar).importHeaders({
-        if (header?.isNotEmpty == true) uri: header!,
-        if (identityHeader?.isNotEmpty == true)
-          Uri.parse(urls.idLogin()): identityHeader!,
-      });
+      await CampusCookieBridge(api.cookieJar).importHeaders(headers);
       await _connect();
       _complete();
     } on RegistrarException catch (error) {
@@ -93,9 +103,8 @@ class CampusLoginContinuation {
     }
   }
 
-  Future<void> _connect() => api
-      .establishCampusSession(allowCredentialRecovery: false)
-      .timeout(const Duration(seconds: 12));
+  Future<void> _connect({bool allowCredentialRecovery = false}) => api
+      .establishCampusSession(allowCredentialRecovery: allowCredentialRecovery);
 
   void _complete() {
     final completion = _completion;

@@ -65,3 +65,15 @@ uses `archive`'s ZIP decoder; it is not a streaming archive implementation.
 
 The `.archive` directory under `LearnY Files` remains reserved for extracted
 archive previews.
+
+## Saving Images to the Gallery
+
+On mobile, long-press an image and select “保存到相册”. This action is shared by
+notification/assignment/feedback HTML, their full-screen image viewer, and file
+previews (including extracted archive images). `SaveableImage` owns the menu,
+in-flight guard and feedback; `ImageGalleryService` exports through `gal` 2.3.3.
+HTML images reuse their loaded bytes, with a temporary file named from the actual
+image format; attachments export the published local file. Originals are copied
+without re-downloading or recompressing. Temporary export files are removed after
+the save operation. Android 9 and earlier request write permission when saving;
+modern Android writes through MediaStore. iOS declares photo-library usage keys.

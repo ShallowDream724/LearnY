@@ -36,7 +36,7 @@ final Provider<Learn2018Helper> apiClientProvider = Provider<Learn2018Helper>((
         }
       },
       campusCredentialProvider: () async {
-        if (!ref.read(autoReloginEnabledProvider)) {
+        if (disposed || !ref.read(autoReloginEnabledProvider)) {
           throw const ApiError(reason: FailReason.noCredential);
         }
         final credential = await ref.read(credentialVaultProvider).read();

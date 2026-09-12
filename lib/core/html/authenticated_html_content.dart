@@ -13,6 +13,8 @@ import '../auth/session_recovery_coordinator.dart';
 import '../design/app_theme_colors.dart';
 import '../design/colors.dart';
 import '../design/typography.dart';
+import '../design/saveable_image.dart';
+import '../files/image_gallery_service.dart';
 import '../providers/api_client_provider.dart';
 
 class AuthenticatedHtmlContent extends StatelessWidget {
@@ -580,7 +582,10 @@ class _AuthenticatedHtmlImageState
 
             return GestureDetector(
               onTap: () => _showFullscreenImage(context, bytes),
-              child: image,
+              child: SaveableImage(
+                onSave: () => ImageGalleryService.saveBytes(bytes),
+                child: image,
+              ),
             );
           },
         );
@@ -595,26 +600,38 @@ class _AuthenticatedHtmlImageState
       builder: (context) {
         return Dialog.fullscreen(
           backgroundColor: Colors.transparent,
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: InteractiveViewer(
-                  minScale: 1,
-                  maxScale: 4,
-                  child: Center(
-                    child: Image.memory(bytes, fit: BoxFit.contain),
+          child: ScaffoldMessenger(
+            child: Scaffold(
+              backgroundColor: Colors.transparent,
+              body: Stack(
+                children: [
+                  Positioned.fill(
+                    child: SaveableImage(
+                      onSave: () => ImageGalleryService.saveBytes(bytes),
+                      child: InteractiveViewer(
+                        minScale: 1,
+                        maxScale: 4,
+                        child: Center(
+                          child: Image.memory(bytes, fit: BoxFit.contain),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                  Positioned(
+                    top: MediaQuery.paddingOf(context).top + 12,
+                    right: 12,
+                    child: IconButton(
+                      tooltip: '关闭图片',
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              Positioned(
-                top: MediaQuery.paddingOf(context).top + 12,
-                right: 12,
-                child: IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close_rounded, color: Colors.white),
-                ),
-              ),
-            ],
+            ),
           ),
         );
       },

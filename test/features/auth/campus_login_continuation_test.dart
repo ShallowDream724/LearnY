@@ -23,7 +23,8 @@ void main() {
       await surface.navigation.future;
       expect(requestedInteraction, isTrue);
       expect(flow.isActive, isTrue);
-      expect(surface.destination, contains('/form/campus/0'));
+      expect(surface.destination, 'https://webvpn.tsinghua.edu.cn/login');
+      expect(api.recoveryModes, [true]);
       api.verified = true;
       await flow.onPageFinished('https://webvpn.tsinghua.edu.cn/');
       await login;
@@ -32,6 +33,11 @@ void main() {
         Uri.https('webvpn.tsinghua.edu.cn'),
       );
       expect(cookies.single.value, 'verified');
+      expect(api.recoveryModes, [true, false]);
+      final oauthCookies = await api.cookieJar.loadForRequest(
+        Uri.https('oauth.tsinghua.edu.cn'),
+      );
+      expect(oauthCookies.single.value, 'verified');
       flow.dispose();
     },
   );
@@ -55,16 +61,19 @@ void main() {
 
 class _CampusApi extends Learn2018Helper {
   bool verified = false;
+  final recoveryModes = <bool>[];
   @override
   Future<void> establishCampusSession({
     bool allowCredentialRecovery = true,
   }) async {
+    recoveryModes.add(allowCredentialRecovery);
     if (!verified) {
       throw RegistrarException(
         RegistrarFailure.identityVerification,
         loginUri: Uri.parse(
           'https://id.tsinghua.edu.cn/do/off/ui/auth/login/form/campus/0',
         ),
+        browserEntryUri: Uri.https('webvpn.tsinghua.edu.cn', '/login'),
       );
     }
   }

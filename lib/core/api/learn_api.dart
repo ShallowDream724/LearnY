@@ -13,6 +13,7 @@
 /// ```
 library;
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -725,7 +726,19 @@ class Learn2018Helper implements LearningReadApi {
   // -------------------------------------------------------------------
 
   Future<void> logout() async {
-    await _dio.post(urls.learnLogout());
+    final cancellation = CancelToken();
+    final deadline = Timer(const Duration(seconds: 5), () {
+      cancellation.cancel('Logout deadline');
+    });
+    try {
+      await _dio.post(
+        urls.learnLogout(),
+        cancelToken: cancellation,
+        options: Options(followRedirects: false, validateStatus: (_) => true),
+      );
+    } finally {
+      deadline.cancel();
+    }
   }
 
   // -------------------------------------------------------------------
