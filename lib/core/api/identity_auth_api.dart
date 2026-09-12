@@ -27,6 +27,13 @@ class Credential {
 
 typedef CredentialProvider = Future<Credential> Function();
 
+class IdentityAuthDeferredException implements Exception {
+  const IdentityAuthDeferredException(this.retryAfter);
+  final Duration retryAfter;
+  @override
+  String toString() => 'Identity authentication is temporarily deferred';
+}
+
 /// The identity server keeps the destination service in its login session.
 /// Serialize form loading and submission so parallel services cannot replace it.
 class IdentityAuthApi {
@@ -35,6 +42,8 @@ class IdentityAuthApi {
   final Dio _dio;
   final CookieJar _cookies;
   Future<void> _tail = Future.value();
+  DateTime? _lastPasswordSubmission;
+  String? _lastPasswordUsername;
 
   Future<Response<String>> authenticate(
     Uri loginUri,
@@ -48,54 +57,94 @@ class IdentityAuthApi {
         throw ArgumentError('Unsupported identity login endpoint');
       }
       if (resetSession) await _cookies.delete(Uri.parse(urls.idPrefix));
-      final page = await _dio.get<String>(
-        loginUri.toString(),
-        options: Options(
-          followRedirects: false,
-          validateStatus: (_) => true,
-          responseType: ResponseType.plain,
-        ),
-      );
+      var page = await _loadForm(loginUri);
       if (page.statusCode != 200) return page;
-      final source = page.data ?? '';
-      final document = html.parse(source);
-      final singleLogin = supportsSingleLoginShortcut(source);
-      if (!singleLogin && document.getElementById('sm2publicKey') == null) {
-        return page;
-      }
-      final payload = singleLogin
-          ? <String, String>{
+      if (html.parse(page.data ?? '').getElementById('sm2publicKey') == null &&
+          supportsSingleLoginShortcut(page.data ?? '')) {
+        final shortcut =
+            await _submit(urls.idLoginCheckSingle(), loginUri, <String, String>{
               'i_rememberme': 'on',
               'fingerPrint': credential.fingerPrint ?? '',
               'fingerGenPrint': credential.fingerGenPrint ?? '',
-            }
-          : buildIdentityCheckFormData(
-              username: credential.username ?? '',
-              encryptedPassword: encryptIdentityPassword(
-                credential.password ?? '',
-                document.getElementById('sm2publicKey')!.text.trim(),
-              ),
-              fingerPrint: credential.fingerPrint ?? '',
-              fingerGenPrint: credential.fingerGenPrint ?? '',
-              fingerGenPrint3: credential.fingerGenPrint3 ?? '',
-              deviceName: credential.deviceName ?? '',
-              includeSingleLogin: credential.singleLoginEnabled,
-            );
-      return _dio.post<String>(
-        singleLogin ? urls.idLoginCheckSingle() : urls.idLoginCheck(),
-        data: payload,
-        options: Options(
-          contentType: Headers.formUrlEncodedContentType,
-          headers: buildIdentityCheckHeaders(referer: loginUri.toString()),
-          followRedirects: false,
-          validateStatus: (_) => true,
-          responseType: ResponseType.plain,
+            });
+        final source = shortcut.data ?? '';
+        final target = shortcut.headers.value('location');
+        final redirect = target == null ? null : loginUri.resolve(target);
+        final backToForm =
+            redirect?.host == loginUri.host &&
+            redirect!.path.startsWith('/do/off/ui/auth/login/form/');
+        final key = html.parse(source).getElementById('sm2publicKey');
+        if (shortcut.statusCode == 200 && key != null) {
+          page = shortcut;
+        } else if (backToForm ||
+            (shortcut.statusCode == 200 &&
+                supportsSingleLoginShortcut(source))) {
+          // A remembered-browser rejection is not a rejected password. Start
+          // one fresh form for this service, then submit the saved password once.
+          await _cookies.delete(Uri.parse(urls.idPrefix));
+          page = await _loadForm(loginUri);
+        } else {
+          return shortcut;
+        }
+      }
+      final document = html.parse(page.data ?? '');
+      final publicKey = document.getElementById('sm2publicKey');
+      if (page.statusCode != 200 || publicKey == null) return page;
+      final now = DateTime.now();
+      final previous = _lastPasswordSubmission;
+      if (previous != null && _lastPasswordUsername == credential.username) {
+        final remaining = const Duration(minutes: 1) - now.difference(previous);
+        if (remaining > Duration.zero) {
+          throw IdentityAuthDeferredException(remaining);
+        }
+      }
+      _lastPasswordSubmission = now;
+      _lastPasswordUsername = credential.username;
+      return _submit(
+        urls.idLoginCheck(),
+        loginUri,
+        buildIdentityCheckFormData(
+          username: credential.username ?? '',
+          encryptedPassword: encryptIdentityPassword(
+            credential.password ?? '',
+            publicKey.text.trim(),
+          ),
+          fingerPrint: credential.fingerPrint ?? '',
+          fingerGenPrint: credential.fingerGenPrint ?? '',
+          fingerGenPrint3: credential.fingerGenPrint3 ?? '',
+          deviceName: credential.deviceName ?? '',
+          includeSingleLogin: credential.singleLoginEnabled,
         ),
       );
     });
     _tail = task.then<void>((_) {}, onError: (Object _, StackTrace _) {});
     return task;
   }
+
+  Future<Response<String>> _loadForm(Uri uri) => _dio.get<String>(
+    uri.toString(),
+    options: Options(
+      followRedirects: false,
+      validateStatus: (_) => true,
+      responseType: ResponseType.plain,
+    ),
+  );
+
+  Future<Response<String>> _submit(
+    String url,
+    Uri referer,
+    Map<String, String> payload,
+  ) => _dio.post<String>(
+    url,
+    data: payload,
+    options: Options(
+      contentType: Headers.formUrlEncodedContentType,
+      headers: buildIdentityCheckHeaders(referer: referer.toString()),
+      followRedirects: false,
+      validateStatus: (_) => true,
+      responseType: ResponseType.plain,
+    ),
+  );
 }
 
 bool supportsSingleLoginShortcut(String source) =>

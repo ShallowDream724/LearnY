@@ -256,25 +256,19 @@ void main() {
   );
 
   test(
-    'timeout stops refreshing and late results cannot replace the cache',
+    'a transport timeout stops refreshing without replacing the cache',
     () async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
       final client = CalendarFake()
-        ..pending = Completer<List<api.CalendarEvent>>();
-      final repository = ScheduleRepository(
-        database: db,
-        apiClient: client,
-        requestTimeout: const Duration(milliseconds: 30),
-      );
+        ..error = TimeoutException('transport timed out');
+      final repository = ScheduleRepository(database: db, apiClient: client);
       final states = await repository
           .watch(days: days, fetchRemote: true, operation: SyncOperation())
           .take(3)
           .toList();
       expect(states.last.failure, ScheduleFailure.timeout);
       expect(states.last.isRefreshing, isFalse);
-      client.pending!.complete([event]);
-      await Future<void>.delayed(Duration.zero);
       expect(
         await db.getState(
           AppStateKeys.scheduleWeekSnapshot(semester, days.first.dateKey),

@@ -197,6 +197,8 @@ class Learn2018Helper implements LearningReadApi {
   final Dio _dio;
   late final IdentityAuthApi _identityAuth = IdentityAuthApi(_dio, _cookieJar);
   DateTime? _lastCampusIdentityAttempt;
+  int _campusRequestGeneration = 0;
+  late final RegistrarCalendarApi _campusApi = _createRegistrar();
   final bool previewFirstPage;
 
   String _csrfToken = '';
@@ -465,6 +467,7 @@ class Learn2018Helper implements LearningReadApi {
     bool singleLoginEnabled = false,
   ]) async {
     _lastCampusIdentityAttempt = null;
+    _campusApi.invalidateSession();
     if (username == null ||
         password == null ||
         fingerPrint == null ||
@@ -522,6 +525,7 @@ class Learn2018Helper implements LearningReadApi {
   /// establish the API session.
   Future<void> loginWithTicket(String ticket) async {
     _lastCampusIdentityAttempt = null;
+    _campusApi.invalidateSession();
     debugPrint('[LearnX] loginWithTicket: starting roam...');
     final roamResp = await _followRedirectsManually(urls.learnAuthRoam(ticket));
     debugPrint(
@@ -878,43 +882,56 @@ class Learn2018Helper implements LearningReadApi {
   }) async {
     final resolvedStartDate = _normalizeRegistrarDateParam(startDate);
     final resolvedEndDate = _normalizeRegistrarDateParam(endDate);
+    final generation = ++_campusRequestGeneration;
 
     try {
-      final result = await _registrar().getCalendar(
+      final result = await _campusApi.getCalendar(
         resolvedStartDate,
         resolvedEndDate,
         graduate: graduate,
       );
-      _onCampusVerificationChanged?.call(false);
+      if (generation == _campusRequestGeneration) {
+        _onCampusVerificationChanged?.call(false);
+      }
       return result;
     } on RegistrarException catch (error) {
-      if (error.failure == RegistrarFailure.identityVerification) {
+      if (generation == _campusRequestGeneration &&
+          error.failure == RegistrarFailure.identityVerification) {
         _onCampusVerificationChanged?.call(true);
       }
       rethrow;
     }
   }
 
-  Future<void> establishCampusSession({bool allowCredentialRecovery = true}) =>
-      _registrar(
-        allowCredentialRecovery: allowCredentialRecovery,
-      ).establishSession();
+  Future<void> establishCampusSession({
+    bool allowCredentialRecovery = true,
+  }) async {
+    final generation = ++_campusRequestGeneration;
+    await (allowCredentialRecovery
+            ? _campusApi
+            : _createRegistrar(allowCredentialRecovery: false))
+        .establishSession();
+    if (generation == _campusRequestGeneration) {
+      _onCampusVerificationChanged?.call(false);
+    }
+  }
 
-  RegistrarCalendarApi _registrar({bool allowCredentialRecovery = true}) =>
-      RegistrarCalendarApi(
-        dio: _dio,
-        authenticateIdentity: allowCredentialRecovery
-            ? _authenticateCampusIdentity
-            : null,
-        fetchTicket: () async {
-          final response = await _myFetchWithToken(
-            urls.registrarTicket(),
-            method: 'POST',
-            data: FormData.fromMap(urls.registrarTicketFormData()),
-          );
-          return response.data.toString();
-        },
+  RegistrarCalendarApi _createRegistrar({
+    bool allowCredentialRecovery = true,
+  }) => RegistrarCalendarApi(
+    dio: _dio,
+    authenticateIdentity: allowCredentialRecovery
+        ? _authenticateCampusIdentity
+        : null,
+    fetchTicket: () async {
+      final response = await _myFetchWithToken(
+        urls.registrarTicket(),
+        method: 'POST',
+        data: FormData.fromMap(urls.registrarTicketFormData()),
       );
+      return response.data.toString();
+    },
+  );
 
   Future<Response<String>?> _authenticateCampusIdentity(Uri loginUri) async {
     final provider = _campusCredentialProvider ?? _provider;
@@ -922,16 +939,28 @@ class Learn2018Helper implements LearningReadApi {
     final previous = _lastCampusIdentityAttempt;
     if (previous != null &&
         DateTime.now().difference(previous) < const Duration(minutes: 1)) {
-      return null;
+      throw RegistrarException(
+        RegistrarFailure.recoveryDeferred,
+        retryAfter:
+            const Duration(minutes: 1) - DateTime.now().difference(previous),
+      );
     }
-    _lastCampusIdentityAttempt = DateTime.now();
     try {
       final credential = await provider();
       if (credential.username?.isNotEmpty != true ||
           credential.password?.isNotEmpty != true) {
         return null;
       }
+      _lastCampusIdentityAttempt = DateTime.now();
       return await _identityAuth.authenticate(loginUri, credential);
+    } on IdentityAuthDeferredException catch (error) {
+      // No password was submitted in this attempt. Do not stack the campus
+      // delay on top of the shared identity submission delay.
+      _lastCampusIdentityAttempt = previous;
+      throw RegistrarException(
+        RegistrarFailure.recoveryDeferred,
+        retryAfter: error.retryAfter,
+      );
     } on ApiError catch (error) {
       if (error.reason == FailReason.noCredential) return null;
       rethrow;

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html;
@@ -68,6 +69,15 @@ void main() {
         ),
       );
       addTearDown(() => helper.dio.close(force: true));
+      final transport = Platform.environment['LEARNY_PROBE_TRANSPORT'];
+      if (transport != null) {
+        helper.dio.httpClientAdapter = IOHttpClientAdapter(
+          createHttpClient: () =>
+              HttpClient()
+                ..findProxy = (_) =>
+                    transport == 'proxy' ? 'PROXY 127.0.0.1:20808' : 'DIRECT',
+        );
+      }
       final requests = <Map<String, Object?>>[];
       helper.dio.interceptors.add(
         InterceptorsWrapper(
@@ -87,6 +97,42 @@ void main() {
                 'redirect':
                     '${location.scheme}://${location.host}${location.path.replaceAll(RegExp(r';[^/]*'), '')}',
             });
+            if (response.requestOptions.uri.host == 'id.tsinghua.edu.cn' &&
+                response.statusCode == 200) {
+              final page = html.parse(response.data?.toString() ?? '');
+              String destination(String value) {
+                final uri = response.requestOptions.uri.resolve(value);
+                return '${uri.host}${uri.path}';
+              }
+
+              requests.last['identityPage'] = {
+                'title': page.querySelector('title')?.text,
+                'passwordField':
+                    page.querySelector('input[type="password"]') != null,
+                'sm2Key': page.querySelector('#sm2publicKey') != null,
+                'singleLogin': (response.data ?? '').contains('checkSingle'),
+                'forms': page
+                    .querySelectorAll('form[action]')
+                    .map((node) => destination(node.attributes['action']!))
+                    .toList(),
+                'links': page
+                    .querySelectorAll('a[href]')
+                    .map((node) => destination(node.attributes['href']!))
+                    .toList(),
+                'refresh': page
+                    .querySelectorAll('meta[http-equiv]')
+                    .map((node) => node.attributes['http-equiv'])
+                    .toList(),
+                'scripts': page
+                    .querySelectorAll('script')
+                    .map(
+                      (node) => node.attributes['src'] == null
+                          ? 'inline'
+                          : destination(node.attributes['src']!),
+                    )
+                    .toList(),
+              };
+            }
             if (response.requestOptions.uri.host == 'webvpn.tsinghua.edu.cn' &&
                 response.requestOptions.uri.path.endsWith('/')) {
               final page = html.parse(response.data?.toString() ?? '');
@@ -116,7 +162,8 @@ void main() {
       }
       for (final range in [
         ('2026-09-07', '2026-09-13'),
-        ('2026-09-14', '2026-09-20'),
+        if (Platform.environment['LEARNY_PROBE_SINGLE_RANGE'] != '1')
+          ('2026-09-14', '2026-09-20'),
         if (Platform.environment['LEARNY_PROBE_EXTENDED'] == '1')
           ('2026-04-20', '2026-04-26'),
       ]) {

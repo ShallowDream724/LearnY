@@ -22,7 +22,6 @@ class ScheduleRepository {
     required AppDatabase database,
     required LearningReadApi apiClient,
     DateTime Function()? now,
-    this.requestTimeout = const Duration(seconds: 20),
     this.academicCalendar = const AcademicCalendar(),
     CourseCatalogRepository? courseCatalog,
   }) : _database = database,
@@ -35,7 +34,6 @@ class ScheduleRepository {
   final AppDatabase _database;
   final LearningReadApi _apiClient;
   final DateTime Function() _now;
-  final Duration requestTimeout;
   final AcademicCalendar academicCalendar;
   final CourseCatalogRepository _courseCatalog;
 
@@ -187,9 +185,13 @@ class ScheduleRepository {
           isRefreshing: true,
         );
         try {
-          final events = await _apiClient
-              .getCalendar(days.first.dateKey, days.last.dateKey)
-              .timeout(requestTimeout);
+          // The shared campus session may be recovering for another date range.
+          // Its HTTP requests own timeouts; abandoning this future would leave
+          // authentication running after the UI had already reported failure.
+          final events = await _apiClient.getCalendar(
+            days.first.dateKey,
+            days.last.dateKey,
+          );
           operation.ensureActive();
           final remote = buildHomeScheduleSnapshotFromCalendarEvents(
             days: days,
@@ -445,6 +447,7 @@ class ScheduleRepository {
         RegistrarFailure.campusAccess => ScheduleFailure.campusAccess,
         RegistrarFailure.invalidCalendar => ScheduleFailure.invalidCalendar,
         RegistrarFailure.ticket ||
+        RegistrarFailure.recoveryDeferred ||
         RegistrarFailure.unavailable => ScheduleFailure.registrarUnavailable,
       };
     }

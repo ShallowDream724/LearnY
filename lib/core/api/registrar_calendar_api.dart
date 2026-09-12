@@ -13,14 +13,16 @@ enum RegistrarFailure {
   authorization,
   campusAccess,
   identityVerification,
+  recoveryDeferred,
   unavailable,
   invalidCalendar,
 }
 
 class RegistrarException implements Exception {
-  const RegistrarException(this.failure, {this.loginUri});
+  const RegistrarException(this.failure, {this.loginUri, this.retryAfter});
   final RegistrarFailure failure;
   final Uri? loginUri;
+  final Duration? retryAfter;
   @override
   String toString() => 'RegistrarException(${failure.name})';
 }
@@ -39,36 +41,92 @@ class RegistrarCalendarApi {
   String? _gatewayPrefix;
   bool _didAuthenticateIdentity = false;
   Uri? _identityLoginUri;
+  bool _sessionEstablished = false;
+  Future<void> _tail = Future.value();
 
-  Future<void> establishSession() async {
+  Future<T> _enqueue<T>(Future<T> Function() action) {
+    final task = _tail.then((_) => action());
+    _tail = task.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+    return task;
+  }
+
+  /// Invalidate service routing after an explicit new account/login. Network
+  /// changes are discovered from real responses, not inferred from Wi-Fi/VPN.
+  void invalidateSession() {
+    _sessionEstablished = false;
+    _gatewayPrefix = null;
+  }
+
+  Future<void> establishSession() => _enqueue(() async {
+    _didAuthenticateIdentity = false;
+    await _establishSession();
+  });
+
+  Future<void> _establishSession() async {
+    if (_sessionEstablished) return;
+    _gatewayPrefix = null;
+    _identityLoginUri = null;
     final ticket = parseRegistrarTicket(await fetchTicket());
     _verify(
       await _follow(_throughGateway(urls.registrarAuth(ticket))),
       landingPage: true,
     );
+    _sessionEstablished = true;
   }
 
   Future<List<CalendarEvent>> getCalendar(
     String start,
     String end, {
     bool graduate = false,
+  }) => _enqueue(() => _getCalendar(start, end, graduate: graduate));
+
+  Future<List<CalendarEvent>> _getCalendar(
+    String start,
+    String end, {
+    required bool graduate,
   }) async {
+    _didAuthenticateIdentity = false;
     for (var attempt = 0; attempt < 2; attempt++) {
       try {
-        await establishSession();
+        await _establishSession();
         final calendarUrl = urls.registrarCalendar(
           start,
           end,
           graduate: graduate,
           callbackName: jsonpExtractorName,
         );
+        final hadAuthenticated = _didAuthenticateIdentity;
         final response = await _follow(_throughGateway(calendarUrl));
         _verify(response);
-        return parseRegistrarCalendar(response.data.toString());
+        try {
+          return parseRegistrarCalendar(response.data.toString());
+        } on RegistrarException catch (error) {
+          // A session renewed from a calendar URL may land on the service home
+          // page. Re-enter the service once before repeating the data request.
+          if (!hadAuthenticated &&
+              _didAuthenticateIdentity &&
+              error.failure == RegistrarFailure.invalidCalendar) {
+            throw const RegistrarException(RegistrarFailure.authorization);
+          }
+          rethrow;
+        }
       } on RegistrarException catch (error) {
+        _sessionEstablished = false;
+        if (error.failure == RegistrarFailure.recoveryDeferred &&
+            error.retryAfter != null &&
+            attempt == 0) {
+          // Keep the shared queue occupied while waiting; don't turn pacing
+          // into a manual-login warning or let queued dates submit in parallel.
+          await Future<void>.delayed(error.retryAfter!);
+          _didAuthenticateIdentity = false;
+          continue;
+        }
         if (error.failure != RegistrarFailure.authorization || attempt == 1) {
           rethrow;
         }
+      } on DioException {
+        _sessionEstablished = false;
+        rethrow;
       }
     }
     throw const RegistrarException(RegistrarFailure.authorization);
@@ -166,7 +224,9 @@ class RegistrarCalendarApi {
       if (uri.host != registrarHost && !gatewayContent) {
         if (uri.host == Uri.parse(urls.idPrefix).host &&
             _identityLoginUri != null &&
-            status == 200) {
+            status == 200 &&
+            (_didAuthenticateIdentity ||
+                _isIdentityChallenge(response.data ?? ''))) {
           throw RegistrarException(
             RegistrarFailure.identityVerification,
             loginUri: _identityLoginUri,

@@ -11,6 +11,13 @@ authorization. It saves campus cookies to ignored `.out/calendar-gateway/`.
 optionally imports that capture, and calls the production calendar client.
 It never changes the installed app's cookie files or prints cookie values.
 
+For a bounded network-route comparison, set `LEARNY_PROBE_SINGLE_RANGE=1` and
+run sequentially with `LEARNY_PROBE_TRANSPORT=direct` then `proxy`. The proxy mode
+uses `127.0.0.1:20808`; neither mode changes system proxy settings. These probes
+use only the cookie snapshot, never supply a stored password, and log only
+status codes, query-free destinations and identity-page structure. A trusted
+device `checkSingle` form is not evidence of a CAPTCHA or a changed password.
+
 ```powershell
 conda activate aider
 node tool/auth_diag/capture_calendar_gateway.mjs

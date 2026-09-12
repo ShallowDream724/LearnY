@@ -16,16 +16,21 @@ import 'auth_preferences_provider.dart';
 /// an expired learn session, it delegates recovery to the centralized session
 /// recovery coordinator, which may attempt cookie-based SSO recovery and then
 /// opt-in secure re-login.
-final Provider<Learn2018Helper> apiClientProvider = Provider<Learn2018Helper>((ref) {
+final Provider<Learn2018Helper> apiClientProvider = Provider<Learn2018Helper>((
+  ref,
+) {
+  ref.watch(dataSessionEpochProvider);
   final jar = ref.watch(cookieJarProvider);
   final coordinator = ref.watch(sessionRecoveryCoordinatorProvider);
+  var disposed = false;
+  ref.onDispose(() => disposed = true);
 
   late final Learn2018Helper helper;
   helper = Learn2018Helper(
     config: HelperConfig(
       cookieJar: jar,
       onCampusVerificationChanged: (required) {
-        if (ref.read(authProvider).canAccessCachedData) {
+        if (!disposed && ref.read(authProvider).canAccessCachedData) {
           ref.read(campusIdentityVerificationRequiredProvider.notifier).state =
               required;
         }

@@ -5,10 +5,44 @@ import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:learn_y/core/api/learn_api.dart';
+import 'package:learn_y/core/api/identity_auth_api.dart'
+    show IdentityAuthApi, IdentityAuthDeferredException;
 import 'package:learn_y/core/api/registrar_calendar_api.dart';
 import 'package:learn_y/core/api/utils.dart';
 
 void main() {
+  test(
+    'Learn and campus password submissions share the same rate limit',
+    () async {
+      final dio = Dio();
+      addTearDown(() => dio.close());
+      var passwordPosts = 0;
+      dio.httpClientAdapter = _Adapter((options, _) {
+        if (options.method == 'GET') return _response(_passwordForm);
+        passwordPosts++;
+        return _redirect('https://learn.tsinghua.edu.cn/');
+      });
+      final identity = IdentityAuthApi(dio, CookieJar());
+      const credential = Credential(username: 'student', password: 'password');
+      await identity.authenticate(
+        Uri.parse(
+          'https://id.tsinghua.edu.cn/do/off/ui/auth/login/form/learn/0',
+        ),
+        credential,
+      );
+      await expectLater(
+        identity.authenticate(
+          Uri.parse(
+            'https://id.tsinghua.edu.cn/do/off/ui/auth/login/form/campus/0',
+          ),
+          credential,
+        ),
+        throwsA(isA<IdentityAuthDeferredException>()),
+      );
+      expect(passwordPosts, 1);
+    },
+  );
+
   test(
     'campus service login reuses identity without expiring a healthy Learn session',
     () async {
@@ -82,6 +116,173 @@ void main() {
       );
       expect(credentialReads, 1);
       expect(learnRecoveries, 0);
+      await Future.wait([
+        helper.getCalendar('2026-09-21', '2026-09-27'),
+        helper.getCalendar('2026-09-28', '2026-10-04'),
+      ]);
+      expect(
+        credentialReads,
+        1,
+        reason: 'date changes reuse the campus session',
+      );
+    },
+  );
+
+  test(
+    'rejected trusted-browser shortcut falls back to one password submission',
+    () async {
+      var shortcutPosts = 0;
+      var passwordPosts = 0;
+      var tickets = 0;
+      var ready = false;
+      final helper = Learn2018Helper(
+        config: HelperConfig(
+          campusCredentialProvider: () async => const Credential(
+            username: 'student',
+            password: 'correct-password',
+            fingerPrint: 'browser',
+            fingerGenPrint: 'trusted',
+          ),
+        ),
+      )..setCSRFToken('learn-token');
+      addTearDown(() => helper.dio.close());
+      helper.dio.httpClientAdapter = _Adapter((options, body) {
+        final uri = options.uri;
+        if (uri.host == 'learn.tsinghua.edu.cn') {
+          tickets++;
+          return _response('ticket');
+        }
+        if (uri.path == '/j_acegi_login.do') {
+          return ready
+              ? _response('authorized')
+              : _redirect(
+                  'https://id.tsinghua.edu.cn/do/off/ui/auth/login/form/campus/0',
+                );
+        }
+        if (uri.path.contains('/login/form/')) {
+          return _response(
+            '<form action="/do/off/ui/auth/login/checkSingle"></form>',
+          );
+        }
+        if (uri.path.endsWith('/checkSingle')) {
+          shortcutPosts++;
+          return _response(_passwordForm);
+        }
+        if (uri.path.endsWith('/check')) {
+          passwordPosts++;
+          expect(body, contains('i_user=student'));
+          expect(body, contains('i_pass=04'));
+          ready = true;
+          return _redirect('https://zhjw.cic.tsinghua.edu.cn/j_acegi_login.do');
+        }
+        return _response('$jsonpExtractorName([])');
+      });
+      await Future.wait([
+        helper.getCalendar('2026-09-07', '2026-09-13'),
+        helper.getCalendar('2026-09-14', '2026-09-20'),
+      ]);
+      expect(shortcutPosts, 1);
+      expect(passwordPosts, 1);
+      expect(tickets, 1);
+    },
+  );
+
+  test(
+    'an obsolete identity failure cannot overwrite a later recovered date',
+    () async {
+      var credentialReads = 0;
+      var ready = false;
+      final flags = <bool>[];
+      final helper = Learn2018Helper(
+        config: HelperConfig(
+          onCampusVerificationChanged: flags.add,
+          campusCredentialProvider: () async {
+            credentialReads++;
+            return const Credential(username: 'student', password: 'password');
+          },
+        ),
+      )..setCSRFToken('learn-token');
+      addTearDown(() => helper.dio.close());
+      helper.dio.httpClientAdapter = _Adapter((options, _) {
+        if (options.uri.host == 'learn.tsinghua.edu.cn') {
+          return _response('ticket');
+        }
+        if (options.uri.host == 'zhjw.cic.tsinghua.edu.cn') {
+          if (ready) {
+            return options.uri.path == '/j_acegi_login.do'
+                ? _response('authorized')
+                : _response('$jsonpExtractorName([])');
+          }
+          return _redirect(
+            'https://id.tsinghua.edu.cn/do/off/ui/auth/login/form/campus/0',
+          );
+        }
+        if (options.uri.path.endsWith('/check')) ready = true;
+        return _response(_passwordForm);
+      });
+      final first = helper.getCalendar('2026-09-07', '2026-09-13');
+      final next = helper.getCalendar('2026-09-14', '2026-09-20');
+      await expectLater(
+        first,
+        throwsA(
+          isA<RegistrarException>().having(
+            (error) => error.failure,
+            'failure',
+            RegistrarFailure.identityVerification,
+          ),
+        ),
+      );
+      expect(await next, isEmpty);
+      expect(credentialReads, 1);
+      expect(flags, [
+        false,
+      ], reason: 'obsolete failure must not overwrite the current request');
+    },
+  );
+
+  test(
+    'a paced campus recovery waits once then finishes without manual login',
+    () async {
+      final dio = Dio();
+      addTearDown(() => dio.close());
+      var attempts = 0;
+      var ready = false;
+      dio.httpClientAdapter = _Adapter((options, _) {
+        if (options.uri.path == '/j_acegi_login.do') {
+          return ready
+              ? _response('authorized')
+              : _redirect(
+                  'https://id.tsinghua.edu.cn/do/off/ui/auth/login/form/campus/0',
+                );
+        }
+        if (options.uri.host == 'id.tsinghua.edu.cn') {
+          return _response(_passwordForm);
+        }
+        return _response('$jsonpExtractorName([])');
+      });
+      final registrar = RegistrarCalendarApi(
+        dio: dio,
+        fetchTicket: () async => 'ticket',
+        authenticateIdentity: (uri) async {
+          attempts++;
+          if (attempts == 1) {
+            throw const RegistrarException(
+              RegistrarFailure.recoveryDeferred,
+              retryAfter: Duration(milliseconds: 1),
+            );
+          }
+          ready = true;
+          return Response<String>(
+            requestOptions: RequestOptions(path: uri.toString()),
+            statusCode: 302,
+            headers: Headers.fromMap({
+              'location': ['https://zhjw.cic.tsinghua.edu.cn/j_acegi_login.do'],
+            }),
+          );
+        },
+      );
+      expect(await registrar.getCalendar('20260907', '20260913'), isEmpty);
+      expect(attempts, 2);
     },
   );
 
@@ -198,6 +399,7 @@ void main() {
       var recoveries = 0;
       var tickets = 0;
       var auth = 0;
+      var calendarExpired = false;
       final helper = Learn2018Helper(
         config: HelperConfig(
           sessionRecoveryHandler: () async {
@@ -216,10 +418,22 @@ void main() {
           auth++;
           return auth == 1 ? _response('', 403) : _response('authorized');
         }
+        if (calendarExpired) {
+          calendarExpired = false;
+          return _response('', 403);
+        }
         return _response('$jsonpExtractorName([])');
       });
       expect(await helper.getCalendar('2026-09-07', '2026-09-13'), isEmpty);
       expect(tickets, 2);
+      expect(recoveries, 0);
+      calendarExpired = true;
+      expect(await helper.getCalendar('2026-09-14', '2026-09-20'), isEmpty);
+      expect(
+        tickets,
+        3,
+        reason: 'only real authorization loss renews the cached service',
+      );
       expect(recoveries, 0);
     },
   );
@@ -379,6 +593,13 @@ void main() {
     expect(recovery, 0);
   });
 }
+
+const _passwordForm =
+    '<html><input type="password" name="i_pass">'
+    '<div id="sm2publicKey">'
+    '0432C4AE2C1F1981195F9904466A39C9948FE30BBFF2660BE1715A4589334C74C7'
+    'BC3736A2F4F6779C59BDCEE36B692153D0A9877CC62A474002DF32E52139F0A0'
+    '</div></html>';
 
 ResponseBody _response(
   String body, [
