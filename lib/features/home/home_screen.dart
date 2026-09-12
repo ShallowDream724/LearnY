@@ -279,6 +279,7 @@ class _HomeContentSliver extends StatelessWidget {
               );
               if (constraints.maxWidth < 840) {
                 return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const HomeTodayScheduleSection(),
                     const HomeUrgentAssignmentsSection(),
@@ -292,6 +293,7 @@ class _HomeContentSliver extends StatelessWidget {
                   const Expanded(
                     flex: 5,
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         HomeTodayScheduleSection(),
                         HomeUrgentAssignmentsSection(),

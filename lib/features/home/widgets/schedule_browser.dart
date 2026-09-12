@@ -121,12 +121,9 @@ class _ScheduleBrowserState extends State<ScheduleBrowser> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Wrap(
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 4,
-              runSpacing: 2,
-              children: [
-                Tooltip(
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final title = Tooltip(
                   message: '选择日期',
                   child: TextButton(
                     style: TextButton.styleFrom(
@@ -144,38 +141,67 @@ class _ScheduleBrowserState extends State<ScheduleBrowser> {
                       ),
                     ),
                   ),
-                ),
-                if (!day.isToday)
-                  Tooltip(
-                    message: '回到今天',
-                    child: TextButton(
-                      onPressed: () => widget.onDateSelected(widget.today),
-                      child: const Text('回到今天'),
+                );
+                final actions = Wrap(
+                  alignment: WrapAlignment.end,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 4,
+                  runSpacing: 2,
+                  children: [
+                    if (!day.isToday)
+                      Tooltip(
+                        message: '回到今天',
+                        child: TextButton(
+                          onPressed: () => widget.onDateSelected(widget.today),
+                          child: const Text('回到今天'),
+                        ),
+                      ),
+                    Tooltip(
+                      message: '查看整周课表',
+                      child: TextButton(
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        onPressed: widget.onOpenWeek,
+                        child: const Text('周课表'),
+                      ),
                     ),
-                  ),
-                Tooltip(
-                  message: '查看整周课表',
-                  child: TextButton(
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                    ),
-                    onPressed: widget.onOpenWeek,
-                    child: const Text('周课表'),
-                  ),
-                ),
-                if (desktopControls)
-                  IconButton(
-                    tooltip: '前一天',
-                    onPressed: () => _move(-1),
-                    icon: const Icon(Icons.chevron_left, size: 18),
-                  ),
-                if (desktopControls)
-                  IconButton(
-                    tooltip: '后一天',
-                    onPressed: () => _move(1),
-                    icon: const Icon(Icons.chevron_right, size: 18),
-                  ),
-              ],
+                    if (desktopControls)
+                      IconButton(
+                        tooltip: '前一天',
+                        onPressed: () => _move(-1),
+                        icon: const Icon(Icons.chevron_left, size: 18),
+                      ),
+                    if (desktopControls)
+                      IconButton(
+                        tooltip: '后一天',
+                        onPressed: () => _move(1),
+                        icon: const Icon(Icons.chevron_right, size: 18),
+                      ),
+                  ],
+                );
+                final rowWidth =
+                    (280 +
+                        (day.date.year == widget.today.year ? 0 : 48) +
+                        (desktopControls ? 96 : 0)) *
+                    scale;
+                if (constraints.maxWidth < rowWidth) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Align(alignment: Alignment.centerLeft, child: title),
+                      actions,
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(child: title),
+                    const SizedBox(width: 8),
+                    actions,
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 8),
             LayoutBuilder(
