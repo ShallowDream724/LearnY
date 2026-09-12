@@ -51,7 +51,14 @@ enum StudyWallpaper {
     ),
   ),
   warmHills('warm_hills', '暖丘', mobile: WallpaperArtwork('warm_hills_mobile')),
-  cove('cove', '碧潭', mobile: WallpaperArtwork('cove_mobile'), paneOpacity: .62);
+  cove('cove', '碧潭', mobile: WallpaperArtwork('cove_mobile'), paneOpacity: .62),
+  custom(
+    'custom',
+    '自定义',
+    desktop: WallpaperArtwork('custom'),
+    mobile: WallpaperArtwork('custom'),
+    paneOpacity: .62,
+  );
 
   const StudyWallpaper(
     this.id,
@@ -89,6 +96,7 @@ enum StudyWallpaper {
       artwork(forMobile: forMobile).assetFor(brightness);
 
   static StudyWallpaper fromId(String? id, {bool forMobile = false}) {
+    if (id == custom.id) return custom;
     final available = choices(forMobile: forMobile);
     return available.firstWhere(
       (wallpaper) => wallpaper.id == id,

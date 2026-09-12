@@ -35,6 +35,7 @@ class CourseGlassSurface extends StatelessWidget {
       radius: radius,
       dark: context.isDark,
       scene: StudyLightBackdrop.sceneOf(context),
+      motion: StudyLightBackdrop.motionOf(context),
       tint: Color(tone.glass),
       child: ClipRRect(
         borderRadius: border,
@@ -61,24 +62,27 @@ class _GlassLayer extends SingleChildRenderObjectWidget {
     required this.dark,
     required this.tint,
     required this.scene,
+    required this.motion,
     required super.child,
   });
   final double radius;
   final bool dark;
   final Color tint;
   final StudyLightScene? scene;
+  final Listenable? motion;
   @override
   RenderObject createRenderObject(BuildContext context) =>
-      _GlassSurface(radius, dark, tint, scene);
+      _GlassSurface(radius, dark, tint, scene, motion);
   @override
   void updateRenderObject(
     BuildContext context,
     covariant _GlassSurface renderObject,
-  ) => renderObject.update(radius, dark, tint, scene);
+  ) => renderObject.update(radius, dark, tint, scene, motion);
 }
 
 class _GlassSurface extends RenderProxyBox {
-  _GlassSurface(this.radius, this.dark, this.tint, this.scene);
+  _GlassSurface(this.radius, this.dark, this.tint, this.scene, this.motion);
+  Listenable? motion;
   double radius;
   bool dark;
   Color tint;
@@ -91,7 +95,13 @@ class _GlassSurface extends RenderProxyBox {
     bool nextDark,
     Color nextTint,
     StudyLightScene? nextScene,
+    Listenable? nextMotion,
   ) {
+    if (motion != nextMotion) {
+      if (attached) motion?.removeListener(markNeedsPaint);
+      motion = nextMotion;
+      if (attached) motion?.addListener(markNeedsPaint);
+    }
     if (radius == nextRadius &&
         dark == nextDark &&
         tint == nextTint &&
@@ -103,6 +113,18 @@ class _GlassSurface extends RenderProxyBox {
     tint = nextTint;
     scene = nextScene;
     markNeedsPaint();
+  }
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    motion?.addListener(markNeedsPaint);
+  }
+
+  @override
+  void detach() {
+    motion?.removeListener(markNeedsPaint);
+    super.detach();
   }
 
   @override

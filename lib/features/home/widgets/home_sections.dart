@@ -7,7 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/design/app_theme_colors.dart';
 import '../../../core/design/app_materials.dart';
 import '../../../core/design/app_toast.dart';
-import '../../../core/design/file_type_utils.dart';
+import '../../../core/design/file_type_icon.dart';
 import '../../../core/design/homework_reminder_menu.dart';
 import '../../../core/design/swipe_to_read.dart';
 import '../../../core/design/animated_data_list.dart';
@@ -16,8 +16,13 @@ import '../../../core/design/typography.dart';
 import '../../../core/providers/providers.dart';
 import '../../../core/providers/sync_models.dart';
 import '../../../core/router/router.dart';
+import '../../../core/files/file_asset_runtime.dart';
+import '../../../core/files/file_models.dart';
+import '../../../core/services/file_download_service.dart';
 import '../../assignments/providers/assignments_providers.dart';
 import '../../files/providers/file_bookmark_providers.dart';
+import '../../files/providers/file_queries.dart';
+import '../../files/widgets/file_action_menu.dart';
 import '../providers/home_providers.dart';
 import 'notification_card.dart';
 import 'stat_card.dart';
@@ -232,6 +237,7 @@ class HomeUnreadNotificationsSection extends ConsumerWidget {
                   padding: const EdgeInsets.only(bottom: 8),
                   child: SwipeToRead(
                     actionId: 'notification-${notification.id}',
+                    readMenuTitle: notification.title,
                     removesOnRead: true,
                     onUndo: () =>
                         actions.markNotificationUnread(notification.id),
@@ -335,64 +341,130 @@ class HomeUnreadFilesSection extends ConsumerWidget {
   }
 }
 
-class HomeNewFileCard extends StatelessWidget {
+class HomeNewFileCard extends ConsumerStatefulWidget {
   const HomeNewFileCard({super.key, required this.file, this.onTap});
   final FileSummary file;
   final VoidCallback? onTap;
 
   @override
+  ConsumerState<HomeNewFileCard> createState() => _HomeNewFileCardState();
+}
+
+class _HomeNewFileCardState extends ConsumerState<HomeNewFileCard> {
+  late FileDetailRouteData _routeData;
+
+  @override
+  void initState() {
+    super.initState();
+    _routeData = _routeDataFor(widget.file);
+  }
+
+  @override
+  void didUpdateWidget(covariant HomeNewFileCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.file.id != widget.file.id ||
+        oldWidget.file.courseId != widget.file.courseId ||
+        oldWidget.file.courseName != widget.file.courseName) {
+      _routeData = _routeDataFor(widget.file);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final file = widget.file;
     final c = context.colors;
-    final ext = FileTypeUtils.extractExt(file.title, file.fileType);
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
+    final item = ref.watch(fileDetailItemProvider(_routeData)).valueOrNull;
+    final isFavorite =
+        ref.watch(fileBookmarkStateProvider(file.id)).valueOrNull ?? false;
+    final trackedDownloadStates = ref.watch(fileDownloadProvider);
+    final isDownloading =
+        item != null &&
+        ref
+            .read(fileAssetRuntimeResolverProvider)
+            .resolveDetailItem(item, trackedDownloadStates)
+            .isDownloading;
+
+    Future<void> openMenu(Offset anchor) async {
+      final resolvedItem =
+          item ??
+          await ProviderScope.containerOf(
+            context,
+            listen: false,
+          ).read(fileDetailItemProvider(_routeData).future);
+      if (!context.mounted || resolvedItem == null) return;
+      await showFileActionMenu(
+        context,
+        item: resolvedItem,
+        isFavorite: isFavorite,
+        isDownloading: isDownloading,
+        anchor: anchor,
+      );
+    }
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onLongPressStart: (details) => openMenu(details.globalPosition),
+      onSecondaryTapDown: (details) => openMenu(details.globalPosition),
+      child: Material(
+        color: Colors.transparent,
         borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              Icon(
-                FileTypeUtils.icon(ext),
-                color: FileTypeUtils.color(ext),
-                size: 24,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      file.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTypography.titleMedium.copyWith(color: c.text),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      file.courseName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTypography.bodySmall.copyWith(
-                        color: c.subtitle,
-                      ),
-                    ),
-                    if (file.size.isNotEmpty)
+        child: InkWell(
+          onTap: widget.onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                FileTypeIcon(
+                  title: file.title,
+                  fileType: file.fileType,
+                  size: 24,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        file.size,
+                        file.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTypography.titleMedium.copyWith(
+                          color: c.text,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        file.courseName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: AppTypography.bodySmall.copyWith(
                           color: c.subtitle,
                         ),
                       ),
-                  ],
+                      if (file.size.isNotEmpty)
+                        Text(
+                          file.size,
+                          style: AppTypography.bodySmall.copyWith(
+                            color: c.subtitle,
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
+    );
+  }
+
+  FileDetailRouteData _routeDataFor(FileSummary file) {
+    return FileDetailRouteData.courseFile(
+      fileId: file.id,
+      courseId: file.courseId,
+      courseName: file.courseName,
     );
   }
 }

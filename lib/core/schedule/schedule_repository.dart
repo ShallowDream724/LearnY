@@ -93,13 +93,31 @@ class ScheduleRepository {
         };
         final local = await _routineSnapshot(days, semesters, courses);
         final raw = await _database.getState(snapshotKey);
+        // Pre-v3 calendar-v2 snapshots were only written after a successful
+        // range query, so their request bounds recover authoritative empty days.
         final cached = raw == null
             ? await _legacySnapshot(days, semesters)
             : decodeHomeScheduleSnapshotCachePayload(
                 semesterId: semesterId,
                 days: days,
                 raw: raw,
+                legacyAuthoritativeDateKeys: days
+                    .where((day) => term == null || term.contains(day.date))
+                    .map((day) => day.dateKey),
               );
+        if (raw != null && cached != null) {
+          final normalized = encodeHomeScheduleSnapshotCachePayload(
+            semesterId: semesterId,
+            snapshot: cached,
+          );
+          if (normalized != raw) {
+            await _database.transaction(() async {
+              operation.ensureActive();
+              await _database.setState(snapshotKey, normalized);
+              operation.ensureActive();
+            });
+          }
+        }
         final refreshRaw = await _database.getState(refreshKey);
         final refreshState = refreshRaw == null
             ? null
@@ -248,7 +266,19 @@ class ScheduleRepository {
           // Preserve the last actual snapshot rather than erasing its history.
           final retained = hasScheduleItems(linkedRemote) || cached == null
               ? linkedRemote
-              : _linkCourses(cached, semesters, courses, withdrawn);
+              : HomeScheduleSnapshot(
+                  days: days,
+                  itemsByDateKey: _linkCourses(
+                    cached,
+                    semesters,
+                    courses,
+                    withdrawn,
+                  ).itemsByDateKey,
+                  authoritativeDateKeys: {
+                    ...cached.authoritativeDateKeys,
+                    ...linkedRemote.authoritativeDateKeys,
+                  },
+                );
           final merged = _reconcile(retained, fallback, courses);
           // Full-term snapshots and freshness belong to the account transfer.
           // A late view must not overwrite that shared result or timestamp.
@@ -441,6 +471,7 @@ class ScheduleRepository {
     return HomeScheduleSnapshot(
       days: snapshot.days,
       itemsByDateKey: linked,
+      authoritativeDateKeys: snapshot.authoritativeDateKeys,
       hasRoutineData: snapshot.hasRoutineData,
       unscheduledCourses: snapshot.unscheduledCourses,
     );

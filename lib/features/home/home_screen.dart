@@ -15,7 +15,6 @@ import '../../core/design/app_light_scene.dart';
 import '../../core/providers/providers.dart';
 import '../../core/providers/sync_models.dart';
 import '../../core/shell/shell_layout_metrics.dart';
-import '../../core/sync/sync_actions.dart';
 import '../../core/semester/semester_switcher.dart';
 import '../../core/router/router.dart';
 import 'providers/home_providers.dart';
@@ -43,20 +42,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _onRefresh() async {
-    final syncState = (await ref.read(syncActionsProvider).refreshAll()).state;
-    if (!mounted) return;
-    await ref.read(homeScheduleActionsProvider).refresh();
-    if (!mounted) return;
+    final result = await ref.read(homeRefreshActionsProvider).refresh();
+    if (!mounted || !result.isCurrent) return;
+    final syncState = result.syncState;
+    final scheduleRefreshed = result.scheduleRefreshed;
     if (syncState.status == SyncStatus.success) {
-      final msg = syncState.syncWarnings.isNotEmpty
-          ? '同步完成（${syncState.updatedCount} 项），'
-                '${syncState.syncWarnings.length} 个课程部分失败'
-          : '同步完成，更新了 ${syncState.updatedCount} 项';
-      AppToast.showSuccess(
-        context,
-        message: msg,
-        duration: const Duration(milliseconds: 2600),
-      );
+      if (syncState.syncWarnings.isEmpty && scheduleRefreshed) {
+        AppToast.showSuccess(
+          context,
+          message: '同步完成，更新了 ${syncState.updatedCount} 项',
+          duration: const Duration(milliseconds: 2600),
+        );
+      } else {
+        final warnings = <String>[
+          if (syncState.syncWarnings.isNotEmpty)
+            '${syncState.syncWarnings.length} 个课程部分失败',
+          if (!scheduleRefreshed) '课表刷新失败',
+        ];
+        AppToast.showWarning(
+          context,
+          message: '已更新 ${syncState.updatedCount} 项；${warnings.join('，')}',
+          duration: const Duration(milliseconds: 3400),
+          actionLabel: '重试',
+          onAction: _onRefresh,
+        );
+      }
     } else if (syncState.status == SyncStatus.sessionExpired) {
       AppToast.showWarning(
         context,
@@ -157,7 +167,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         context.push('/search');
                       },
                     ),
-                    if (!shouldShowRail(context)) const SemesterSyncControl(),
+                    if (!shouldShowRail(context))
+                      SemesterSyncControl(
+                        onRefresh: _onRefresh,
+                        refreshTooltip: '刷新全部内容和课表',
+                      ),
                     SizedBox(width: gutter - 8),
                   ],
                 ),

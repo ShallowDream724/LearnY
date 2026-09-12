@@ -17,6 +17,7 @@ import '../../core/providers/providers.dart';
 import '../../core/providers/sync_models.dart';
 import '../../core/router/router.dart';
 import '../../core/sync/sync_actions.dart';
+import '../courses/providers/course_workbench_repository.dart';
 import 'providers/file_queries.dart';
 import 'widgets/file_card.dart';
 import 'widgets/file_search_field.dart';
@@ -72,6 +73,13 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
   Widget build(BuildContext context) {
     final files = ref.watch(unreadFilesProvider);
     final courseNames = ref.watch(fileCourseNameMapProvider).valueOrNull ?? {};
+    final coursePreferences =
+        ref.watch(courseDisplayPrefsProvider).valueOrNull ??
+        const <db.CourseDisplayPref>[];
+    final coursePreferencesById = {
+      for (final preference in coursePreferences)
+        preference.courseId: preference,
+    };
     final allFiles = files.valueOrNull ?? const <db.CourseFile>[];
     final actions = ref.read(learningDataActionsProvider);
     final typeCounts = <String, int>{};
@@ -223,10 +231,18 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
                           if (row is (String, int)) {
                             final (id, count) = row;
                             final collapsed = _collapsedCourses.contains(id);
+                            final courseName = courseNames[id] ?? '';
                             return ListTile(
                               contentPadding: EdgeInsets.zero,
-                              title: Text(courseNames[id] ?? '未知课程'),
-                              leading: CourseSeal(courseId: id, size: 24),
+                              title: Text(
+                                courseName.isEmpty ? '未知课程' : courseName,
+                              ),
+                              leading: CourseSeal(
+                                courseId: id,
+                                size: 24,
+                                iconKey: coursePreferencesById[id]?.iconKey,
+                                courseName: courseName,
+                              ),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [

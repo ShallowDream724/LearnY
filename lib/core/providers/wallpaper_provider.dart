@@ -1,9 +1,14 @@
+import 'dart:io';
+
+import 'package:flutter/painting.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 
 import '../database/app_state_keys.dart';
 import '../database/database.dart';
 import '../design/wallpaper.dart';
+import '../wallpaper/custom_wallpaper.dart';
+import '../wallpaper/custom_wallpaper_repository.dart';
 import 'app_providers.dart';
 
 /// Device collection stays stable when a phone rotates or a desktop resizes.
@@ -32,7 +37,8 @@ class WallpaperNotifier extends StateNotifier<StudyWallpaper> {
   }
 
   Future<void> select(StudyWallpaper wallpaper) {
-    if (!StudyWallpaper.choices(forMobile: forMobile).contains(wallpaper)) {
+    if (wallpaper != StudyWallpaper.custom &&
+        !StudyWallpaper.choices(forMobile: forMobile).contains(wallpaper)) {
       throw ArgumentError.value(
         wallpaper,
         'wallpaper',
@@ -45,6 +51,19 @@ class WallpaperNotifier extends StateNotifier<StudyWallpaper> {
     final write = _pendingWrite.then(
       (_) => _database.setState(AppStateKeys.wallpaper, wallpaper.id),
     );
+    _pendingWrite = write.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return write;
+  }
+
+  Future<void> applyCustom(Future<void> Function() save) {
+    _userSelected = true;
+    final write = _pendingWrite.then((_) async {
+      await save();
+      if (mounted) state = StudyWallpaper.custom;
+    });
     _pendingWrite = write.then<void>(
       (_) {},
       onError: (Object _, StackTrace _) {},
@@ -122,5 +141,109 @@ final wallpaperIntensityProvider = Provider<int>((ref) {
       (values) =>
           values[wallpaper] ?? WallpaperIntensityNotifier.defaultIntensity,
     ),
+  );
+});
+
+final customWallpaperRepositoryProvider = Provider(
+  (ref) => CustomWallpaperRepository(ref.watch(databaseProvider)),
+);
+
+class CustomWallpaperNotifier
+    extends StateNotifier<AsyncValue<CustomWallpaper?>> {
+  CustomWallpaperNotifier(this.repository) : super(const AsyncLoading()) {
+    _load();
+  }
+  final CustomWallpaperRepository repository;
+  bool _changed = false;
+
+  Future<void> _load() async {
+    try {
+      final wallpaper = await repository.load();
+      if (mounted && !_changed) state = AsyncData(wallpaper);
+    } catch (error, stack) {
+      if (mounted && !_changed) state = AsyncError(error, stack);
+    }
+  }
+
+  Future<void> save({
+    required String sourcePath,
+    required String name,
+    required Rect crop,
+    required Uint8List imageBytes,
+    required int intensity,
+  }) async {
+    _changed = true;
+    final old = state.valueOrNull;
+    final saved = await repository.save(
+      sourcePath: sourcePath,
+      name: name,
+      crop: crop,
+      imageBytes: imageBytes,
+      intensity: intensity,
+    );
+    if (mounted) state = AsyncData(saved);
+    if (old != null) await FileImage(File(old.imagePath)).evict();
+  }
+
+  Future<void> remove() async {
+    _changed = true;
+    final old = state.valueOrNull;
+    await repository.remove();
+    if (mounted) state = const AsyncData(null);
+    if (old != null) await FileImage(File(old.imagePath)).evict();
+  }
+}
+
+final customWallpaperProvider =
+    StateNotifierProvider<
+      CustomWallpaperNotifier,
+      AsyncValue<CustomWallpaper?>
+    >(
+      (ref) =>
+          CustomWallpaperNotifier(ref.watch(customWallpaperRepositoryProvider)),
+    );
+
+/// Missing/deleted custom files fall back while the persisted choice loads.
+final effectiveWallpaperProvider = Provider<StudyWallpaper>((ref) {
+  final selected = ref.watch(wallpaperProvider);
+  if (selected == StudyWallpaper.custom &&
+      ref.watch(customWallpaperProvider).valueOrNull == null) {
+    return StudyWallpaper.defaultFor(
+      forMobile: ref.watch(mobileWallpapersProvider),
+    );
+  }
+  return selected;
+});
+
+final wallpaperImageProvider = Provider.family<ImageProvider, Brightness>((
+  ref,
+  brightness,
+) {
+  final wallpaper = ref.watch(effectiveWallpaperProvider);
+  if (wallpaper == StudyWallpaper.custom) {
+    return FileImage(
+      File(ref.watch(customWallpaperProvider).requireValue!.imagePath),
+    );
+  }
+  return AssetImage(
+    wallpaper.assetFor(
+      brightness,
+      forMobile: ref.watch(mobileWallpapersProvider),
+    ),
+  );
+});
+
+final wallpaperThumbnailProvider = Provider<ImageProvider>((ref) {
+  final wallpaper = ref.watch(effectiveWallpaperProvider);
+  if (wallpaper == StudyWallpaper.custom) {
+    return ResizeImage(
+      FileImage(
+        File(ref.watch(customWallpaperProvider).requireValue!.imagePath),
+      ),
+      width: 192,
+    );
+  }
+  return AssetImage(
+    wallpaper.artwork(forMobile: ref.watch(mobileWallpapersProvider)).thumbnail,
   );
 });

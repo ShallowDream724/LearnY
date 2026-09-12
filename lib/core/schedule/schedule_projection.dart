@@ -31,6 +31,7 @@ HomeScheduleSnapshot buildHomeScheduleSnapshotFromCalendarEvents({
   required List<HomeScheduleDayOption> days,
   required List<api.CalendarEvent> events,
   Map<String, String>? courseIdsByName,
+  Iterable<DateTime>? authoritativeDates,
 }) {
   final allowedKeys = {for (final day in days) day.dateKey};
   final grouped = <String, List<TodayScheduleItem>>{
@@ -61,7 +62,14 @@ HomeScheduleSnapshot buildHomeScheduleSnapshotFromCalendarEvents({
     grouped[entry.key] = _mergeAdjacentScheduleItems(entry.value);
   }
 
-  return HomeScheduleSnapshot(days: days, itemsByDateKey: grouped);
+  return HomeScheduleSnapshot(
+    days: days,
+    itemsByDateKey: grouped,
+    authoritativeDateKeys: {
+      for (final date in authoritativeDates ?? days.map((day) => day.date))
+        DateFormat('yyyy-MM-dd').format(date),
+    }.intersection(allowedKeys),
+  );
 }
 
 HomeScheduleSnapshot buildHomeScheduleSnapshotFromCachedCourses({
@@ -149,6 +157,10 @@ HomeScheduleSnapshot mergeHomeScheduleSnapshots({
   return HomeScheduleSnapshot(
     days: primary.days,
     itemsByDateKey: mergedItemsByDateKey,
+    authoritativeDateKeys: {
+      ...primary.authoritativeDateKeys,
+      ...fallback.authoritativeDateKeys,
+    },
     hasRoutineData: primary.hasRoutineData || fallback.hasRoutineData,
     unscheduledCourses: {
       for (final item in [
@@ -160,8 +172,8 @@ HomeScheduleSnapshot mergeHomeScheduleSnapshots({
   );
 }
 
-/// Calendar occurrences cover a course for this week, including days moved by
-/// holidays. Only courses not yet represented in that calendar use recurrence.
+/// A successfully queried registrar date is authoritative even when it is empty.
+/// Recurrence is only used for dates whose registrar state is still unknown.
 HomeScheduleSnapshot reconcileScheduleSources({
   required HomeScheduleSnapshot calendar,
   required HomeScheduleSnapshot routine,
@@ -170,6 +182,7 @@ HomeScheduleSnapshot reconcileScheduleSources({
 }) {
   final activeCalendar = HomeScheduleSnapshot(
     days: calendar.days,
+    authoritativeDateKeys: calendar.authoritativeDateKeys,
     itemsByDateKey: {
       for (final day in calendar.days)
         day.dateKey: [
@@ -193,13 +206,18 @@ HomeScheduleSnapshot reconcileScheduleSources({
   final coveredNames = actual.map((item) => item.courseName.trim()).toSet();
   final supplement = HomeScheduleSnapshot(
     days: routine.days,
-    hasRoutineData: routine.hasRoutineData,
+    hasRoutineData:
+        routine.hasRoutineData &&
+        routine.days.any(
+          (day) => !calendar.authoritativeDateKeys.contains(day.dateKey),
+        ),
     unscheduledCourses: routine.unscheduledCourses,
     itemsByDateKey: {
       for (final day in routine.days)
         day.dateKey: [
           for (final item in routine.itemsFor(day))
-            if (!coveredIds.contains(item.courseId) &&
+            if (!calendar.authoritativeDateKeys.contains(day.dateKey) &&
+                !coveredIds.contains(item.courseId) &&
                 !coveredNames.contains(item.courseName.trim()))
               item,
         ],

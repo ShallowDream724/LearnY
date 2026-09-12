@@ -68,7 +68,7 @@ class SemesterPageTitle extends ConsumerWidget {
     if (shouldShowRail(context)) return Text(title);
     final selected = ref.watch(currentSemesterIdProvider);
     return Tooltip(
-      message: '切换学期',
+      message: '切换浏览学期',
       child: InkWell(
         borderRadius: BorderRadius.circular(6),
         onTap: () => _selectLearningSemester(context, ref),
@@ -153,14 +153,44 @@ class SemesterSelector extends ConsumerWidget {
   }
 }
 
-class SemesterSyncControl extends ConsumerWidget {
-  const SemesterSyncControl({super.key, this.showLabel = false});
+class SemesterSyncControl extends ConsumerStatefulWidget {
+  const SemesterSyncControl({
+    super.key,
+    this.showLabel = false,
+    this.onRefresh,
+    this.refreshTooltip = '刷新当前学期',
+  });
   final bool showLabel;
+  final Future<void> Function()? onRefresh;
+  final String refreshTooltip;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SemesterSyncControl> createState() =>
+      _SemesterSyncControlState();
+}
+
+class _SemesterSyncControlState extends ConsumerState<SemesterSyncControl> {
+  bool _refreshing = false;
+
+  Future<void> _refresh() async {
+    if (_refreshing) return;
+    setState(() => _refreshing = true);
+    try {
+      final callback = widget.onRefresh;
+      if (callback != null) {
+        await callback();
+      } else {
+        await ref.read(syncStateProvider.notifier).syncAll(force: true);
+      }
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final sync = ref.watch(syncStateProvider);
-    final busy = sync.status == SyncStatus.syncing;
+    final busy = _refreshing || sync.status == SyncStatus.syncing;
     final failed =
         sync.status == SyncStatus.error ||
         sync.status == SyncStatus.sessionExpired;
@@ -227,7 +257,7 @@ class SemesterSyncControl extends ConsumerWidget {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              ref.read(syncStateProvider.notifier).syncAll(force: true);
+              _refresh();
             },
             child: const Text('重试'),
           ),
@@ -241,7 +271,7 @@ class SemesterSyncControl extends ConsumerWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (showLabel)
+        if (widget.showLabel)
           Expanded(
             child: Text(
               label,
@@ -255,12 +285,12 @@ class SemesterSyncControl extends ConsumerWidget {
               ? '正在刷新'
               : hasIssue
               ? '查看同步问题'
-              : '刷新当前学期',
+              : widget.refreshTooltip,
           onPressed: busy
               ? null
               : hasIssue
               ? showStatus
-              : () => ref.read(syncStateProvider.notifier).syncAll(force: true),
+              : _refresh,
           icon: busy
               ? const SizedBox.square(
                   dimension: 16,
@@ -349,6 +379,7 @@ class _SemesterDialogState extends ConsumerState<_SemesterDialog> {
     final selected = widget.selectedId;
     final calendar = ref.watch(academicCalendarProvider);
     final official = ref.watch(serverCurrentSemesterIdProvider).valueOrNull;
+    final teaching = ref.watch(currentTeachingSemesterIdProvider);
     return AlertDialog(
       title: Row(
         children: [
@@ -396,8 +427,10 @@ class _SemesterDialogState extends ConsumerState<_SemesterDialog> {
                             title: Text(semesterLabel(semester.id)),
                             subtitle: !datesAvailable
                                 ? const Text('学期起止日期待确认')
+                                : semester.id == teaching
+                                ? const Text('当前教学学期')
                                 : semester.id == official
-                                ? const Text('当前学期')
+                                ? const Text('网络学堂当前学期')
                                 : null,
                             trailing: semester.id == selected
                                 ? const Icon(Icons.check)

@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 
 import 'app_theme_colors.dart';
 import 'wallpaper.dart';
@@ -15,12 +16,14 @@ class StudyLightBackdrop extends StatefulWidget {
     this.wallpaper = StudyWallpaper.dunes,
     this.mobileArtwork = false,
     this.strength = .3,
+    this.imageProvider,
   });
 
   final Widget child;
   final StudyWallpaper wallpaper;
   final bool mobileArtwork;
   final double strength;
+  final ImageProvider? imageProvider;
 
   static String assetFor(
     Brightness brightness, {
@@ -30,6 +33,9 @@ class StudyLightBackdrop extends StatefulWidget {
 
   static StudyLightScene? sceneOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<_SceneScope>()?.scene;
+
+  static Listenable? motionOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_SceneScope>()?.motion;
 
   static ({StudyLightScene scene, Size size, Offset origin}) locate(
     RenderBox surface, {
@@ -64,9 +70,13 @@ class StudyLightBackdrop extends StatefulWidget {
 class _StudyLightBackdropState extends State<StudyLightBackdrop> {
   ImageStream? _stream;
   ImageInfo? _image;
-  String? _asset;
+  ImageProvider? _provider;
+  final _motion = _SceneMotion();
   ImageStreamListener? _listener;
   late StudyLightScene _scene;
+  Color? _statusSample;
+  Size? _sampleSize;
+  int _sampleRevision = 0;
 
   @override
   void didChangeDependencies() {
@@ -78,7 +88,8 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop> {
   void didUpdateWidget(StudyLightBackdrop oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.wallpaper != widget.wallpaper ||
-        oldWidget.mobileArtwork != widget.mobileArtwork) {
+        oldWidget.mobileArtwork != widget.mobileArtwork ||
+        oldWidget.imageProvider != widget.imageProvider) {
       _resolveImage();
     }
     if (oldWidget.strength != widget.strength) {
@@ -90,12 +101,16 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop> {
     final dark = context.isDark;
     final wallpaper = widget.wallpaper;
     final mobile = widget.mobileArtwork;
-    final asset = wallpaper.assetFor(
-      Theme.of(context).brightness,
-      forMobile: mobile,
-    );
-    if (_asset == asset) return;
-    _asset = asset;
+    final provider =
+        widget.imageProvider ??
+        AssetImage(
+          wallpaper.assetFor(Theme.of(context).brightness, forMobile: mobile),
+        );
+    if (_provider == provider && _scene.dark == dark) {
+      if (_sampleSize != MediaQuery.sizeOf(context)) _sampleStatusBar();
+      return;
+    }
+    _provider = provider;
     if (_listener != null) _stream?.removeListener(_listener!);
     // Keep the current landscape visible while a new selection decodes.
     if (_image == null || _scene.dark != dark) {
@@ -107,14 +122,21 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop> {
         strength: widget.strength,
       );
     }
-    _listener = ImageStreamListener((image, synchronousCall) {
-      if (!mounted || _asset != asset) {
-        image.dispose();
-        return;
-      }
-      _onImage(image, synchronousCall, wallpaper, dark, mobile);
-    });
-    _stream = AssetImage(asset).resolve(createLocalImageConfiguration(context));
+    _listener = ImageStreamListener(
+      (image, synchronousCall) {
+        if (!mounted || _provider != provider) {
+          image.dispose();
+          return;
+        }
+        _onImage(image, synchronousCall, wallpaper, dark, mobile);
+      },
+      onError: (Object error, StackTrace? stack) {
+        // Import validates custom files; external deletion/corruption can still
+        // happen later. Preserve the previous scene without a framework crash.
+        debugPrint('[LearnY] Background image could not be loaded');
+      },
+    );
+    _stream = provider.resolve(createLocalImageConfiguration(context));
     _stream!.addListener(_listener!);
   }
 
@@ -141,6 +163,69 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop> {
     } else {
       setState(update);
     }
+    _sampleStatusBar();
+  }
+
+  Future<void> _sampleStatusBar() async {
+    final image = _scene.image;
+    if (image == null) return;
+    final size = MediaQuery.sizeOf(context);
+    _sampleSize = size;
+    final height = MediaQuery.viewPaddingOf(context).top.clamp(1.0, 80.0);
+    final revision = ++_sampleRevision;
+    final texture = image.clone();
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder)..scale(16 / size.width, 4 / height);
+    StudyLightScene(
+      dark: _scene.dark,
+      image: texture,
+      wallpaper: _scene.wallpaper,
+      mobileArtwork: _scene.mobileArtwork,
+      strength: 1,
+    ).paint(canvas, size);
+    final picture = recorder.endRecording();
+    ui.Image? sample;
+    try {
+      sample = await picture.toImage(16, 4);
+      final bytes = await sample.toByteData(format: ui.ImageByteFormat.rawRgba);
+      if (!mounted || revision != _sampleRevision || bytes == null) return;
+      var r = 0;
+      var g = 0;
+      var b = 0;
+      for (var i = 0; i < bytes.lengthInBytes; i += 4) {
+        r += bytes.getUint8(i);
+        g += bytes.getUint8(i + 1);
+        b += bytes.getUint8(i + 2);
+      }
+      setState(
+        () => _statusSample = Color.fromARGB(255, r ~/ 64, g ~/ 64, b ~/ 64),
+      );
+    } catch (_) {
+      // Theme contrast remains the fallback if pixel sampling is unavailable.
+    } finally {
+      sample?.dispose();
+      picture.dispose();
+      texture.dispose();
+    }
+  }
+
+  SystemUiOverlayStyle _systemBars() {
+    final base = _scene.dark
+        ? const Color(0xFF1B1D20)
+        : const Color(0xFFF7F8FB);
+    final color = _statusSample == null
+        ? base
+        : Color.alphaBlend(
+            _statusSample!.withValues(alpha: widget.strength.clamp(0, 1)),
+            base,
+          );
+    return (color.computeLuminance() > .179
+            ? SystemUiOverlayStyle.dark
+            : SystemUiOverlayStyle.light)
+        .copyWith(
+          statusBarColor: Colors.transparent,
+          systemStatusBarContrastEnforced: false,
+        );
   }
 
   void _replaceImage(ImageInfo? next) {
@@ -157,23 +242,49 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop> {
   void dispose() {
     if (_listener != null) _stream?.removeListener(_listener!);
     _replaceImage(null);
+    _motion.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => _SceneScope(
     scene: _scene,
-    child: _SceneLayer(scene: _scene, child: widget.child),
+    motion: _motion,
+    child: NotificationListener<ScrollNotification>(
+      onNotification: (_) {
+        // Moving a cached PageView layer changes its sampling coordinates but
+        // does not otherwise repaint its header/glass display lists.
+        _motion.moved();
+        return false;
+      },
+      child: Theme(
+        data: Theme.of(context).copyWith(
+          appBarTheme: Theme.of(
+            context,
+          ).appBarTheme.copyWith(systemOverlayStyle: _systemBars()),
+        ),
+        child: _SceneLayer(scene: _scene, child: widget.child),
+      ),
+    ),
   );
 }
 
 class _SceneScope extends InheritedWidget {
-  const _SceneScope({required this.scene, required super.child});
+  const _SceneScope({
+    required this.scene,
+    required this.motion,
+    required super.child,
+  });
   final StudyLightScene scene;
+  final Listenable motion;
 
   @override
   bool updateShouldNotify(_SceneScope oldWidget) =>
       !identical(scene, oldWidget.scene);
+}
+
+class _SceneMotion extends ChangeNotifier {
+  void moved() => notifyListeners();
 }
 
 class _SceneLayer extends SingleChildRenderObjectWidget {
@@ -216,29 +327,51 @@ class StudyLightSurface extends LeafRenderObjectWidget {
   const StudyLightSurface({super.key});
 
   @override
-  RenderObject createRenderObject(BuildContext context) =>
-      _SceneSurfaceBox(StudyLightBackdrop.sceneOf(context), context.isDark);
+  RenderObject createRenderObject(BuildContext context) => _SceneSurfaceBox(
+    StudyLightBackdrop.sceneOf(context),
+    context.isDark,
+    StudyLightBackdrop.motionOf(context),
+  );
 
   @override
   void updateRenderObject(BuildContext context, RenderObject renderObject) {
     (renderObject as _SceneSurfaceBox).update(
       StudyLightBackdrop.sceneOf(context),
       context.isDark,
+      StudyLightBackdrop.motionOf(context),
     );
   }
 }
 
 class _SceneSurfaceBox extends RenderBox {
-  _SceneSurfaceBox(this.scene, this.dark);
+  _SceneSurfaceBox(this.scene, this.dark, this.motion);
   StudyLightScene? scene;
   bool dark;
+  Listenable? motion;
   Offset _lastSceneOrigin = Offset.zero;
 
-  void update(StudyLightScene? next, bool nextDark) {
+  void update(StudyLightScene? next, bool nextDark, Listenable? nextMotion) {
+    if (motion != nextMotion) {
+      if (attached) motion?.removeListener(markNeedsPaint);
+      motion = nextMotion;
+      if (attached) motion?.addListener(markNeedsPaint);
+    }
     if (identical(scene, next) && dark == nextDark) return;
     scene = next;
     dark = nextDark;
     markNeedsPaint();
+  }
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    motion?.addListener(markNeedsPaint);
+  }
+
+  @override
+  void detach() {
+    motion?.removeListener(markNeedsPaint);
+    super.detach();
   }
 
   @override
@@ -311,6 +444,9 @@ class StudyLightScene {
     if (texture == null || strength <= 0) return;
     final paint = Paint()
       ..color = Colors.white.withValues(alpha: strength.clamp(0, 1));
+    if (dark && wallpaper == StudyWallpaper.custom) {
+      paint.colorFilter = customWallpaperDarkFilter;
+    }
     if (_shader == null || _shaderSize != size) {
       final textureSize = Size(
         texture.width.toDouble(),
@@ -347,3 +483,26 @@ class StudyLightScene {
     canvas.drawRect(paintBounds, paint);
   }
 }
+
+const customWallpaperDarkFilter = ui.ColorFilter.matrix([
+  .46,
+  0,
+  0,
+  0,
+  0,
+  0,
+  .49,
+  0,
+  0,
+  0,
+  0,
+  0,
+  .54,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+]);

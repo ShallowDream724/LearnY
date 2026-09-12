@@ -118,7 +118,7 @@ final favoriteFileEntriesProvider = StreamProvider<List<FavoriteFileEntry>>((
     bookmarks.watchAll(),
     cachedAssets.watchAllAssets(),
     fileRepository.watchAllFiles(),
-    _buildFavoriteFileEntries,
+    buildFavoriteFileEntries,
   );
 });
 
@@ -169,7 +169,8 @@ FavoriteFilesPresentation buildFavoriteFilesPresentation({
   );
 }
 
-List<FavoriteFileEntry> _buildFavoriteFileEntries(
+@visibleForTesting
+List<FavoriteFileEntry> buildFavoriteFileEntries(
   List<db.FileBookmark> bookmarks,
   List<db.CachedAsset> assets,
   List<db.CourseFile> courseFiles,
@@ -180,35 +181,41 @@ List<FavoriteFileEntry> _buildFavoriteFileEntries(
 
   for (final bookmark in bookmarks) {
     final asset = assetMap[bookmark.assetKey];
-    if (asset == null) {
-      continue;
-    }
-
-    final routeData = FileDetailRouteData.tryParseJsonString(
-      asset.routeDataJson,
-    );
+    final routeData = asset == null
+        ? null
+        : FileDetailRouteData.tryParseJsonString(asset.routeDataJson);
     final routeCourseName = routeData?.courseName ?? '';
     final courseName = routeCourseName.isNotEmpty
         ? routeCourseName
         : bookmark.courseName;
 
     FileDetailItem? item;
-    final persistedFileId = asset.persistedFileId;
-    if (persistedFileId != null && persistedFileId.isNotEmpty) {
-      final file = courseFileMap[persistedFileId];
-      if (file == null) {
-        continue;
-      }
-      item = FileDetailItem.fromCourseFile(file, courseName: courseName);
-    } else {
-      final cachedItem = CachedAssetListItem.fromCachedAsset(
-        asset,
+    final directCourseFile = courseFileMap[bookmark.assetKey];
+    if (directCourseFile != null) {
+      item = FileDetailItem.fromCourseFile(
+        directCourseFile,
         courseName: courseName,
       );
-      if (cachedItem.routeData?.attachment == null) {
-        continue;
+    } else if (asset != null) {
+      final persistedFileId = asset.persistedFileId;
+      if (persistedFileId != null && persistedFileId.isNotEmpty) {
+        final file = courseFileMap[persistedFileId];
+        if (file == null) {
+          continue;
+        }
+        item = FileDetailItem.fromCourseFile(file, courseName: courseName);
+      } else {
+        final cachedItem = CachedAssetListItem.fromCachedAsset(
+          asset,
+          courseName: courseName,
+        );
+        if (cachedItem.routeData?.attachment == null) {
+          continue;
+        }
+        item = FileDetailItem.fromCachedAssetListItem(cachedItem);
       }
-      item = FileDetailItem.fromCachedAssetListItem(cachedItem);
+    } else {
+      continue;
     }
 
     entries.add(

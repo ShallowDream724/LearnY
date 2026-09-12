@@ -7,6 +7,7 @@ import '../../../core/design/app_theme_colors.dart';
 import '../../../core/design/app_materials.dart';
 import '../../../core/design/typography.dart';
 import '../../../core/design/app_toast.dart';
+import '../../../core/design/responsive.dart';
 import '../../../core/router/router.dart';
 import 'package:go_router/go_router.dart';
 import '../../assignments/providers/assignments_providers.dart';
@@ -53,18 +54,36 @@ class PendingAssignments extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 2,
           children: [
-            Expanded(
-              child: Text(
-                '待办作业',
-                style: AppTypography.headlineSmall.copyWith(color: titleColor),
-              ),
+            Text(
+              '待办作业',
+              style: AppTypography.headlineSmall.copyWith(color: titleColor),
             ),
-            IconButton(
-              tooltip: '截止提醒：${threshold}h',
-              onPressed: () => _configure(context, ref),
-              icon: const Icon(Icons.tune, size: 18),
+            Tooltip(
+              message: '调整待办显示范围',
+              child: TextButton(
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
+                  ),
+                ),
+                onPressed: () => _configure(context, ref),
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 5,
+                  children: [
+                    const Icon(Icons.tune, size: 16),
+                    Text('逾期及未来 $threshold 小时'),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
@@ -134,7 +153,7 @@ class PendingAssignments extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(width: 4),
-                      if (onLongPress != null)
+                      if (onLongPress != null && usesDesktopControls(context))
                         Builder(
                           builder: (buttonContext) => IconButton(
                             tooltip: '作业提醒设置',
@@ -216,7 +235,7 @@ class _DeadlineThresholdDialogState extends State<_DeadlineThresholdDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('截止提醒'),
+    title: const Text('待办显示范围'),
     content: Form(
       key: _form,
       child: TextFormField(
@@ -224,7 +243,11 @@ class _DeadlineThresholdDialogState extends State<_DeadlineThresholdDialog> {
         autofocus: true,
         keyboardType: TextInputType.number,
         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-        decoration: const InputDecoration(labelText: '提前提醒', suffixText: '小时'),
+        decoration: const InputDecoration(
+          labelText: '未来截止范围',
+          suffixText: '小时',
+          helperText: '逾期作业始终显示',
+        ),
         validator: (text) =>
             (int.tryParse(text ?? '') ?? 0) > 0 ? null : '请输入大于 0 的小时数',
         onFieldSubmitted: (_) => _submit(),

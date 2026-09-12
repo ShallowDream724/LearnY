@@ -93,21 +93,33 @@ void main() {
   );
 
   testWidgets(
-    'daily touch paging and mouse buttons cross the Sunday boundary',
+    'daily header keeps phone paging compact and desktop arrow navigation',
     (tester) async {
       resetView(tester);
       final dates = <DateTime>[];
       await pumpScheduleFixture(tester, width: 360, onDate: dates.add);
-      for (var i = 0; i < 6; i++) {
-        await clickScheduleMouse(tester, find.byTooltip('后一天'));
+      expect(find.text('周一 · 9/7'), findsOneWidget);
+      expect(find.text('今日课程'), findsNothing);
+      expect(find.byTooltip('前一天'), findsNothing);
+      expect(find.byTooltip('后一天'), findsNothing);
+      for (var i = 0; i < 7; i++) {
+        await tester.fling(find.byType(PageView), const Offset(-240, 0), 900);
+        await tester.pumpAndSettle();
       }
-      expect(dates.last, DateTime(2026, 9, 13));
-      await tester.fling(find.byType(PageView), const Offset(-240, 0), 900);
-      await tester.pumpAndSettle();
       expect(dates.last, DateTime(2026, 9, 14));
+      expect(find.text('周一 · 9/14'), findsOneWidget);
       await tester.tap(find.byTooltip('回到今天'));
       await tester.pumpAndSettle();
       expect(dates.last, scheduleToday);
+
+      dates.clear();
+      await pumpScheduleFixture(tester, width: 1280, onDate: dates.add);
+      expect(find.byTooltip('前一天'), findsOneWidget);
+      expect(find.byTooltip('后一天'), findsOneWidget);
+      for (var i = 0; i < 7; i++) {
+        await clickScheduleMouse(tester, find.byTooltip('后一天'));
+      }
+      expect(dates.last, DateTime(2026, 9, 14));
     },
   );
 

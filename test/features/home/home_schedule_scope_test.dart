@@ -14,6 +14,7 @@ import 'package:learn_y/core/providers/time_tick_provider.dart';
 import 'package:learn_y/core/schedule/schedule_cache_codec.dart';
 import 'package:learn_y/core/schedule/schedule_models.dart';
 import 'package:learn_y/core/schedule/schedule_projection.dart';
+import 'package:learn_y/core/schedule/schedule_repository.dart';
 import 'package:learn_y/core/semester/semester_repository.dart';
 import 'package:learn_y/features/home/providers/home_schedule_provider.dart';
 
@@ -72,6 +73,89 @@ void main() {
         hasLength(1),
         reason: 'Learn semester selection does not invalidate calendar data',
       );
+    },
+  );
+
+  test(
+    'manual refresh waits for a delayed remote failure after cached data',
+    () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      final client = _DelayedFailingCalendarApi();
+      final days = buildHomeScheduleDays(DateTime(2026, 9, 7));
+      final cached = HomeScheduleSnapshot(
+        days: days,
+        itemsByDateKey: {
+          days.first.dateKey: const [
+            TodayScheduleItem(
+              courseName: 'Cached course',
+              startTime: '08:00',
+              endTime: '09:35',
+              location: 'Room 101',
+            ),
+          ],
+        },
+      );
+      final firstDay = days.first.dateKey;
+      await db.setState(
+        AppStateKeys.scheduleWeekSnapshot(
+          ScheduleRepository.calendarCacheScope,
+          firstDay,
+        ),
+        encodeHomeScheduleSnapshotCachePayload(
+          semesterId: ScheduleRepository.calendarCacheScope,
+          snapshot: cached,
+        ),
+      );
+      await db.setState(
+        AppStateKeys.scheduleWeekRefresh(
+          ScheduleRepository.calendarCacheScope,
+          firstDay,
+        ),
+        encodeHomeScheduleRemoteRefreshPayload(
+          HomeScheduleRemoteRefreshState(
+            semesterId: ScheduleRepository.calendarCacheScope,
+            lastAttemptAt: DateTime.now(),
+            hasSuccessfulRefresh: true,
+          ),
+        ),
+      );
+      final container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          authProvider.overrideWith((ref) => _OnlineAuth()),
+          initialCurrentSemesterIdProvider.overrideWithValue('2026-2027-1'),
+          serverCurrentSemesterIdProvider.overrideWith(
+            (ref) => Stream.value(null),
+          ),
+          minuteTickProvider.overrideWith(
+            (ref) => Stream.value(DateTime(2026, 9, 7)),
+          ),
+          learningReadApiProvider.overrideWithValue(client),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(minuteTickProvider.future);
+      final week = container.read(homeScheduleWeekStartProvider);
+      final subscription = container.listen(
+        scheduleWeekProvider(week),
+        (_, _) {},
+      );
+      addTearDown(subscription.close);
+      final initial = await container.read(scheduleWeekProvider(week).future);
+      expect(
+        initial.snapshot.itemsFor(days.first).single.courseName,
+        'Cached course',
+      );
+
+      final refresh = container.read(homeScheduleActionsProvider).refresh();
+      await client.started.future;
+      var completed = false;
+      refresh.whenComplete(() => completed = true);
+      await container.pump();
+      expect(completed, isFalse);
+      client.gate.completeError(StateError('offline'));
+      expect(await refresh, isFalse);
     },
   );
 
@@ -190,6 +274,25 @@ class _CalendarApi implements LearningReadApi {
   }) async {
     calls.add('$startDate/$endDate');
     return [];
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw StateError('Unexpected API call');
+}
+
+class _DelayedFailingCalendarApi implements LearningReadApi {
+  final started = Completer<void>();
+  final gate = Completer<List<api.CalendarEvent>>();
+
+  @override
+  Future<List<api.CalendarEvent>> getCalendar(
+    String startDate,
+    String endDate, {
+    bool graduate = false,
+  }) {
+    if (!started.isCompleted) started.complete();
+    return gate.future;
   }
 
   @override

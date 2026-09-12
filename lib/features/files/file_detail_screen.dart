@@ -5,7 +5,6 @@
 // preview subsystem so richer formats can be added without growing this screen.
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../../app/app_orientation.dart';
 import '../../core/design/app_toast.dart';
@@ -14,7 +13,6 @@ import '../../core/design/app_surfaces.dart';
 import '../../core/design/app_materials.dart';
 import '../../core/design/colors.dart';
 import '../../core/design/file_type_utils.dart';
-import '../../core/files/file_access_resolver.dart';
 import '../../core/files/file_asset_actions.dart';
 import '../../core/files/file_asset_runtime.dart';
 import '../../core/files/file_models.dart';
@@ -231,7 +229,7 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
         IconButton(
           tooltip: '分享',
           icon: const Icon(Icons.ios_share_rounded),
-          onPressed: isReady ? () => _shareFile(file, fs) : null,
+          onPressed: isReady ? () => _shareFile(file) : null,
         ),
         if (_canPreview(file))
           IconButton(
@@ -275,7 +273,7 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
               await _startDownload(file);
               break;
             case _FileAction.share:
-              await _shareFile(file, fs);
+              await _shareFile(file);
               break;
             case _FileAction.openExternal:
               await _openExternal(file);
@@ -364,33 +362,17 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
           courseName: widget.routeData.courseName,
           isDownloaded: MediaQuery.sizeOf(context).width < 840,
           onOpen: () => _openExternal(file),
-          onShare: () => _shareFile(file, fs),
+          onShare: () => _shareFile(file),
         );
     }
   }
 
-  Future<void> _shareFile(FileDetailItem file, FileAssetRuntime fs) async {
-    if (fs.localPath == null) {
-      return;
-    }
-
-    final accessDescriptor = ref
-        .read(fileAccessResolverProvider)
-        .resolve(title: file.title, fileType: file.fileType);
+  Future<void> _shareFile(FileDetailItem file) async {
     try {
-      await Share.shareXFiles(
-        [
-          XFile(
-            fs.localPath!,
-            mimeType: accessDescriptor.mimeType,
-            name: accessDescriptor.displayName,
-          ),
-        ],
-        fileNameOverrides: [accessDescriptor.displayName],
-      );
-    } catch (e) {
+      await ref.read(fileAssetActionsProvider).share(file);
+    } catch (_) {
       if (mounted) {
-        AppToast.showError(context, message: '分享失败: $e');
+        AppToast.showError(context, message: '分享失败');
       }
     }
   }
@@ -623,14 +605,10 @@ class _FileInfoPanel extends StatelessWidget {
           ),
         ),
         if (isDownloaded)
-          Container(
+          Padding(
             padding: EdgeInsets.symmetric(
               horizontal: pageGutter(context, maxWidth: 720),
               vertical: 12,
-            ),
-            decoration: BoxDecoration(
-              color: c.surface,
-              border: Border(top: BorderSide(color: c.border, width: 0.5)),
             ),
             child: SafeArea(
               top: false,
@@ -639,12 +617,12 @@ class _FileInfoPanel extends StatelessWidget {
                 runSpacing: 8,
                 alignment: WrapAlignment.center,
                 children: [
-                  FilledButton.tonalIcon(
+                  FilledButton.icon(
                     onPressed: onOpen,
                     icon: const Icon(Icons.open_in_new_rounded, size: 18),
                     label: const Text('外部打开'),
                   ),
-                  FilledButton.tonalIcon(
+                  OutlinedButton.icon(
                     onPressed: onShare,
                     icon: const Icon(Icons.ios_share_rounded, size: 18),
                     label: const Text('分享'),

@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart' show listEquals;
 
 import 'schedule_models.dart';
 
-const int _homeScheduleCacheVersion = 2;
+const int _homeScheduleCacheVersion = 3;
 const int _homeScheduleRemoteRefreshStateVersion = 1;
 String encodeHomeScheduleRemoteRefreshPayload(
   HomeScheduleRemoteRefreshState state,
@@ -56,6 +56,9 @@ String encodeHomeScheduleSnapshotCachePayload({
     'version': _homeScheduleCacheVersion,
     'semesterId': semesterId,
     'days': snapshot.days.map((day) => day.dateKey).toList(growable: false),
+    'authoritativeDateKeys': snapshot.authoritativeDateKeys.toList(
+      growable: false,
+    ),
     'itemsByDateKey': {
       for (final entry in snapshot.itemsByDateKey.entries)
         entry.key: entry.value
@@ -80,14 +83,17 @@ HomeScheduleSnapshot? decodeHomeScheduleSnapshotCachePayload({
   String? semesterId,
   required List<HomeScheduleDayOption> days,
   required String raw,
+  Iterable<String> legacyAuthoritativeDateKeys = const [],
 }) {
   try {
     final decoded = jsonDecode(raw);
     if (decoded is! Map) {
       return null;
     }
-    if ((decoded['version'] != 1 &&
-            decoded['version'] != _homeScheduleCacheVersion) ||
+    final version = decoded['version'];
+    if ((version != 1 &&
+            version != 2 &&
+            version != _homeScheduleCacheVersion) ||
         (semesterId != null && decoded['semesterId'] != semesterId)) {
       return null;
     }
@@ -134,7 +140,18 @@ HomeScheduleSnapshot? decodeHomeScheduleSnapshotCachePayload({
           .toList(growable: false);
     }
 
-    return HomeScheduleSnapshot(days: days, itemsByDateKey: itemsByDateKey);
+    final authoritativeDateKeys = version == _homeScheduleCacheVersion
+        ? (decoded['authoritativeDateKeys'] as List?)
+                  ?.whereType<String>()
+                  .where(dayKeys.contains)
+                  .toSet() ??
+              <String>{}
+        : legacyAuthoritativeDateKeys.where(dayKeys.contains).toSet();
+    return HomeScheduleSnapshot(
+      days: days,
+      itemsByDateKey: itemsByDateKey,
+      authoritativeDateKeys: authoritativeDateKeys,
+    );
   } catch (_) {
     return null;
   }

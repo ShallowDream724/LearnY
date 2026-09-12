@@ -89,12 +89,26 @@ class CalendarRangeRepository {
           final remote = buildHomeScheduleSnapshotFromCalendarEvents(
             days: days,
             events: events,
+            authoritativeDates: days
+                .map((day) => day.date)
+                .where(term.contains),
           );
           // Empty school responses must not erase an earlier actual timetable.
           final retained = !hasScheduleItems(remote) && cached != null
-              ? cached
+              ? HomeScheduleSnapshot(
+                  days: days,
+                  itemsByDateKey: cached.itemsByDateKey,
+                  authoritativeDateKeys: {
+                    ...cached.authoritativeDateKeys,
+                    ...remote.authoritativeDateKeys,
+                  },
+                )
               : HomeScheduleSnapshot(
                   days: days,
+                  authoritativeDateKeys: {
+                    ...?cached?.authoritativeDateKeys,
+                    ...remote.authoritativeDateKeys,
+                  },
                   itemsByDateKey: {
                     for (final day in days)
                       day.dateKey: term.contains(day.date)

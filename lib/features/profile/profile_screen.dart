@@ -51,7 +51,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final profileIdentity = ref.watch(profileIdentityProvider).valueOrNull;
     final buildInfo = ref.watch(appBuildInfoProvider).valueOrNull;
     final updateInfo = ref.watch(appUpdateInfoProvider).valueOrNull;
-    final wallpaper = ref.watch(wallpaperProvider);
+    final wallpaper = ref.watch(effectiveWallpaperProvider);
     final mobileWallpaper = ref.watch(mobileWallpapersProvider);
 
     return Scaffold(
@@ -162,10 +162,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               onTap: () => showWallpaperPicker(context),
                               trailing: ClipRRect(
                                 borderRadius: BorderRadius.circular(8),
-                                child: Image.asset(
-                                  wallpaper
-                                      .artwork(forMobile: mobileWallpaper)
-                                      .thumbnail,
+                                child: Image(
+                                  image: ref.watch(wallpaperThumbnailProvider),
                                   width: mobileWallpaper ? 28 : 64,
                                   height: mobileWallpaper ? 56 : 40,
                                   fit: BoxFit.cover,

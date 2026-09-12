@@ -18,6 +18,7 @@ class SwipeToRead extends StatefulWidget {
     this.removesOnRead = false,
     this.actionId,
     this.onUndo,
+    this.readMenuTitle,
   }) : assert(onUndo == null || actionId != null);
   final Widget child;
   final Future<void> Function() onSwipe;
@@ -26,12 +27,65 @@ class SwipeToRead extends StatefulWidget {
   final Object? actionId;
   final Future<void> Function()? onUndo;
 
+  /// Notifications expose the same read action through a contextual menu.
+  /// Files supply their own richer menu inside [child].
+  final String? readMenuTitle;
+
   @override
   State<SwipeToRead> createState() => _SwipeToReadState();
 }
 
 class _SwipeToReadState extends State<SwipeToRead> {
   bool _busy = false;
+  bool _menuOpen = false;
+
+  Future<void> _showReadMenu(Offset anchor) async {
+    if (_busy || _menuOpen) return;
+    _menuOpen = true;
+    try {
+      final overlay =
+          Overlay.of(context, rootOverlay: true).context.findRenderObject()!
+              as RenderBox;
+      final point = overlay.globalToLocal(anchor);
+      final selected = await showMenu<bool>(
+        context: context,
+        useRootNavigator: true,
+        position: RelativeRect.fromRect(
+          point & const Size(1, 1),
+          Offset.zero & overlay.size,
+        ),
+        items: [
+          PopupMenuItem<bool>(
+            enabled: false,
+            child: Text(
+              widget.readMenuTitle!,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const PopupMenuDivider(),
+          PopupMenuItem<bool>(
+            value: true,
+            child: Row(
+              children: [
+                Icon(
+                  widget.isRead
+                      ? Icons.mark_email_unread_outlined
+                      : Icons.mark_email_read_outlined,
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
+                Text(widget.isRead ? '标为未读' : '标为已读'),
+              ],
+            ),
+          ),
+        ],
+      );
+      if (selected == true && mounted) await _apply();
+    } finally {
+      _menuOpen = false;
+    }
+  }
 
   Future<bool> _apply() async {
     if (_busy) return false;
@@ -62,6 +116,15 @@ class _SwipeToReadState extends State<SwipeToRead> {
 
   @override
   Widget build(BuildContext context) {
+    final content = widget.readMenuTitle == null
+        ? widget.child
+        : GestureDetector(
+            onLongPressStart: (details) =>
+                _showReadMenu(details.globalPosition),
+            onSecondaryTapDown: (details) =>
+                _showReadMenu(details.globalPosition),
+            child: widget.child,
+          );
     final label = widget.isRead ? '标为未读' : '标为已读';
     final icon = widget.isRead
         ? Icons.mark_email_unread_outlined
@@ -85,14 +148,14 @@ class _SwipeToReadState extends State<SwipeToRead> {
             child: AnimatedOpacity(
               opacity: _busy ? 0.6 : 1,
               duration: AppMotion.duration(context, AppMotion.feedback),
-              child: widget.child,
+              child: content,
             ),
           ),
         ],
       );
     }
-    // Read items stay still on mobile. They can be marked unread in details.
-    if (widget.isRead) return widget.child;
+    // Read items stay still on mobile; the context menu can restore unread.
+    if (widget.isRead) return content;
     return Semantics(
       customSemanticsActions: _busy
           ? null
@@ -123,7 +186,7 @@ class _SwipeToReadState extends State<SwipeToRead> {
           final removesOnRead = widget.removesOnRead;
           return await _apply() && removesOnRead;
         },
-        child: widget.child,
+        child: content,
       ),
     );
   }

@@ -6,6 +6,8 @@ import '../database/app_state_keys.dart';
 import '../database/database.dart';
 import '../providers/api_client_provider.dart';
 import '../providers/app_providers.dart';
+import '../providers/time_tick_provider.dart';
+import '../utils/deadline_time.dart';
 import 'semester_models.dart';
 import 'academic_calendar.dart';
 
@@ -122,6 +124,15 @@ final academicCalendarProvider = Provider<AcademicCalendar>(
 
 final semesterCatalogProvider = StreamProvider<List<Semester>>((ref) {
   return ref.watch(databaseProvider).watchSemesters();
+});
+
+/// Teaching dates and Learn's active service semester can change on different
+/// days. Neither changes the semester the user explicitly chose to browse.
+final currentTeachingSemesterIdProvider = Provider.autoDispose<String?>((ref) {
+  final now = ref.watch(minuteTickProvider).valueOrNull ?? nowInShanghai();
+  final semesters =
+      ref.watch(semesterCatalogProvider).valueOrNull ?? const <Semester>[];
+  return ref.watch(academicCalendarProvider).termOn(now, semesters)?.id;
 });
 
 final serverCurrentSemesterIdProvider = StreamProvider<String?>((ref) {

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/design/app_theme_colors.dart';
 import '../../../core/design/app_materials.dart';
+import '../../../core/design/responsive.dart';
 import '../../../core/design/typography.dart';
 import '../../../core/design/app_surfaces.dart';
 import '../../../core/schedule/schedule_models.dart';
@@ -22,7 +23,6 @@ class ScheduleBrowser extends StatefulWidget {
     required this.onDateSelected,
     required this.snapshot,
     required this.onOpenCourse,
-    required this.onRetry,
     required this.onOpenWeek,
     this.isLoading = false,
     this.hasCalendarData = true,
@@ -38,7 +38,6 @@ class ScheduleBrowser extends StatefulWidget {
   final ValueChanged<DateTime> onDateSelected;
   final HomeScheduleSnapshot snapshot;
   final ValueChanged<String> onOpenCourse;
-  final VoidCallback onRetry;
   final VoidCallback onOpenWeek;
   final bool isLoading;
   final bool hasCalendarData;
@@ -98,6 +97,10 @@ class _ScheduleBrowserState extends State<ScheduleBrowser> {
       1.0,
       MediaQuery.textScalerOf(context).scale(12) / 12,
     );
+    final dateLabel = day.date.year == widget.today.year
+        ? day.shortDateLabel
+        : '${day.date.year}/${day.shortDateLabel}';
+    final desktopControls = usesDesktopControls(context);
     return Focus(
       focusNode: _focus,
       onKeyEvent: (_, event) {
@@ -118,62 +121,38 @@ class _ScheduleBrowserState extends State<ScheduleBrowser> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 4,
+              runSpacing: 2,
               children: [
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton(
-                      style: TextButton.styleFrom(
-                        alignment: Alignment.centerLeft,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 2,
-                          vertical: 4,
-                        ),
+                Tooltip(
+                  message: '选择日期',
+                  child: TextButton(
+                    style: TextButton.styleFrom(
+                      alignment: Alignment.centerLeft,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 2,
+                        vertical: 4,
                       ),
-                      onPressed: _pickDate,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            day.isToday ? '今日课程' : '课程安排',
-                            style: AppTypography.headlineSmall.copyWith(
-                              color: c.text,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${day.weekdayLabel} · ${day.shortDateLabel}',
-                            style: AppTypography.bodySmall.copyWith(
-                              color: c.subtitle,
-                            ),
-                          ),
-                        ],
+                    ),
+                    onPressed: _pickDate,
+                    child: Text(
+                      '${day.weekdayLabel} · $dateLabel',
+                      style: AppTypography.headlineSmall.copyWith(
+                        color: c.text,
                       ),
                     ),
                   ),
                 ),
-                IconButton(
-                  tooltip: '前一天',
-                  onPressed: () => _move(-1),
-                  icon: const Icon(Icons.chevron_left, size: 18),
-                ),
-                IconButton(
-                  tooltip: '后一天',
-                  onPressed: () => _move(1),
-                  icon: const Icon(Icons.chevron_right, size: 18),
-                ),
-                IconButton(
-                  tooltip: '刷新课表',
-                  onPressed: widget.isLoading ? null : widget.onRetry,
-                  icon: widget.isLoading
-                      ? const SizedBox.square(
-                          dimension: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.refresh, size: 19),
-                ),
+                if (!day.isToday)
+                  Tooltip(
+                    message: '回到今天',
+                    child: TextButton(
+                      onPressed: () => widget.onDateSelected(widget.today),
+                      child: const Text('回到今天'),
+                    ),
+                  ),
                 Tooltip(
                   message: '查看整周课表',
                   child: TextButton(
@@ -184,16 +163,20 @@ class _ScheduleBrowserState extends State<ScheduleBrowser> {
                     child: const Text('周课表'),
                   ),
                 ),
+                if (desktopControls)
+                  IconButton(
+                    tooltip: '前一天',
+                    onPressed: () => _move(-1),
+                    icon: const Icon(Icons.chevron_left, size: 18),
+                  ),
+                if (desktopControls)
+                  IconButton(
+                    tooltip: '后一天',
+                    onPressed: () => _move(1),
+                    icon: const Icon(Icons.chevron_right, size: 18),
+                  ),
               ],
             ),
-            if (!day.isToday)
-              Tooltip(
-                message: '回到今天',
-                child: TextButton(
-                  onPressed: () => widget.onDateSelected(widget.today),
-                  child: const Text('回到今天'),
-                ),
-              ),
             const SizedBox(height: 8),
             LayoutBuilder(
               builder: (context, constraints) {
@@ -284,7 +267,6 @@ class _ScheduleBrowserState extends State<ScheduleBrowser> {
                                   ),
                               itemBuilder: (_, i) => _DailyCourseTile(
                                 item: entries[i],
-                                standalone: entries.length > 1,
                                 onOpen: widget.onOpenCourse,
                               ),
                             );
@@ -326,14 +308,9 @@ class _ScheduleBrowserState extends State<ScheduleBrowser> {
 }
 
 class _DailyCourseTile extends StatelessWidget {
-  const _DailyCourseTile({
-    required this.item,
-    required this.onOpen,
-    required this.standalone,
-  });
+  const _DailyCourseTile({required this.item, required this.onOpen});
   final TodayScheduleItem item;
   final ValueChanged<String> onOpen;
-  final bool standalone;
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
@@ -407,25 +384,12 @@ class _DailyCourseTile extends StatelessWidget {
         : showScheduleItemDetails(context, item);
     return Tooltip(
       message: '${item.courseName}\n${item.timeLabel}\n${item.location}',
-      child: standalone
-          ? StudySurface(
-              radius: 12,
-              tone: StudyPalette.course(
-                context,
-                item.courseId ?? item.courseName,
-              ),
-              onTap: open,
-              child: content,
-            )
-          : Material(
-              color: Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
-              child: InkWell(
-                onTap: open,
-                borderRadius: BorderRadius.circular(12),
-                child: content,
-              ),
-            ),
+      child: StudySurface(
+        radius: 12,
+        tone: StudyPalette.course(context, item.courseId ?? item.courseName),
+        onTap: open,
+        child: content,
+      ),
     );
   }
 }

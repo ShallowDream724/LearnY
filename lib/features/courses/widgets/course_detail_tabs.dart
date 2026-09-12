@@ -5,22 +5,21 @@ import 'package:go_router/go_router.dart';
 import '../../../core/design/app_materials.dart';
 import '../../../core/design/app_theme_colors.dart';
 import '../../../core/design/app_surfaces.dart';
-import '../../../core/design/colors.dart';
 import '../../../core/design/cooldown_toast.dart';
 import '../../../core/design/shimmer.dart';
 import '../../../core/design/swipe_to_read.dart';
 import '../../../core/design/animated_data_list.dart';
 import '../../../core/design/read_action_feedback.dart';
 import '../../../core/design/typography.dart';
-import '../../../core/database/database.dart' as db;
 import '../../../core/files/file_models.dart';
 import '../../../core/providers/providers.dart';
 import '../../../core/providers/sync_models.dart';
 import '../../../core/router/router.dart';
 import '../../../core/sync/sync_actions.dart';
 import '../../../core/utils/deadline_time.dart';
-import '../../../core/utils/homework_grade_display.dart';
 import '../../../core/utils/notification_read_state.dart';
+import '../../assignments/homework_reminder_action.dart';
+import '../../assignments/widgets/assignment_list_item.dart';
 import '../../files/providers/file_bookmark_providers.dart';
 import '../../files/widgets/file_card.dart';
 import '../../files/widgets/file_type_filter_button.dart';
@@ -94,6 +93,7 @@ class CourseNotificationsTab extends ConsumerWidget {
                     child: SwipeToRead(
                       key: ValueKey(notification.id),
                       isRead: isRead,
+                      readMenuTitle: notification.title,
                       actionId: 'notification-${notification.id}',
                       onUndo: () => actions.setNotificationReadState(
                         notification.id,
@@ -416,9 +416,11 @@ class CourseHomeworksTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final c = context.colors;
     final now = ref.watch(minuteTickProvider).valueOrNull ?? nowInShanghai();
     final homeworksAsync = ref.watch(courseHomeworksProvider(courseId));
+    final noSubmissionNeededIds =
+        ref.watch(homeworkNoSubmissionNeededIdsProvider).valueOrNull ??
+        const <String>{};
 
     return ReadingWidth(
       child: homeworksAsync.when(
@@ -454,20 +456,17 @@ class CourseHomeworksTab extends ConsumerWidget {
               itemCount: homeworks.length,
               itemBuilder: (context, index) {
                 final homework = homeworks[index];
-                final statusTone = _statusTone(homework, now);
-                final statusColor = StudyPalette.of(context, statusTone).accent;
-                final statusText = _statusText(homework, now);
-                final gradeDisplay = resolveHomeworkGradeDisplay(
-                  grade: homework.grade,
-                  gradeLevel: homework.gradeLevel,
+                final noSubmissionNeeded = noSubmissionNeededIds.contains(
+                  homework.id,
                 );
 
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 10),
-                  child: StudySurface(
-                    tone: statusTone,
-                    radius: 16,
-                    padding: const EdgeInsets.all(18),
+                  child: AssignmentListItem(
+                    homework: homework,
+                    courseName: '',
+                    now: now,
+                    noSubmissionNeeded: noSubmissionNeeded,
                     onTap: () => context.push(
                       Routes.homeworkDetail(
                         homeworkId: homework.id,
@@ -475,48 +474,13 @@ class CourseHomeworksTab extends ConsumerWidget {
                         courseName: courseName,
                       ),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          homework.title,
-                          style: AppTypography.titleLarge.copyWith(
-                            color: c.text,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 10),
-                        Wrap(
-                          spacing: 14,
-                          runSpacing: 6,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            Text(
-                              statusText,
-                              style: AppTypography.bodySmall.copyWith(
-                                color: statusColor,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            Text(
-                              _formatDeadline(homework.deadline),
-                              style: AppTypography.bodySmall.copyWith(
-                                color: c.subtitle,
-                              ),
-                            ),
-                            if (homework.graded && gradeDisplay.hasDisplayValue)
-                              Text(
-                                gradeDisplay.primaryLabel!,
-                                style: AppTypography.titleSmall.copyWith(
-                                  color: _gradeColor(gradeDisplay.numericGrade),
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
+                    onReminder: (anchor) => showAssignmentReminderAction(
+                      context: context,
+                      ref: ref,
+                      homework: homework,
+                      courseName: courseName,
+                      noSubmissionNeeded: noSubmissionNeeded,
+                      anchor: anchor,
                     ),
                   ),
                 );
@@ -526,43 +490,6 @@ class CourseHomeworksTab extends ConsumerWidget {
         },
       ),
     );
-  }
-
-  StudyTone _statusTone(db.Homework homework, DateTime now) {
-    if (homework.graded) return StudyTone.jade;
-    if (homework.submitted) return StudyTone.slate;
-    final deadline = tryParseEpochMillisToLocal(homework.deadline);
-    if (deadline != null && deadline.isBefore(now)) {
-      return StudyTone.rose;
-    }
-    return StudyTone.ochre;
-  }
-
-  String _statusText(db.Homework homework, DateTime now) {
-    if (homework.graded) return '已批改';
-    if (homework.submitted) return '已提交';
-    final deadline = tryParseEpochMillisToLocal(homework.deadline);
-    if (deadline != null && deadline.isBefore(now)) {
-      return '已超期';
-    }
-    return '待提交';
-  }
-
-  String _formatDeadline(String deadline) {
-    final d = tryParseEpochMillisToLocal(deadline);
-    if (d == null) return deadline.isEmpty ? '截止时间待确认' : '截止 $deadline';
-    return '截止 ${d.month}/${d.day} '
-        '${d.hour.toString().padLeft(2, '0')}:'
-        '${d.minute.toString().padLeft(2, '0')}';
-  }
-
-  Color _gradeColor(double? grade) {
-    if (grade == null) return AppColors.info;
-    if (grade >= 90) return AppColors.gradeExcellent;
-    if (grade >= 80) return AppColors.gradeGood;
-    if (grade >= 70) return AppColors.gradeAverage;
-    if (grade >= 60) return AppColors.gradePoor;
-    return AppColors.gradeFail;
   }
 }
 

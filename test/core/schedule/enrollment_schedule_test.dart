@@ -45,7 +45,9 @@ void main() {
           type: 'fall',
         ),
       );
-      final client = _Api()..courses = [_course('old')];
+      final client = _Api()
+        ..courses = [_course('old')]
+        ..events = [_event('old', '2026-09-14')];
       final catalog = CourseCatalogRepository(database: db, apiClient: client);
       final academicCalendar = await loadUndergraduateAcademicCalendarFixture();
       final repository = ScheduleRepository(
@@ -66,7 +68,7 @@ void main() {
                 refreshing = true;
                 return false;
               }
-              return refreshing && state.snapshot.hasRoutineData;
+              return refreshing;
             });
       }
 
@@ -75,10 +77,7 @@ void main() {
       client.courses = [_course('new'), _course('lab', unassigned: true)];
       client.events = [_event('old', '2026-09-14')];
       final updated = await fetch();
-      expect(
-        updated.snapshot.itemsFor(days.first).map((item) => item.courseId),
-        ['new'],
-      );
+      expect(updated.snapshot.itemsFor(days.first), isEmpty);
       expect(updated.snapshot.unscheduledCourses.single.courseId, 'lab');
       expect(await db.getCourseById('old'), isNull);
       expect(client.rosters, ['2026-2027-1', '2026-2027-1']);
@@ -98,7 +97,7 @@ void main() {
   );
 
   test(
-    'registrar holiday move replaces the routine day while newly selected courses remain',
+    'registrar coverage suppresses routine courses missing from that date range',
     () {
       final days = buildHomeScheduleDays(DateTime(2026, 9, 14));
       final routine = HomeScheduleSnapshot(
@@ -130,7 +129,7 @@ void main() {
         enrolledCourseIds: {'moved', 'new'},
         today: days.first.date,
       );
-      expect(result.itemsFor(days[0]).single.courseId, 'new');
+      expect(result.itemsFor(days[0]), isEmpty);
       expect(result.itemsFor(days[5]).single.courseId, 'moved');
       expect(
         result.itemsFor(days[5]).single.source,
@@ -138,7 +137,72 @@ void main() {
       );
     },
   );
+
+  test('routine remains available when registrar coverage is unknown', () {
+    final days = buildHomeScheduleDays(DateTime(2026, 9, 14));
+    final routine = HomeScheduleSnapshot(
+      days: days,
+      hasRoutineData: true,
+      itemsByDateKey: {
+        days.first.dateKey: const [
+          TodayScheduleItem(
+            courseId: 'course',
+            courseName: 'course',
+            startTime: '09:50',
+            endTime: '11:25',
+            location: '',
+            source: ScheduleItemSource.routine,
+          ),
+        ],
+      },
+    );
+
+    final result = reconcileScheduleSources(
+      calendar: emptyScheduleSnapshot(days),
+      routine: routine,
+      enrolledCourseIds: {'course'},
+      today: days.first.date,
+    );
+
+    expect(result.itemsFor(days.first).single.courseId, 'course');
+  });
+
+  test('term-edge coverage leaves dates outside the query untouched', () {
+    final days = buildHomeScheduleDays(DateTime(2026, 9, 14));
+    final routine = HomeScheduleSnapshot(
+      days: days,
+      hasRoutineData: true,
+      itemsByDateKey: {
+        days[0].dateKey: [_routineItem('monday')],
+        days[2].dateKey: [_routineItem('wednesday')],
+      },
+    );
+    final calendar = buildHomeScheduleSnapshotFromCalendarEvents(
+      days: days,
+      events: const [],
+      authoritativeDates: days.skip(2).map((day) => day.date),
+    );
+
+    final result = reconcileScheduleSources(
+      calendar: calendar,
+      routine: routine,
+      enrolledCourseIds: {'monday', 'wednesday'},
+      today: days.first.date,
+    );
+
+    expect(result.itemsFor(days[0]).single.courseId, 'monday');
+    expect(result.itemsFor(days[2]), isEmpty);
+  });
 }
+
+TodayScheduleItem _routineItem(String courseId) => TodayScheduleItem(
+  courseId: courseId,
+  courseName: courseId,
+  startTime: '09:50',
+  endTime: '11:25',
+  location: '',
+  source: ScheduleItemSource.routine,
+);
 
 api.CourseInfo _course(
   String id, {

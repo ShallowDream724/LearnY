@@ -133,7 +133,7 @@ void main() {
     expect(reads, 1);
   });
 
-  testWidgets('mobile read items do not turn unread from a swipe', (
+  testWidgets('mobile read items only turn unread from their context menu', (
     tester,
   ) async {
     var calls = 0;
@@ -143,6 +143,7 @@ void main() {
         home: Scaffold(
           body: SwipeToRead(
             isRead: true,
+            readMenuTitle: 'Read document',
             onSwipe: () async {
               calls++;
             },
@@ -159,6 +160,12 @@ void main() {
     await tester.drag(find.text('Read document'), const Offset(-200, 0));
     await tester.pumpAndSettle();
     expect(calls, 0);
+    await tester.longPress(find.text('Read document'));
+    await tester.pumpAndSettle();
+    expect(calls, 0);
+    await tester.tap(find.widgetWithText(PopupMenuItem<bool>, '标为未读'));
+    await tester.pumpAndSettle();
+    expect(calls, 1);
   });
 
   testWidgets(

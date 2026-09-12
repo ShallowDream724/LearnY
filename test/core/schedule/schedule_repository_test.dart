@@ -215,6 +215,137 @@ void main() {
     },
   );
 
+  test(
+    'successful term coverage keeps a registrar-empty holiday week empty',
+    () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await _saveAutumnTerm(db);
+      await _saveRoutineCourse(db);
+      await _markCourseCatalogFresh(db, DateTime(2026, 10, 5));
+      final holidayDays = buildHomeScheduleDays(DateTime(2026, 10, 5));
+      final client = CalendarFake()..events = [_eventOn('2026-09-14')];
+      final repository = ScheduleRepository(
+        database: db,
+        apiClient: client,
+        academicCalendar: await loadUndergraduateAcademicCalendarFixture(),
+        now: () => DateTime(2026, 10, 5),
+      );
+      addTearDown(repository.dispose);
+
+      final states = await repository
+          .watch(
+            days: holidayDays,
+            fetchRemote: true,
+            operation: SyncOperation(),
+          )
+          .take(3)
+          .toList();
+
+      expect(states.first.snapshot.itemsFor(holidayDays.first), hasLength(1));
+      expect(states.last.snapshot.itemsFor(holidayDays.first), isEmpty);
+      expect(
+        states.last.snapshot.authoritativeDateKeys,
+        containsAll(holidayDays.map((day) => day.dateKey)),
+      );
+    },
+  );
+
+  test('failed refresh preserves previously confirmed empty dates', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await _saveAutumnTerm(db);
+    await _saveRoutineCourse(db);
+    await _markCourseCatalogFresh(db, DateTime(2026, 10, 5));
+    final holidayDays = buildHomeScheduleDays(DateTime(2026, 10, 5));
+    await db.setState(
+      AppStateKeys.scheduleWeekSnapshot(semester, holidayDays.first.dateKey),
+      encodeHomeScheduleSnapshotCachePayload(
+        semesterId: semester,
+        snapshot: HomeScheduleSnapshot(
+          days: holidayDays,
+          itemsByDateKey: {
+            for (final day in holidayDays)
+              day.dateKey: const <TodayScheduleItem>[],
+          },
+          authoritativeDateKeys: holidayDays.map((day) => day.dateKey).toSet(),
+        ),
+      ),
+    );
+    final repository = ScheduleRepository(
+      database: db,
+      apiClient: CalendarFake()..fail = true,
+      academicCalendar: await loadUndergraduateAcademicCalendarFixture(),
+      now: () => DateTime(2026, 10, 5),
+    );
+    addTearDown(repository.dispose);
+
+    final states = await repository
+        .watch(days: holidayDays, fetchRemote: true, operation: SyncOperation())
+        .take(3)
+        .toList();
+
+    expect(states.last.failure, ScheduleFailure.network);
+    expect(states.last.snapshot.itemsFor(holidayDays.first), isEmpty);
+    expect(
+      states.last.snapshot.authoritativeDateKeys,
+      contains(holidayDays.first.dateKey),
+    );
+  });
+
+  test(
+    'legacy successful term cache is upgraded to authoritative coverage',
+    () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await _saveAutumnTerm(db);
+      await _saveRoutineCourse(db);
+      await _markCourseCatalogFresh(db, DateTime(2026, 10, 5));
+      final holidayDays = buildHomeScheduleDays(DateTime(2026, 10, 5));
+      await db.setState(
+        AppStateKeys.scheduleWeekSnapshot(semester, holidayDays.first.dateKey),
+        jsonEncode({
+          'version': 2,
+          'semesterId': semester,
+          'days': holidayDays.map((day) => day.dateKey).toList(),
+          'itemsByDateKey': <String, Object?>{},
+        }),
+      );
+      final repository = ScheduleRepository(
+        database: db,
+        apiClient: CalendarFake()..fail = true,
+        academicCalendar: await loadUndergraduateAcademicCalendarFixture(),
+        now: () => DateTime(2026, 10, 5),
+      );
+      addTearDown(repository.dispose);
+
+      final state = await repository
+          .watch(
+            days: holidayDays,
+            fetchRemote: false,
+            operation: SyncOperation(),
+          )
+          .first;
+
+      expect(state.snapshot.itemsFor(holidayDays.first), isEmpty);
+      expect(
+        state.snapshot.authoritativeDateKeys,
+        containsAll(holidayDays.map((day) => day.dateKey)),
+      );
+      expect(
+        jsonDecode(
+          (await db.getState(
+            AppStateKeys.scheduleWeekSnapshot(
+              semester,
+              holidayDays.first.dateKey,
+            ),
+          ))!,
+        )['version'],
+        3,
+      );
+    },
+  );
+
   test('cached classes remain available when remote refresh fails', () async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
@@ -423,8 +554,26 @@ Future<void> _saveAutumnTerm(AppDatabase db) async {
   );
 }
 
+Future<void> _saveRoutineCourse(AppDatabase db) => db.upsertCourse(
+  CoursesCompanion.insert(
+    id: 'routine-course',
+    name: 'Routine course',
+    chineseName: 'Routine course',
+    courseType: 'student',
+    semesterId: '2026-2027-1',
+    timeAndLocationJson: Value(jsonEncode(['星期一第1节(全周)，六教101'])),
+  ),
+);
+
+Future<void> _markCourseCatalogFresh(AppDatabase db, DateTime at) =>
+    db.setState(
+      AppStateKeys.courseCatalogUpdatedAt('2026-2027-1'),
+      at.toIso8601String(),
+    );
+
 class CalendarFake implements LearningReadApi {
   final calls = <String>[];
+  List<api.CalendarEvent> events = const [];
   bool fail = false;
   Object? error;
   Completer<List<api.CalendarEvent>>? pending;
@@ -440,7 +589,7 @@ class CalendarFake implements LearningReadApi {
     if (!started.isCompleted) started.complete();
     if (fail) throw StateError('offline');
     if (error != null) throw error!;
-    return pending?.future ?? [];
+    return pending?.future ?? events;
   }
 
   @override

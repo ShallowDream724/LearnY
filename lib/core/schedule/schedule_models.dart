@@ -70,12 +70,16 @@ class HomeScheduleSnapshot {
   const HomeScheduleSnapshot({
     required this.days,
     required this.itemsByDateKey,
+    this.authoritativeDateKeys = const {},
     this.hasRoutineData = false,
     this.unscheduledCourses = const [],
   });
 
   final List<HomeScheduleDayOption> days;
   final Map<String, List<TodayScheduleItem>> itemsByDateKey;
+
+  /// Dates covered by a successful registrar query, including empty dates.
+  final Set<String> authoritativeDateKeys;
   final bool hasRoutineData;
   final List<UnscheduledCourse> unscheduledCourses;
 

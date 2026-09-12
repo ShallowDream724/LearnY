@@ -139,16 +139,6 @@ class _HomeTodayScheduleSectionState
         failure:
             current?.failure ??
             (asyncState.hasError ? ScheduleFailure.storage : null),
-        onRetry: () async {
-          final refreshed = await ref
-              .read(homeScheduleActionsProvider)
-              .refresh();
-          if (!refreshed && context.mounted) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(const SnackBar(content: Text('课表刷新失败，请稍后重试')));
-          }
-        },
         onOpenCourse: (id) => context.push(Routes.courseDetail(id)),
         onOpenWeek: () => showScheduleDialog(
           context,

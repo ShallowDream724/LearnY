@@ -145,7 +145,6 @@ class _ScheduleFixtureState extends State<ScheduleFixture> {
             },
             snapshot: snapshot,
             onOpenCourse: widget.onOpen ?? (_) {},
-            onRetry: () {},
             failure: widget.failure,
             onOpenWeek: () => showScheduleDialog(
               context,

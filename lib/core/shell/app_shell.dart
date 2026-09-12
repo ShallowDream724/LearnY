@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../design/app_surfaces.dart';
+import '../design/app_toast.dart';
 import '../design/app_light_scene.dart';
 import '../design/app_materials.dart';
 import '../design/app_theme_colors.dart';
@@ -14,6 +15,7 @@ import '../providers/providers.dart';
 import '../providers/wallpaper_provider.dart';
 import '../router/router.dart';
 import '../semester/semester_switcher.dart';
+import '../../features/home/providers/home_schedule_provider.dart';
 import 'app_bottom_navigation.dart';
 
 const _destinations = <ShellNavDestinationData>[
@@ -57,6 +59,19 @@ class AppShell extends ConsumerWidget {
       campusIdentityVerificationRequiredProvider,
     );
     final location = GoRouterState.of(context).uri.toString();
+    Future<void> refreshAll() async {
+      final result = await ref.read(homeRefreshActionsProvider).refresh();
+      if (!context.mounted || !result.isCurrent || result.scheduleRefreshed) {
+        return;
+      }
+      AppToast.showWarning(
+        context,
+        message: '课表刷新失败，其他内容状态请查看同步结果',
+        actionLabel: '重试',
+        onAction: refreshAll,
+      );
+    }
+
     final content = ContentLayout(
       child: Column(
         children: [
@@ -81,7 +96,10 @@ class AppShell extends ConsumerWidget {
       ),
     );
     return StudyLightBackdrop(
-      wallpaper: ref.watch(wallpaperProvider),
+      wallpaper: ref.watch(effectiveWallpaperProvider),
+      imageProvider: ref.watch(
+        wallpaperImageProvider(Theme.of(context).brightness),
+      ),
       mobileArtwork: ref.watch(mobileWallpapersProvider),
       strength: ref.watch(wallpaperIntensityProvider) / 100,
       child: Scaffold(
@@ -92,6 +110,7 @@ class AppShell extends ConsumerWidget {
                   _Sidebar(
                     index: navigationShell.currentIndex,
                     onSelected: _select,
+                    onRefresh: refreshAll,
                   ),
                   Expanded(child: content),
                 ],
@@ -110,9 +129,14 @@ class AppShell extends ConsumerWidget {
 }
 
 class _Sidebar extends StatelessWidget {
-  const _Sidebar({required this.index, required this.onSelected});
+  const _Sidebar({
+    required this.index,
+    required this.onSelected,
+    required this.onRefresh,
+  });
   final int index;
   final ValueChanged<int> onSelected;
+  final Future<void> Function() onRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -136,10 +160,14 @@ class _Sidebar extends StatelessWidget {
                         children: [
                           const StudyMark(size: 30),
                           const SizedBox(width: 10),
-                          Text(
-                            'LearnY',
-                            style: AppTypography.headlineMedium.copyWith(
-                              color: c.text,
+                          Flexible(
+                            child: Text(
+                              'LearnY',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.headlineMedium.copyWith(
+                                color: c.text,
+                              ),
                             ),
                           ),
                         ],
@@ -210,16 +238,22 @@ class _Sidebar extends StatelessWidget {
                   vertical: 12,
                 ),
                 child: extended
-                    ? const Row(
+                    ? Row(
                         children: [
-                          Expanded(child: SemesterSelector()),
-                          SemesterSyncControl(),
+                          const Expanded(child: SemesterSelector()),
+                          SemesterSyncControl(
+                            onRefresh: onRefresh,
+                            refreshTooltip: '刷新全部内容和课表',
+                          ),
                         ],
                       )
-                    : const Column(
+                    : Column(
                         children: [
-                          SemesterSelector(iconOnly: true),
-                          SemesterSyncControl(),
+                          const SemesterSelector(iconOnly: true),
+                          SemesterSyncControl(
+                            onRefresh: onRefresh,
+                            refreshTooltip: '刷新全部内容和课表',
+                          ),
                         ],
                       ),
               ),

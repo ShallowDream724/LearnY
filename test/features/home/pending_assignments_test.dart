@@ -60,8 +60,14 @@ void main() {
       var menus = 0;
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [databaseProvider.overrideWithValue(db)],
+          overrides: [
+            databaseProvider.overrideWithValue(db),
+            deadlineThresholdHoursProvider.overrideWith(
+              (_) => _TestDeadlineThresholdNotifier(),
+            ),
+          ],
           child: MaterialApp(
+            theme: ThemeData(platform: TargetPlatform.windows),
             home: Scaffold(
               body: PendingAssignments(
                 assignments: const [
@@ -86,6 +92,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.more_horiz), findsOneWidget);
       final gesture = await tester.createGesture(
         kind: PointerDeviceKind.mouse,
         buttons: kSecondaryMouseButton,
@@ -102,4 +109,60 @@ void main() {
       await tester.pumpAndSettle();
     },
   );
+
+  testWidgets('phone hides the reminder button while retaining long press', (
+    tester,
+  ) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    var menus = 0;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          deadlineThresholdHoursProvider.overrideWith(
+            (_) => _TestDeadlineThresholdNotifier(),
+          ),
+        ],
+        child: MaterialApp(
+          theme: ThemeData(platform: TargetPlatform.android),
+          home: Scaffold(
+            body: PendingAssignments(
+              assignments: const [
+                HomeworkSummary(
+                  id: 'hw',
+                  courseId: 'course',
+                  courseName: '算法设计',
+                  title: '第一章习题',
+                  deadline: '4102416000000',
+                  timeRemaining: Duration(hours: 20),
+                  isOverdue: false,
+                ),
+              ],
+              pendingAssignments: 1,
+              onLongPress: (_, _) async {
+                menus++;
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.more_horiz), findsNothing);
+    await tester.longPress(find.text('第一章习题'));
+    await tester.pump();
+    expect(menus, 1);
+  });
+}
+
+class _TestDeadlineThresholdNotifier extends StateNotifier<int>
+    implements DeadlineThresholdNotifier {
+  _TestDeadlineThresholdNotifier() : super(168);
+
+  @override
+  Future<void> setHours(int hours) async {
+    if (hours > 0) state = hours;
+  }
 }

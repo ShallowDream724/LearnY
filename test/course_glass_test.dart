@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+import 'package:flutter/rendering.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:learn_y/core/design/app_light_scene.dart';
@@ -6,6 +8,87 @@ import 'package:learn_y/core/design/course_glass.dart';
 import 'package:learn_y/core/design/wallpaper.dart';
 
 void main() {
+  testWidgets(
+    'swiped cached header samples the same pixels as explicit navigation',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      canvas.drawRect(
+        const Rect.fromLTWH(0, 0, 100, 100),
+        Paint()
+          ..shader = const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Colors.red, Colors.green, Colors.blue],
+          ).createShader(const Rect.fromLTWH(0, 0, 100, 100)),
+      );
+      final picture = recorder.endRecording();
+      final source = (await tester.runAsync(() => picture.toImage(100, 100)))!;
+      final data = await tester.runAsync(
+        () => source.toByteData(format: ui.ImageByteFormat.png),
+      );
+      final provider = MemoryImage(data!.buffer.asUint8List());
+      source.dispose();
+      picture.dispose();
+      final controller = PageController();
+      addTearDown(controller.dispose);
+      final header = GlobalKey();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: StudyLightBackdrop(
+            imageProvider: provider,
+            strength: 1,
+            child: PageView(
+              controller: controller,
+              children: [
+                const SizedBox.expand(),
+                Align(
+                  alignment: Alignment.topCenter,
+                  child: RepaintBoundary(
+                    key: header,
+                    child: const SizedBox(
+                      height: 90,
+                      width: double.infinity,
+                      child: StudyLightSurface(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.runAsync(
+        () => precacheImage(provider, tester.element(find.byType(PageView))),
+      );
+      await tester.pumpAndSettle();
+      controller.jumpToPage(1);
+      await tester.pumpAndSettle();
+      Future<List<int>> pixels() async {
+        final image =
+            await (header.currentContext!.findRenderObject()!
+                    as RenderRepaintBoundary)
+                .toImage();
+        final bytes = await image.toByteData();
+        image.dispose();
+        return bytes!.buffer.asUint8List();
+      }
+
+      final expected = await tester.runAsync(pixels);
+      controller.jumpToPage(0);
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(PageView), const Offset(-340, 0));
+      await tester.pumpAndSettle();
+      expect(controller.page, 1);
+      expect(await tester.runAsync(pixels), expected);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
   testWidgets('cached course glass survives background changes and returns', (
     tester,
   ) async {

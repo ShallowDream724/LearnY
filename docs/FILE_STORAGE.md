@@ -87,3 +87,32 @@ image format; attachments export the published local file. Originals are copied
 without re-downloading or recompressing. Temporary export files are removed after
 the save operation. Android 9 and earlier request write permission when saving;
 modern Android writes through MediaStore. iOS declares photo-library usage keys.
+
+## File List Actions
+
+`FileCard` and the home summary use one `showFileActionMenu` for long-press and
+right-click. The menu exposes favorite/read toggles, share and external open;
+redownload stays in file details. `FileAssetActions` owns availability and sharing,
+including waiting for an active download's validated publication and merging
+duplicate preparation/share requests. Sharing or external opening from a list
+does not implicitly mark the item read. Download failures never pass a temporary
+or stale replacement path to the system share sheet. Read changes reuse the
+list's undo receipt where available; asynchronous feedback uses a captured
+`AppToastHost` so removal of the row cannot invalidate its UI context.
+
+`FileTypeIcon` is the common glyph, color and accessibility component;
+`FileTypeUtils` supplies the single extension mapping and `FileTypeMark` only
+adapts its footprint in denser file rows. Pages do not draw a second paper/letter
+symbol. Undownloaded course-file bookmarks are resolved from course metadata and
+remain visible in favorites without requiring a cached asset record.
+
+## Custom Wallpapers
+
+Device wallpaper files live in application support under `wallpapers/`, outside
+`LearnY Files` and account cache cleanup. `CustomWallpaperRepository` keeps one
+original copy (`.source`) and one rendered PNG, plus normalized crop coordinates
+in versioned app-state metadata. New files are completed before a transaction
+publishes metadata, the selected wallpaper and intensity. Only then are old
+managed copies removed. Cancelling the editor leaves preferences untouched;
+removing a wallpaper never deletes the user's selected source file. Decoding and
+output limits are documented in [artwork](../tool/artwork/README.md).

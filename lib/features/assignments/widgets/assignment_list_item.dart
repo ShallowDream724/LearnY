@@ -114,27 +114,39 @@ class AssignmentListItem extends StatelessWidget {
     );
     Widget outcome() {
       final hasGrade = homework.graded && grade.hasDisplayValue;
+      final numericGrade = hasGrade && grade.isNumeric;
+      final primary = Text.rich(
+        TextSpan(
+          text: hasGrade ? grade.primaryLabel! : status,
+          children: numericGrade
+              ? [
+                  TextSpan(
+                    text: ' 分',
+                    style: AppTypography.labelMedium.copyWith(
+                      color: state.accent,
+                    ),
+                  ),
+                ]
+              : null,
+        ),
+        maxLines: 1,
+        textAlign: TextAlign.right,
+        style: AppTypography.titleMedium.copyWith(
+          color: state.accent,
+          fontSize: numericGrade ? 30 : 15,
+          height: 1.2,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+      );
       final content = Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Text(
-            hasGrade ? grade.primaryLabel! : status,
-            textAlign: TextAlign.right,
-            style: AppTypography.titleMedium.copyWith(
-              color: state.accent,
-              fontSize: hasGrade && grade.isNumeric ? 30 : 15,
-              height: 1.2,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-          if (hasGrade) ...[
-            const SizedBox(height: 4),
-            Text(
-              status,
-              style: AppTypography.labelSmall.copyWith(color: c.subtitle),
-            ),
-          ] else if (hasReminder) ...[
+          if (numericGrade)
+            FittedBox(fit: BoxFit.scaleDown, child: primary)
+          else
+            primary,
+          if (!hasGrade && hasReminder) ...[
             const SizedBox(height: 4),
             Icon(Icons.keyboard_arrow_down, size: 14, color: c.subtitle),
           ],

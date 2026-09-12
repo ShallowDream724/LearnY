@@ -219,9 +219,12 @@ abstract final class AppTheme {
         titleTextStyle: AppTypography.headlineMedium.copyWith(
           color: textPrimary,
         ),
-        systemOverlayStyle: isDark
-            ? SystemUiOverlayStyle.light
-            : SystemUiOverlayStyle.dark,
+        systemOverlayStyle:
+            (isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark)
+                .copyWith(
+                  statusBarColor: Colors.transparent,
+                  systemStatusBarContrastEnforced: false,
+                ),
       ),
 
       // ── Bottom Navigation ──

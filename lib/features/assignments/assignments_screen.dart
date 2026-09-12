@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -10,10 +8,8 @@ import '../../core/design/app_materials.dart';
 import '../../core/design/app_theme_colors.dart';
 import '../../core/design/app_toast.dart';
 import '../../core/design/cooldown_toast.dart';
-import '../../core/design/homework_reminder_menu.dart';
 import '../../core/design/shimmer.dart';
 import '../../core/design/typography.dart';
-import '../../core/database/database.dart';
 import '../../core/providers/providers.dart';
 import '../../core/providers/sync_provider.dart';
 import '../../core/router/router.dart';
@@ -21,6 +17,7 @@ import '../../core/semester/semester_switcher.dart';
 import '../../core/shell/shell_layout_metrics.dart';
 import '../../core/sync/sync_actions.dart';
 import '../../core/utils/deadline_time.dart';
+import 'homework_reminder_action.dart';
 import 'providers/assignments_providers.dart';
 import 'widgets/assignment_list_item.dart';
 
@@ -32,6 +29,7 @@ class AssignmentsScreen extends ConsumerStatefulWidget {
 
 class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
   final _scroll = ScrollController();
+  final _collapsedGroups = <AssignmentTimelineGroup>{};
   @override
   void dispose() {
     _scroll.dispose();
@@ -55,53 +53,15 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
     }
   }
 
-  Future<void> _reminder(
-    Homework homework,
-    String courseName,
-    bool noSubmissionNeeded,
-    Offset anchor,
-  ) async {
-    final action = await showHomeworkReminderMenu(
-      context,
-      title: homework.title,
-      courseName: courseName,
-      isNoSubmissionNeeded: noSubmissionNeeded,
-      anchor: anchor,
-    );
-    if (action == null || !mounted) return;
-    final value = action == HomeworkReminderMenuAction.markNoSubmissionNeeded;
-    Future<void> save(bool next) async {
-      try {
-        await ref
-            .read(homeworkReminderActionsProvider)
-            .setNoSubmissionNeeded(homework.id, noSubmissionNeeded: next);
-      } catch (_) {
-        if (mounted) AppToast.showError(context, message: '提醒设置未能保存');
-        rethrow;
-      }
-    }
-
-    try {
-      await save(value);
-      if (!mounted) return;
-      AppToast.showInfo(
-        context,
-        message: value ? '已设为无需提交' : '已恢复提交提醒',
-        actionLabel: '撤销',
-        onAction: () {
-          unawaited(save(!value).catchError((Object _) {}));
-        },
-      );
-    } catch (_) {
-      /* The failed write already has local feedback. */
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final semester = ref.watch(currentSemesterIdProvider);
     ref.listen(currentSemesterIdProvider, (previous, next) {
-      if (previous != next && _scroll.hasClients) _scroll.jumpTo(0);
+      if (previous == next) return;
+      if (_scroll.hasClients) _scroll.jumpTo(0);
+      if (_collapsedGroups.isNotEmpty) {
+        setState(_collapsedGroups.clear);
+      }
     });
     final filter = ref.watch(homeworkFilterProvider);
     final data = ref.watch(assignmentHomeworksProvider);
@@ -250,49 +210,65 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
                                   child: _AssignmentGroupHeading(
                                     group: section.group,
                                     count: section.homeworks.length,
+                                    collapsed: _collapsedGroups.contains(
+                                      section.group,
+                                    ),
+                                    onPressed: () => setState(() {
+                                      if (!_collapsedGroups.add(
+                                        section.group,
+                                      )) {
+                                        _collapsedGroups.remove(section.group);
+                                      }
+                                    }),
                                   ),
                                 ),
                               ),
-                              SliverList.builder(
-                                itemCount: section.homeworks.length,
-                                itemBuilder: (context, index) {
-                                  final homework = section.homeworks[index];
-                                  final course =
-                                      courses[homework.courseId] ?? '';
-                                  final noSubmissionNeeded =
-                                      section.group ==
-                                      AssignmentTimelineGroup
-                                          .noSubmissionNeeded;
-                                  return Padding(
-                                    key: ValueKey(homework.id),
-                                    padding: EdgeInsets.only(
-                                      bottom:
-                                          index == section.homeworks.length - 1
-                                          ? 24
-                                          : 3,
-                                    ),
-                                    child: AssignmentListItem(
-                                      homework: homework,
-                                      courseName: course,
-                                      now: now,
-                                      noSubmissionNeeded: noSubmissionNeeded,
-                                      onTap: () => context.push(
-                                        Routes.homeworkDetail(
-                                          homeworkId: homework.id,
-                                          courseId: homework.courseId,
-                                          courseName: course,
+                              if (!_collapsedGroups.contains(section.group))
+                                SliverList.builder(
+                                  itemCount: section.homeworks.length,
+                                  itemBuilder: (context, index) {
+                                    final homework = section.homeworks[index];
+                                    final course =
+                                        courses[homework.courseId] ?? '';
+                                    final noSubmissionNeeded =
+                                        section.group ==
+                                        AssignmentTimelineGroup
+                                            .noSubmissionNeeded;
+                                    return Padding(
+                                      key: ValueKey(homework.id),
+                                      padding: EdgeInsets.only(
+                                        bottom:
+                                            index ==
+                                                section.homeworks.length - 1
+                                            ? 24
+                                            : 3,
+                                      ),
+                                      child: AssignmentListItem(
+                                        homework: homework,
+                                        courseName: course,
+                                        now: now,
+                                        noSubmissionNeeded: noSubmissionNeeded,
+                                        onTap: () => context.push(
+                                          Routes.homeworkDetail(
+                                            homeworkId: homework.id,
+                                            courseId: homework.courseId,
+                                            courseName: course,
+                                          ),
                                         ),
+                                        onReminder: (anchor) =>
+                                            showAssignmentReminderAction(
+                                              context: context,
+                                              ref: ref,
+                                              homework: homework,
+                                              courseName: course,
+                                              noSubmissionNeeded:
+                                                  noSubmissionNeeded,
+                                              anchor: anchor,
+                                            ),
                                       ),
-                                      onReminder: (anchor) => _reminder(
-                                        homework,
-                                        course,
-                                        noSubmissionNeeded,
-                                        anchor,
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
+                                    );
+                                  },
+                                ),
                             ],
                         ],
                       ),
@@ -326,9 +302,16 @@ String _filterLabel(HomeworkFilter filter) => switch (filter) {
 };
 
 class _AssignmentGroupHeading extends StatelessWidget {
-  const _AssignmentGroupHeading({required this.group, required this.count});
+  const _AssignmentGroupHeading({
+    required this.group,
+    required this.count,
+    required this.collapsed,
+    required this.onPressed,
+  });
   final AssignmentTimelineGroup group;
   final int count;
+  final bool collapsed;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -338,29 +321,58 @@ class _AssignmentGroupHeading extends StatelessWidget {
           ? StudyTone.rose
           : StudyTone.slate,
     );
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: [
-          Text(
-            _groupLabel(group),
-            style: AppTypography.titleMedium.copyWith(color: colors.accent),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-            decoration: BoxDecoration(
-              color: colors.fill,
-              borderRadius: BorderRadius.circular(5),
+    final label = _groupLabel(group);
+    return Semantics(
+      button: true,
+      expanded: !collapsed,
+      label: '$label，$count 项',
+      onTap: onPressed,
+      excludeSemantics: true,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: onPressed,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Row(
+              children: [
+                Text(
+                  label,
+                  style: AppTypography.titleMedium.copyWith(
+                    color: colors.accent,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colors.fill,
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: Text(
+                    '$count',
+                    style: AppTypography.labelSmall.copyWith(
+                      color: colors.accent,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(child: Divider(color: context.colors.border)),
+                const SizedBox(width: 8),
+                Icon(
+                  collapsed ? Icons.expand_more : Icons.expand_less,
+                  size: 20,
+                  color: colors.accent,
+                ),
+              ],
             ),
-            child: Text(
-              '$count',
-              style: AppTypography.labelSmall.copyWith(color: colors.accent),
-            ),
           ),
-          const SizedBox(width: 14),
-          Expanded(child: Divider(color: context.colors.border)),
-        ],
+        ),
       ),
     );
   }
@@ -416,6 +428,7 @@ class _AssignmentFilters extends StatelessWidget {
           const SizedBox(width: 12),
           PopupMenuButton<HomeworkFilter>(
             tooltip: '筛选作业',
+            useRootNavigator: true,
             initialValue: current,
             onSelected: onChanged,
             itemBuilder: (_) => [
