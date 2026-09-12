@@ -1,5 +1,6 @@
 """Export navigation captures without introducing false bands in the glass."""
 
+import argparse
 from pathlib import Path
 
 from PIL import Image
@@ -40,7 +41,7 @@ def export_motion(frames, name):
                     optimize=False, disposal=2)
 
 
-def main():
+def main(stills_only=False):
     for name in ('courses_light', 'courses_dark', 'home_light'):
         with Image.open(ROOT / f'{name}.png') as screenshot:
             dock_crop(screenshot).save(ROOT / f'{name}_dock.png')
@@ -53,6 +54,8 @@ def main():
         screenshot.crop((0, 0, screenshot.width,
                          round(screenshot.width * 260 / 390))).save(
                              ROOT / 'profile_header.png')
+    if stills_only:
+        return
     dock, whole = [], []
     for path in sorted((ROOT / 'frames').glob('*.png')):
         with Image.open(path) as screenshot:
@@ -65,4 +68,7 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--stills-only', action='store_true',
+                        help='Crop screenshots without regenerating animations.')
+    main(stills_only=parser.parse_args().stills_only)

@@ -27,16 +27,13 @@ void main() {
   float upper_light = pow(max(dot(normal, normalize(vec2(-0.35, -1.0))), 0.0), 5.0);
   float lower_light = pow(max(normal.y, 0.0), 7.0);
   float along = 0.68 + 0.32 * gaussian(point.x, u_size.x * 0.28, u_size.x * 0.32);
-  float rim = gaussian(depth, 1.05 + sides * 0.35, 0.62 + sides * 0.28);
-  float light = rim * (0.19 + 0.62 * upper_light * along + 0.48 * lower_light);
-  light += gaussian(depth, 3.3, 2.3) * 0.13 * upper_light;
+  float rim = gaussian(depth, 0.65 + sides * 0.18, 0.34 + sides * 0.16);
+  float light = rim * (0.14 + 0.48 * upper_light * along + 0.32 * lower_light);
+  light += gaussian(depth, 1.8, 1.2) * 0.04 * upper_light;
   light *= mix(1.0, 0.57, u_dark);
 
-  float shade = gaussian(depth, 3.0 + sides, 2.0 + sides) *
-      (0.06 + 0.12 * sides + 0.025 * max(-normal.y, 0.0));
-  shade *= mix(1.0, 1.4, u_dark);
+  // Keep the transmitted interior clear. Depth comes from the exterior shadow
+  // and this narrow reflection, without adding a second dark ring inside.
   light = clamp(light * u_strength, 0.0, 1.0);
-  shade = clamp(shade * u_strength, 0.0, 1.0);
-  float alpha = light + shade * (1.0 - light);
-  frag_color = vec4(vec3(light), alpha);
+  frag_color = vec4(vec3(light), light);
 }

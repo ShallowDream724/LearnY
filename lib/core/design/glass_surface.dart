@@ -203,7 +203,7 @@ class _RenderGlassBackdrop extends RenderProxyBox {
   }
 }
 
-/// Inner highlights and grazing shade only; no tint, backdrop, input, or shadow.
+/// Inner reflections only; no tint, backdrop, input, or inset shadow.
 /// Light is painted below [child], so it cannot wash out icons and text.
 class GlassLighting extends StatefulWidget {
   const GlassLighting({
@@ -322,25 +322,25 @@ class GlassShadow extends CustomPainter {
         ..addRRect(shape),
     );
     canvas.drawRRect(
-      shape.shift(const Offset(0, 5)),
+      shape.shift(const Offset(0, 3)),
       Paint()
         ..color = Colors.black.withValues(
-          alpha: ((dark ? .34 : .16) * strength).clamp(0, 1),
+          alpha: ((dark ? .20 : .075) * strength).clamp(0, 1),
         )
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7),
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
     );
     // Gaussian, slightly wider at the curved sides; no constant-width outline.
     final contact = RRect.fromRectAndRadius(
-      Rect.fromLTRB(-1.05, -.2, size.width + 1.05, size.height + .3),
-      Radius.elliptical(corner + 1.05, corner + .25),
+      Rect.fromLTRB(-.45, -.1, size.width + .45, size.height + .16),
+      Radius.elliptical(corner + .45, corner + .13),
     );
     canvas.drawRRect(
       contact,
       Paint()
         ..color = Colors.black.withValues(
-          alpha: ((dark ? .66 : .48) * strength).clamp(0, 1),
+          alpha: ((dark ? .46 : .30) * strength).clamp(0, 1),
         )
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, .75),
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, .5),
     );
     canvas.restore();
   }

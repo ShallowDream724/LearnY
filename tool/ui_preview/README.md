@@ -54,6 +54,7 @@ the real pager; the capture does not animate a mock indicator.
 Run `python tool/ui_preview/export_navigation_preview.py` in the aider environment
 to export cropped PNGs and motion previews. The lossless animated WebP is the
 visual reference; GIF uses an all-frame palette with dithering as a fallback.
+Use `--stills-only` when only the static material captures changed.
 Do not build GIF palettes from only the first frame: when another page has a
 different background, that produces false bands in otherwise smooth glass.
 
