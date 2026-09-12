@@ -9,6 +9,7 @@ import '../core/database/database.dart';
 import '../core/files/file_repository.dart';
 import '../core/providers/providers.dart';
 import '../core/semester/semester_repository.dart';
+import '../core/semester/academic_calendar.dart';
 import '../core/services/file_storage_workspace_service.dart';
 import '../core/sync/sync_engine.dart';
 import 'demo_api.dart';
@@ -104,6 +105,20 @@ class DemoEnvironment {
   }
 
   List<Override> get overrides => [
+    // Demo dates are generated teaching fixtures, independent of real Learn
+    // activation metadata and the bundled official calendar.
+    academicCalendarProvider.overrideWithValue(
+      AcademicCalendar(
+        supplement: [
+          for (final semester in api.data.semesters)
+            AcademicTermDates(
+              id: semester.id,
+              start: semester.startDate,
+              end: semester.endDate,
+            ),
+        ],
+      ),
+    ),
     databaseProvider.overrideWithValue(database),
     cookieJarProvider.overrideWithValue(cookieJar),
     secureStorageProvider.overrideWithValue(secureStorage),
@@ -120,7 +135,7 @@ class DemoEnvironment {
     authReloginServiceProvider.overrideWith(
       (ref) => AuthReloginService(
         ref.watch(credentialVaultProvider),
-        helperFactory: () => api,
+        helperFactory: () => DemoLearnApi(api.data, cookieJar: CookieJar()),
       ),
     ),
     appBuildInfoProvider.overrideWith(

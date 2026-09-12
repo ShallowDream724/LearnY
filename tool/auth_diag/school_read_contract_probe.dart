@@ -107,8 +107,9 @@ Future<Map<String, Object?>> probeSchoolReadContracts(
     ];
     final download =
         files.firstOrNull?.downloadUrl ?? attachments.firstOrNull?.downloadUrl;
-    if (download != null)
+    if (download != null) {
       sample['download'] = await _sampleAsset(api, Uri.parse(download));
+    }
     final markup = [
       ...notifications.map((item) => item.content),
       ...homework.expand(
@@ -123,8 +124,9 @@ Future<Map<String, Object?>> probeSchoolReadContracts(
       final src = html.parse(body).querySelector('img[src]')?.attributes['src'];
       if (src == null || src.startsWith('data:')) continue;
       final uri = Uri.parse('https://learn.tsinghua.edu.cn/').resolve(src);
-      if (uri.scheme != 'https' || uri.host != 'learn.tsinghua.edu.cn')
+      if (uri.scheme != 'https' || uri.host != 'learn.tsinghua.edu.cn') {
         continue;
+      }
       sample['inlineImage'] = await _sampleAsset(api, uri);
       break;
     }
