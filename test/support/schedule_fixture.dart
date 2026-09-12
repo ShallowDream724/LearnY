@@ -41,6 +41,7 @@ HomeScheduleSnapshot scheduleFixtureSnapshot(
   DateTime week,
   List<int> counts, {
   bool estimated = false,
+  String? secondPeriodEnd,
 }) {
   final days = buildHomeScheduleDays(week, today: scheduleToday);
   return HomeScheduleSnapshot(
@@ -65,7 +66,9 @@ HomeScheduleSnapshot scheduleFixtureSnapshot(
                   scheduleCourses[(i + day.date.weekday - 1) %
                       scheduleCourses.length],
               startTime: scheduleStarts[i % scheduleStarts.length],
-              endTime: estimated && day.date.weekday == 2 && i == 1
+              endTime: i == 1 && secondPeriodEnd != null
+                  ? secondPeriodEnd
+                  : estimated && day.date.weekday == 2 && i == 1
                   ? '12:15'
                   : scheduleEnds[i % scheduleEnds.length],
               location: '六教 6A${301 + i}',

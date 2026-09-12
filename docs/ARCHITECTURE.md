@@ -44,7 +44,7 @@ Android 和 Windows 共用 Dart 业务逻辑、数据库协议与主要界面。
 - 教务成功查询覆盖的日期完全以教务为准，空日和空周也禁止排课推算补课；仅未确认日期可使用注明来源的推算。学期边界周仅标记教学范围内日期。已确认退课的名称索引过滤当前及未来的滞后教务数据，历史教务快照保留。推算不会越过学期结束日期。
 - `scheduleWeekProvider` 组装账户和自然周，同周共享数据，与学期选择独立。`homeScheduleBrowseDateProvider` 将首页所选学期和日期映射到可浏览范围；默认日期随上海时间跨日更新，到学期末日停住。主动选定的日期保持不变，首页换学期重置日期定位。作用域结束取消旧操作。
 - `ScheduleBrowser` 只负责每日课程；`ScheduleDialog` 提供独立周弹层，`WeeklyTimetable` 按共享时间轴绘制完整课表。来源提示和待安排提醒共用 `ScheduleNotes`。具体呈现见 [SCHEDULE_DESIGN.md](SCHEDULE_DESIGN.md)。
-- `TimetableLayout` 是不依赖 Flutter 的连续分钟投影，统一负责时间范围、参照刻度和同日重叠分组／分栏。`WeeklyTimetable` 只根据该投影与可用宽度绘制；Android、Windows 不分别维护排课算法。未知开始时间单独保留为待定条目，不假装排在午夜。
+- `TimetableLayout` 不依赖 Flutter，负责时间范围、参照刻度、可折叠的全周无课午休区间及同日重叠分组／分栏。`TimetableAxis` 根据界面传入的密度与午休带高度统一投影刻度、网格、课程位置／长度及滚动内容总高；界面不得另用原始分钟计算某一部分高度。`WeeklyTimetable` 只根据该投影与可用宽度绘制；Android、Windows 不分别维护排课算法。未知开始时间单独保留为待定条目，不假装排在午夜。
 - `ScheduleSemesterNavigation` 只负责学期边界、相邻学期和初始日期策略；`SchedulePager` 提供有边界的日/周页面，外滑手势单次触发确认。首页由 `HomeTodayScheduleSection` 在用户确认后调用全局学期切换；周弹层的选择只保存在自身状态。`showSemesterPicker` 仅返回选择结果，由调用者决定作用域。
 
 每日方向键按天移动，桌面另有前后按钮；手机省去按钮并保留跨日滑动。日期直接作为首页课表标题，两处都支持日期选择与回到今天。周弹层按周移动，可用外部空白、关闭按钮或 Esc 退出。首页顶栏刷新与下拉刷新共用同一动作和完整忙碌周期，覆盖学习内容及课表，避免局部成功冒充全部完成；周弹层保留局部刷新。

@@ -143,11 +143,21 @@ void main() {
           child: MaterialApp(
             debugShowCheckedModeBanner: false,
             theme: AppTheme.light.copyWith(platform: TargetPlatform.android),
-            home: const Scaffold(
+            home: Scaffold(
               body: SingleChildScrollView(
                 child: Padding(
-                  padding: EdgeInsets.all(16),
-                  child: ScheduleFixture(counts: [6, 6, 6, 6, 6, 0, 0]),
+                  padding: const EdgeInsets.all(16),
+                  child: ScheduleFixture(
+                    snapshotBuilder: (week) => scheduleFixtureSnapshot(week, [
+                      6,
+                      6,
+                      6,
+                      6,
+                      6,
+                      0,
+                      0,
+                    ], secondPeriodEnd: '12:15'),
+                  ),
                 ),
               ),
             ),
@@ -158,6 +168,7 @@ void main() {
       await tester.tap(find.byTooltip('查看整周课表'));
       await tester.pumpAndSettle();
       final table = find.byType(WeeklyTimetable);
+      expect(find.text('午休'), findsOneWidget);
       final scrollable = find.descendant(
         of: table,
         matching: find.byType(Scrollable),
@@ -181,7 +192,7 @@ void main() {
       );
       final week = find.text('2026年 9/7 - 9/13');
       final headerPosition = tester.getTopLeft(week);
-      await capture(tester, key, 'weekly_scroll/phone_morning');
+      await capture(tester, key, 'weekly_lunch/phone_morning');
       // Use a real vertical drag through the nested week pager, not jumpTo.
       await tester.drag(scrollable, const Offset(0, -550));
       await tester.pumpAndSettle();
@@ -191,7 +202,7 @@ void main() {
         lessThanOrEqualTo(tester.getRect(scrollable).bottom),
       );
       expect(tester.getTopLeft(week), headerPosition);
-      await capture(tester, key, 'weekly_scroll/phone_evening');
+      await capture(tester, key, 'weekly_lunch/phone_evening');
       await tester.tap(evening);
       await tester.pumpAndSettle();
       expect(find.text('19:20-20:55\n六教 6A306'), findsOneWidget);

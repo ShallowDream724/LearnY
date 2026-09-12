@@ -5,7 +5,7 @@ import '../../support/schedule_fixture.dart';
 
 void main() {
   test(
-    'retains 08:00 and internal gaps with exact unusual start and end times',
+    'retains 08:00 and exact course geometry around the folded lunch interval',
     () {
       final layout = TimetableLayout.fromSnapshot(
         extremeScheduleSnapshot(scheduleToday),
@@ -20,9 +20,19 @@ void main() {
       expect(lab.duration, 205); // 13:30–16:55
       expect(practice.duration, 150); // 16:10–18:40
       for (final zoom in [.86, .94, 1.88]) {
-        expect(layout.offset(practice.start, zoom), closeTo(490 * zoom, .001));
+        final axis = TimetableAxis(
+          layout,
+          pixelsPerMinute: zoom,
+          breakExtent: 28,
+        );
         expect(
-          layout.offset(practice.start, zoom) - layout.offset(lab.start, zoom),
+          axis.offset(practice.start),
+          closeTo((490 - 75) * zoom + 28, .001),
+        );
+        expect(axis.height, closeTo((825 - 75) * zoom + 28, .001));
+        expect(axis.extent(lab.start, lab.end), closeTo(205 * zoom, .001));
+        expect(
+          axis.offset(practice.start) - axis.offset(lab.start),
           closeTo(160 * zoom, .001),
         );
       }
@@ -36,7 +46,8 @@ void main() {
     expect(layout.start, 480);
     expect(layout.end, 1015);
     expect(layout.ticks, [480, 590, 810, 920]);
-    expect(layout.offset(layout.entries.single.start, 1), 330);
+    final axis = TimetableAxis(layout, pixelsPerMinute: 1, breakExtent: 28);
+    expect(axis.offset(layout.entries.single.start), 330 - 75 + 28);
   });
 
   test('overlap groups share lanes without narrowing unrelated classes', () {
@@ -52,6 +63,42 @@ void main() {
     expect(layout.entries.map((e) => e.lane), [0, 1, 1, 0]);
     expect(layout.entries[2].start, 970);
   });
+
+  test(
+    '12:15 ending and 13:30 starting classes keep their full duration around lunch',
+    () {
+      final layout = TimetableLayout.fromSnapshot(
+        _snapshot([
+          _item('morning', '09:50', '12:15'),
+          _item('afternoon', '13:30', '16:55'),
+        ]),
+      );
+      expect(layout.lunchBreak, isNotNull);
+      final axis = TimetableAxis(layout, pixelsPerMinute: 1, breakExtent: 28);
+      expect(axis.extent(590, 735), 145);
+      expect(axis.extent(735, 810), 28);
+      expect(axis.extent(810, 1015), 205);
+    },
+  );
+
+  test(
+    'any course overlapping lunch, including a nominal ending, prevents folding',
+    () {
+      for (final item in [
+        _item('cross start', '12:14', '12:16'),
+        _item('cross end', '13:29', '13:31'),
+        _item('inside', '12:30', '13:00'),
+        _item('nominal', '11:00', ''),
+      ]) {
+        final layout = TimetableLayout.fromSnapshot(
+          _snapshot([item, _item('afternoon', '13:30', '16:55')]),
+        );
+        expect(layout.lunchBreak, isNull, reason: item.courseName);
+        final axis = TimetableAxis(layout, pixelsPerMinute: 1, breakExtent: 28);
+        expect(axis.extent(735, 810), 75);
+      }
+    },
+  );
 
   test(
     'early and unknown times are retained without fabricated clock labels',

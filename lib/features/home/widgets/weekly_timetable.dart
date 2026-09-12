@@ -7,7 +7,7 @@ import '../../../core/design/app_theme_colors.dart';
 import '../../../core/schedule/schedule_models.dart';
 import '../../../core/schedule/timetable_layout.dart';
 
-/// Phone and desktop render the same continuous minute axis and overlap lanes.
+/// Phone and desktop share the same minute axis, lunch fold and overlap lanes.
 class WeeklyTimetable extends StatefulWidget {
   const WeeklyTimetable({
     super.key,
@@ -52,6 +52,11 @@ class _WeeklyTimetableState extends State<WeeklyTimetable> {
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 600;
         final pixelsPerMinute = (compact ? .94 : .86) * scale;
+        final axis = TimetableAxis(
+          layout,
+          pixelsPerMinute: pixelsPerMinute,
+          breakExtent: 28 * scale,
+        );
         return Column(
           children: [
             SizedBox(
@@ -105,125 +110,132 @@ class _WeeklyTimetableState extends State<WeeklyTimetable> {
                   child: Column(
                     children: [
                       SizedBox(
-                        height: layout.duration * pixelsPerMinute + 24,
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                        height: axis.height + 24,
+                        child: Stack(
+                          fit: StackFit.expand,
                           children: [
-                            SizedBox(
-                              width: timeWidth,
-                              child: Stack(
-                                children: [
-                                  for (final start in layout.ticks)
-                                    Positioned(
-                                      top:
-                                          layout.offset(
-                                            start,
-                                            pixelsPerMinute,
-                                          ) +
-                                          4,
-                                      left: 0,
-                                      right: 0,
-                                      child: Text(
-                                        TimetableLayout.clock(start),
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          color: c.tertiary,
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                SizedBox(
+                                  width: timeWidth,
+                                  child: Stack(
+                                    children: [
+                                      for (final start in layout.ticks)
+                                        Positioned(
+                                          top: axis.offset(start) + 4,
+                                          left: 0,
+                                          right: 0,
+                                          child: Text(
+                                            TimetableLayout.clock(start),
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: c.tertiary,
+                                            ),
+                                          ),
+                                        ),
+                                      Positioned(
+                                        top: axis.height + 5,
+                                        left: 0,
+                                        right: 0,
+                                        child: Text(
+                                          TimetableLayout.clock(layout.end),
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: c.tertiary,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  Positioned(
-                                    top: layout.duration * pixelsPerMinute + 5,
-                                    left: 0,
-                                    right: 0,
-                                    child: Text(
-                                      TimetableLayout.clock(layout.end),
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: c.tertiary,
-                                      ),
-                                    ),
+                                    ],
                                   ),
-                                ],
-                              ),
-                            ),
-                            for (final day in days)
-                              Expanded(
-                                child: DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    border: Border(
-                                      left: BorderSide(
-                                        color: c.border.withAlpha(100),
-                                        width: .5,
+                                ),
+                                for (final day in days)
+                                  Expanded(
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        border: Border(
+                                          left: BorderSide(
+                                            color: c.border.withAlpha(100),
+                                            width: .5,
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                  ),
-                                  child: LayoutBuilder(
-                                    builder: (context, cell) {
-                                      final dayEntries = layout.entries
-                                          .where(
-                                            (entry) => entry.day == day.dateKey,
-                                          )
-                                          .toList();
-                                      return Stack(
-                                        children: [
-                                          for (final tick in [
-                                            ...layout.ticks,
-                                            layout.end,
-                                          ])
-                                            Positioned(
-                                              top:
-                                                  layout.offset(
-                                                    tick,
-                                                    pixelsPerMinute,
-                                                  ) +
-                                                  4,
-                                              left: 0,
-                                              right: 0,
-                                              child: Divider(
-                                                height: 1,
-                                                thickness: .5,
-                                                color: c.border.withAlpha(90),
-                                              ),
-                                            ),
-                                          for (final entry in dayEntries)
-                                            Positioned(
-                                              top:
-                                                  layout.offset(
-                                                    entry.start,
-                                                    pixelsPerMinute,
-                                                  ) +
-                                                  4,
-                                              left:
-                                                  entry.lane *
-                                                      cell.maxWidth /
-                                                      entry.laneCount +
-                                                  2,
-                                              width: math.max(
-                                                0,
-                                                cell.maxWidth /
-                                                        entry.laneCount -
-                                                    4,
-                                              ),
-                                              height: math.max(
-                                                1,
-                                                entry.duration *
-                                                        pixelsPerMinute -
-                                                    2,
-                                              ),
-                                              child: _TimetableEvent(
-                                                item: entry.item,
-                                                compact: compact,
-                                                onTap: () => widget.onOpenItem(
-                                                  entry.item,
+                                      child: LayoutBuilder(
+                                        builder: (context, cell) {
+                                          final dayEntries = layout.entries
+                                              .where(
+                                                (entry) =>
+                                                    entry.day == day.dateKey,
+                                              )
+                                              .toList();
+                                          return Stack(
+                                            children: [
+                                              for (final tick in [
+                                                ...layout.ticks,
+                                                layout.end,
+                                              ])
+                                                Positioned(
+                                                  top: axis.offset(tick) + 4,
+                                                  left: 0,
+                                                  right: 0,
+                                                  child: Divider(
+                                                    height: 1,
+                                                    thickness: .5,
+                                                    color: c.border.withAlpha(
+                                                      90,
+                                                    ),
+                                                  ),
                                                 ),
-                                              ),
-                                            ),
-                                        ],
-                                      );
-                                    },
+                                              for (final entry in dayEntries)
+                                                Positioned(
+                                                  top:
+                                                      axis.offset(entry.start) +
+                                                      4,
+                                                  left:
+                                                      entry.lane *
+                                                          cell.maxWidth /
+                                                          entry.laneCount +
+                                                      2,
+                                                  width: math.max(
+                                                    0,
+                                                    cell.maxWidth /
+                                                            entry.laneCount -
+                                                        4,
+                                                  ),
+                                                  height: math.max(
+                                                    1,
+                                                    axis.extent(
+                                                          entry.start,
+                                                          entry.end,
+                                                        ) -
+                                                        2,
+                                                  ),
+                                                  child: _TimetableEvent(
+                                                    item: entry.item,
+                                                    compact: compact,
+                                                    onTap: () => widget
+                                                        .onOpenItem(entry.item),
+                                                  ),
+                                                ),
+                                            ],
+                                          );
+                                        },
+                                      ),
+                                    ),
                                   ),
+                              ],
+                            ),
+                            if (layout.lunchBreak case final rest?)
+                              Positioned(
+                                top: axis.offset(rest.start) + 4,
+                                left: 0,
+                                right: 0,
+                                height: axis.breakExtent,
+                                child: _LunchBreakBand(
+                                  rest: rest,
+                                  timeWidth: timeWidth,
                                 ),
                               ),
                           ],
@@ -251,6 +263,60 @@ class _WeeklyTimetableState extends State<WeeklyTimetable> {
           ],
         );
       },
+    );
+  }
+}
+
+class _LunchBreakBand extends StatelessWidget {
+  const _LunchBreakBand({required this.rest, required this.timeWidth});
+  final TimetableBreak rest;
+  final double timeWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Semantics(
+      label:
+          '午休，${TimetableLayout.clock(rest.start)} 至 ${TimetableLayout.clock(rest.end)}',
+      child: ExcludeSemantics(
+        child: ColoredBox(
+          color: c.surface,
+          child: Row(
+            children: [
+              SizedBox(
+                width: timeWidth,
+                child: Text(
+                  TimetableLayout.clock(rest.start),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 10, color: c.tertiary),
+                ),
+              ),
+              Expanded(
+                child: Container(
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        c.tertiary.withAlpha(3),
+                        c.tertiary.withAlpha(14),
+                        c.tertiary.withAlpha(3),
+                      ],
+                    ),
+                  ),
+                  child: Text(
+                    '午休',
+                    style: TextStyle(
+                      fontSize: 11,
+                      letterSpacing: 3,
+                      color: c.subtitle,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

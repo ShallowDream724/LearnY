@@ -2,10 +2,16 @@ import 'dart:math' as math;
 
 import 'schedule_models.dart';
 
-/// Platform-independent projection. One minute has the same height everywhere;
-/// a gap in the school calendar is a gap in the timetable.
+/// Platform-independent placement; only a verified empty lunch interval may
+/// fold. Course times, earlier empty periods and overlap lanes stay intact.
 class TimetableLayout {
-  TimetableLayout._(this.start, this.end, this.entries, this.untimed);
+  TimetableLayout._(
+    this.start,
+    this.end,
+    this.entries,
+    this.untimed,
+    this.lunchBreak,
+  );
 
   factory TimetableLayout.fromSnapshot(HomeScheduleSnapshot snapshot) {
     final entries = <TimetablePlacement>[];
@@ -70,6 +76,11 @@ class TimetableLayout {
       end,
       List.unmodifiable(entries),
       List.unmodifiable(untimed),
+      start < 735 &&
+              end > 810 &&
+              !entries.any((entry) => entry.start < 810 && entry.end > 735)
+          ? const TimetableBreak(735, 810)
+          : null,
     );
   }
 
@@ -79,9 +90,8 @@ class TimetableLayout {
   final int end;
   final List<TimetablePlacement> entries;
   final List<({String day, TodayScheduleItem item})> untimed;
+  final TimetableBreak? lunchBreak;
   int get duration => end - start;
-  double offset(int minute, double pixelsPerMinute) =>
-      (minute - start) * pixelsPerMinute;
   List<int> get ticks => {
     start,
     ...periodStarts.where((minute) => minute >= start && minute < end),
@@ -105,6 +115,44 @@ class TimetableLayout {
 
   static String clock(int minutes) =>
       '${(minutes ~/ 60).toString().padLeft(2, '0')}:${(minutes % 60).toString().padLeft(2, '0')}';
+}
+
+class TimetableBreak {
+  const TimetableBreak(this.start, this.end);
+  final int start;
+  final int end;
+  int get duration => end - start;
+}
+
+/// One projection serves the grid, labels and course rectangles on both hosts.
+/// The view supplies density and the accessible height of the lunch separator.
+class TimetableAxis {
+  TimetableAxis(
+    this.layout, {
+    required this.pixelsPerMinute,
+    required double breakExtent,
+  }) : breakExtent = layout.lunchBreak == null
+           ? 0
+           : math.min(
+               breakExtent,
+               layout.lunchBreak!.duration * pixelsPerMinute,
+             );
+
+  final TimetableLayout layout;
+  final double pixelsPerMinute;
+  final double breakExtent;
+  double get height => offset(layout.end);
+  double extent(int start, int end) => offset(end) - offset(start);
+
+  double offset(int minute) {
+    final rest = layout.lunchBreak;
+    final unfolded = (minute - layout.start) * pixelsPerMinute;
+    if (rest == null) return unfolded;
+    final withinBreak = (minute - rest.start).clamp(0, rest.duration);
+    return unfolded -
+        withinBreak * pixelsPerMinute +
+        withinBreak / rest.duration * breakExtent;
+  }
 }
 
 class TimetablePlacement {
