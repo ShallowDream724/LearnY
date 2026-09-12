@@ -7,7 +7,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import '../core/design/theme.dart';
 import '../core/design/app_font.dart';
 import '../core/design/app_materials.dart';
-import '../features/courses/providers/course_color_provider.dart';
+import '../core/design/course_identity.dart';
+import '../features/courses/providers/course_identity_provider.dart';
 import '../core/providers/providers.dart';
 import '../core/router/router.dart';
 import 'app_orientation.dart';
@@ -49,9 +50,9 @@ class _LearnYAppState extends ConsumerState<LearnYApp>
   @override
   Widget build(BuildContext context) {
     final themeMode = ref.watch(themeModeProvider);
-    final courseColors =
-        ref.watch(courseColorsProvider).valueOrNull ??
-        const <String, StudyTone>{};
+    final courseIdentities =
+        ref.watch(courseIdentitiesProvider).unwrapPrevious().valueOrNull ??
+        const <String, CourseIdentity>{};
 
     return MaterialApp.router(
       title: 'LearnY',
@@ -68,7 +69,7 @@ class _LearnYAppState extends ConsumerState<LearnYApp>
       },
       routerConfig: _router,
       builder: (context, child) =>
-          CourseColorScope(colors: courseColors, child: child!),
+          CourseIdentityScope(identities: courseIdentities, child: child!),
     );
   }
 }

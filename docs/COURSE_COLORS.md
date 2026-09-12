@@ -6,7 +6,7 @@
 
 自动分配按账号、学期和课程保存，初次分配以课程 ID 的稳定顺序处理，并优先选择当前使用最少的颜色。同学期首次分配 20 门以内不重复，36 门时每色至多分配两门。已保存的自动颜色和手动选择优先保留，排序、待办数量和刷新不改变课程颜色；新增课程优先填补空闲颜色。手动重复允许保留，课程暂时离开名单时不删除其保存记录，以便再次出现时恢复身份。
 
-`StudyTone` 定义稳定编号与主题色；`assignCourseColors` 负责纯分配规则。`CourseColorRepository` 从所有已缓存学期加载课程并保存缺失的自动颜色，`courseColorsProvider` 绑定当前账号；应用通过 `CourseColorScope` 向各路由与弹层提供只读映射。`StudyPalette.course(context, id)` 统一解析，设计组件不依赖 Riverpod，也没有全局可变取色缓存。整理中的卡片和图标选择器可以传入草稿颜色即时显示。
+`StudyTone` 定义稳定编号与主题色；`assignCourseColors` 负责纯分配规则。`CourseIdentityRepository` 从所有已缓存学期加载课程并保存缺失的自动颜色，同时合并课程原名、简称与图标；`courseIdentitiesProvider` 绑定当前账号。应用通过 `CourseIdentityScope` 向各路由与弹层提供只读身份索引，`StudyPalette.course(context, id)` 统一解析颜色，设计组件不依赖 Riverpod，也没有全局可变取色缓存。整理中的卡片和图标选择器可以传入草稿颜色即时显示。
 
 持久字段沿用 `CourseDisplayPrefs.accentKey`：手动色为稳定色名，自动色为 `auto:<色名>`，无需数据库迁移。自动创建的偏好记录使用 `sortOrder = -1`，不参与用户排序，避免自动保存颜色改变按待办排列的默认课程顺序。整理保存使用 upsert 并显式写入已清除的简称、图标；暂时缺席课程的记录得以保留。无法识别的颜色在显示时采用自动回退，后台不会覆盖非空的未知值。
 

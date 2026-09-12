@@ -100,9 +100,13 @@ class _FavoriteFilesScreenState extends ConsumerState<FavoriteFilesScreen> {
                               const SizedBox(width: 8),
                               Flexible(
                                 child: Text(
-                                  row.courseName.isEmpty
-                                      ? '未知课程'
-                                      : row.courseName,
+                                  CourseIdentityScope.find(
+                                        context,
+                                        row.courseId,
+                                      )?.displayTitle ??
+                                      (row.courseName.isEmpty
+                                          ? '未知课程'
+                                          : row.courseName),
                                   style: Theme.of(context).textTheme.titleSmall,
                                 ),
                               ),

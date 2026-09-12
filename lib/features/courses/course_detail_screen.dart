@@ -9,7 +9,6 @@ import '../../core/design/shimmer.dart';
 import '../../core/design/typography.dart';
 import '../../core/router/router.dart';
 import 'providers/course_queries.dart';
-import 'providers/course_workbench_repository.dart';
 import 'widgets/course_detail_tabs.dart';
 
 class CourseDetailScreen extends ConsumerStatefulWidget {
@@ -40,10 +39,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
   Widget build(BuildContext context) {
     final c = context.colors;
     final courseAsync = ref.watch(courseDetailProvider(widget.courseId));
-    final preferences = ref.watch(courseDisplayPrefsProvider).valueOrNull;
-    final preference = preferences
-        ?.where((item) => item.courseId == widget.courseId)
-        .firstOrNull;
+    final identity = CourseIdentityScope.find(context, widget.courseId);
     return Scaffold(
       appBar: AppBar(
         title: const Text('课程详情'),
@@ -80,8 +76,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
               title: '课程未找到',
             );
           }
-          final alias = preference?.alias?.trim();
-          final title = alias?.isNotEmpty == true ? alias! : course.name;
+          final title = identity?.displayTitle ?? course.name;
           final tabHeight =
               MediaQuery.textScalerOf(context).scale(14) * 1.2 + 24;
           final tabs = TabBar(
@@ -155,12 +150,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                             ),
                           ),
                           const SizedBox(width: 20),
-                          CourseSeal(
-                            courseId: widget.courseId,
-                            size: 44,
-                            iconKey: preference?.iconKey,
-                            courseName: course.name,
-                          ),
+                          CourseSeal(courseId: widget.courseId, size: 44),
                         ],
                       ),
                     ),

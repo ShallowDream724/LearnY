@@ -2,28 +2,31 @@ import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database.dart' as db;
-import '../../../core/design/app_materials.dart';
+import '../../../core/design/course_identity.dart';
 import '../../../core/providers/providers.dart';
 import '../../../core/utils/stream_combiner.dart';
 import 'course_color_assignment.dart';
 import 'course_workbench_models.dart';
 
 /// Covers every cached semester, including the independently browsed timetable.
-final courseColorsProvider = StreamProvider<Map<String, StudyTone>>((ref) {
-  final database = ref.watch(databaseProvider);
+final courseIdentitiesProvider = StreamProvider<Map<String, CourseIdentity>>((
+  ref,
+) {
   final owner = CourseWorkbenchScope.normalizeOwner(
-    ref.watch(authProvider).username ??
+    ref.watch(authProvider.select((auth) => auth.username)) ??
         ref.watch(learningDataOwnerProvider).valueOrNull ??
         '',
   );
-  return CourseColorRepository(database).watchOwner(owner);
+  return CourseIdentityRepository(
+    ref.watch(databaseProvider),
+  ).watchOwner(owner);
 });
 
-class CourseColorRepository {
-  const CourseColorRepository(this.database);
+class CourseIdentityRepository {
+  const CourseIdentityRepository(this.database);
   final db.AppDatabase database;
 
-  Stream<Map<String, StudyTone>> watchOwner(String owner) =>
+  Stream<Map<String, CourseIdentity>> watchOwner(String owner) =>
       combineLatest2(
         database.select(database.courses).watch(),
         (database.select(
@@ -36,15 +39,19 @@ class CourseColorRepository {
           final prefs = await (database.select(
             database.courseDisplayPrefs,
           )..where((table) => table.ownerKey.equals(owner))).get();
-          final result = <String, StudyTone>{};
+          final result = <String, CourseIdentity>{};
           final bySemester = <String, List<db.Course>>{};
           for (final course in courses) {
             bySemester.putIfAbsent(course.semesterId, () => []).add(course);
           }
           for (final entry in bySemester.entries) {
-            final saved = {
+            final preferences = {
               for (final pref in prefs)
-                if (pref.semesterId == entry.key) pref.courseId: pref.accentKey,
+                if (pref.semesterId == entry.key) pref.courseId: pref,
+            };
+            final saved = {
+              for (final pref in preferences.values)
+                pref.courseId: pref.accentKey,
             };
             final assigned = assignCourseColors(
               courseIds: entry.value.map((course) => course.id),
@@ -52,7 +59,14 @@ class CourseColorRepository {
             );
             for (final course in entry.value) {
               final key = assigned[course.id]!;
-              result[course.id] = StudyTone.fromKey(key)!;
+              final preference = preferences[course.id];
+              result[course.id] = CourseIdentity(
+                courseId: course.id,
+                courseName: course.name,
+                alias: preference?.alias,
+                iconKey: preference?.iconKey,
+                accentKey: key,
+              );
               if (saved[course.id] != null) continue;
               await database
                   .into(database.courseDisplayPrefs)
@@ -72,7 +86,7 @@ class CourseColorRepository {
                   );
             }
           }
-          return Map<String, StudyTone>.unmodifiable(result);
+          return Map<String, CourseIdentity>.unmodifiable(result);
         }),
       );
 }

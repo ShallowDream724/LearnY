@@ -88,7 +88,7 @@ Android 和 Windows 共用 Dart 业务逻辑、数据库协议与主要界面。
 ## 界面与交互边界
 
 - `AppFont` 管理内置霞鹜文楷 GB 屏幕版的 family、资源与一次性许可证注册；`AppTypography` 定义排版角色，供主题和独立文字样式共用。`LearnYApp` 声明 `zh_CN` 并使用 Flutter 官方本地化委托。
-- `StudyPalette` 根据课程 ID 派生稳定的颜色身份，`StudySurface` 封装表面光影及按压区域；课程、日程、列表共享这些角色。静态渐变与轻量阴影不引入背景模糊、逐帧布局或新的动画库。
+- `CourseIdentityRepository` 合并全部已缓存学期的课程原名及当前账号的图标、简称、颜色偏好，保留按学期避重与颜色持久化。`CourseIdentityScope` 将不可变身份索引提供给所有路由；`StudyPalette` 按课程 ID 取颜色，`CourseSeal` 按同一身份绘制课程图形，普通调用方不再拼接图标编号与课程名。课程整理草稿显式传入同一身份模型，不影响其他入口；跨账号重新加载时不展示上一账号的索引。`StudySurface` 封装表面光影及按压区域，不引入背景模糊、逐帧布局或新的动画库。
 - 设置分组、行内边距和控制项布局由 `settings_rows.dart` 统一管理；`AppearanceMenu` 使用 `MenuAnchor`，独立持有菜单触发器焦点，区分鼠标关闭与键盘返回。页面继续负责偏好持久化与失败反馈；自动登录摘要和详情复用同一状态快照。
 - `ContentLayout` 用实际分配给页面的宽度计算边距，不改写窗口级 `MediaQuery`。`ReadingWidth` 只约束阅读宽度；根详情页按窗口宽度布局。页面中的分栏由局部 `LayoutBuilder` 决定。
 - `AppShell` 保留同一 `PageView` 和分支导航器，缩放窗口不重建浏览状态。窄屏使用 `NavigationBar`，顶层页面支持触控翻页；点击导航直接切换并可打断正在进行的滑动。宽屏使用侧栏，详情浏览不参与主页面滑动。

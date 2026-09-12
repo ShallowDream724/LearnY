@@ -1,6 +1,4 @@
 import '../../../core/design/course_glass.dart';
-import '../../../core/design/course_icons/course_icon.dart';
-import '../../../core/design/course_icons/course_icon_catalog.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -186,22 +184,13 @@ class CourseCardTile extends StatelessWidget {
                     height: _controlExtent,
                   ),
                   padding: const EdgeInsets.all(4),
-                  icon: CourseIcon(
-                    option: courseIconFor(
-                      key: card.iconKey,
-                      courseName: card.course.name,
-                    ),
-                    color: Color.lerp(palette.accent, c.text, .12)!,
+                  icon: CourseSeal.fromIdentity(
+                    card.identity,
+                    size: _glyphExtent,
                   ),
                 )
               else
-                CourseIcon(
-                  option: courseIconFor(
-                    key: card.iconKey,
-                    courseName: card.course.name,
-                  ),
-                  color: Color.lerp(palette.accent, c.text, .12)!,
-                ),
+                CourseSeal.fromIdentity(card.identity, size: _glyphExtent),
             ],
           ),
           const Spacer(),

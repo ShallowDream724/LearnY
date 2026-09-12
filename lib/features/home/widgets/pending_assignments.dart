@@ -79,8 +79,8 @@ class PendingAssignments extends ConsumerWidget {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   spacing: 5,
                   children: [
-                    const Icon(Icons.tune, size: 16),
-                    Text('逾期及未来 $threshold 小时'),
+                    const Icon(Icons.alarm_outlined, size: 16),
+                    Text('$threshold 小时'),
                   ],
                 ),
               ),

@@ -31,7 +31,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('暂无待交作业'), findsOneWidget);
-    await tester.tap(find.byIcon(Icons.tune));
+    await tester.tap(find.byTooltip('调整待办显示范围'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField), '0');
     await tester.tap(find.text('确定'));

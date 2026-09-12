@@ -77,6 +77,7 @@ class SearchResultTile extends StatelessWidget {
       StudyPalette.course(context, result.courseId),
     );
     final isCourse = result.kind == SearchResultKind.course;
+    final identity = CourseIdentityScope.find(context, result.courseId);
     return Material(
       color: c.surface.withValues(alpha: 0.7),
       borderRadius: BorderRadius.circular(12),
@@ -96,7 +97,9 @@ class SearchResultTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      result.title,
+                      isCourse
+                          ? identity?.displayTitle ?? result.title
+                          : result.title,
                       style: AppTypography.titleMedium.copyWith(
                         color: c.text,
                         fontSize: 15,
@@ -107,7 +110,12 @@ class SearchResultTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      result.subtitle,
+                      isCourse && identity?.hasCustomAlias == true
+                          ? [
+                              identity!.courseName,
+                              result.subtitle,
+                            ].where((value) => value.isNotEmpty).join(' · ')
+                          : result.subtitle,
                       style: AppTypography.bodySmall.copyWith(
                         color: isCourse ? c.subtitle : course.accent,
                         height: 1.5,

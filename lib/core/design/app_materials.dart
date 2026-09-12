@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show mapEquals;
 
 import 'app_theme_colors.dart';
+import 'course_identity.dart';
 import 'course_icons/course_icon.dart';
 import 'course_icons/course_icon_catalog.dart';
 
@@ -44,17 +45,21 @@ enum StudyTone {
 }
 
 /// Scoped course identities supplied by the app; design widgets need no store.
-class CourseColorScope extends InheritedWidget {
-  const CourseColorScope({
+class CourseIdentityScope extends InheritedWidget {
+  const CourseIdentityScope({
     super.key,
-    required this.colors,
+    required this.identities,
     required super.child,
   });
-  final Map<String, StudyTone> colors;
+  final Map<String, CourseIdentity> identities;
+
+  static CourseIdentity? find(BuildContext context, String courseId) => context
+      .dependOnInheritedWidgetOfExactType<CourseIdentityScope>()
+      ?.identities[courseId];
 
   @override
-  bool updateShouldNotify(CourseColorScope oldWidget) =>
-      !mapEquals(colors, oldWidget.colors);
+  bool updateShouldNotify(CourseIdentityScope oldWidget) =>
+      !mapEquals(identities, oldWidget.identities);
 }
 
 class StudyColors {
@@ -71,9 +76,7 @@ abstract final class StudyPalette {
     String? accentKey,
   }) {
     return StudyTone.fromKey(accentKey) ??
-        context
-            .dependOnInheritedWidgetOfExactType<CourseColorScope>()
-            ?.colors[id] ??
+        StudyTone.fromKey(CourseIdentityScope.find(context, id)?.accentKey) ??
         fallbackCourse(id);
   }
 
@@ -187,25 +190,34 @@ class StudySurface extends StatelessWidget {
 
 /// A small course signature, never used in place of its readable name.
 class CourseSeal extends StatelessWidget {
-  const CourseSeal({
-    super.key,
-    required this.courseId,
-    this.size = 32,
-    this.iconKey,
-    this.courseName = '',
-  });
+  const CourseSeal({super.key, required this.courseId, this.size = 32})
+    : _identity = null;
+
+  /// Editing previews explicitly supply the unsaved draft; regular entries
+  /// resolve the saved identity by course ID through the app-wide scope.
+  CourseSeal.fromIdentity(CourseIdentity identity, {super.key, this.size = 32})
+    : courseId = identity.courseId,
+      _identity = identity;
+
   final String courseId;
   final double size;
-  final String? iconKey;
-  final String courseName;
+  final CourseIdentity? _identity;
 
   @override
   Widget build(BuildContext context) {
-    final tone = StudyPalette.course(context, courseId);
+    final identity = _identity ?? CourseIdentityScope.find(context, courseId);
+    final tone = StudyPalette.course(
+      context,
+      courseId,
+      accentKey: identity?.accentKey,
+    );
     final color = StudyPalette.of(context, tone).accent;
     return CourseIcon(
-      option: courseIconFor(key: iconKey, courseName: courseName),
-      color: color,
+      option: courseIconFor(
+        key: identity?.iconKey,
+        courseName: identity?.courseName ?? '',
+      ),
+      color: Color.lerp(color, context.colors.text, .12)!,
       size: size,
     );
   }

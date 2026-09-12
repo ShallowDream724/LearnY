@@ -121,18 +121,6 @@ final unreadFilesProvider = StreamProvider<List<db.CourseFile>>((ref) {
   return database.watchUnreadFiles();
 });
 
-final fileCourseNameMapProvider = StreamProvider<Map<String, String>>((ref) {
-  final database = ref.watch(databaseProvider);
-  final semesterId = ref.watch(currentSemesterIdProvider);
-  if (semesterId == null) {
-    return Stream.value(const <String, String>{});
-  }
-
-  return database
-      .watchCoursesBySemester(semesterId)
-      .map((courses) => {for (final course in courses) course.id: course.name});
-});
-
 final fileDetailProvider = StreamProvider.family<db.CourseFile?, String>((
   ref,
   fileId,

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../../core/database/database.dart' as db;
+import '../../../core/design/course_identity.dart';
 import 'course_color_assignment.dart';
 import 'course_queries.dart';
 
@@ -42,10 +43,17 @@ class ResolvedCourseCardModel {
   final String? iconKey;
   final String? accentKey;
 
-  String get displayTitle =>
-      alias?.trim().isNotEmpty == true ? alias!.trim() : course.name;
+  CourseIdentity get identity => CourseIdentity(
+    courseId: course.id,
+    courseName: course.name,
+    alias: alias,
+    iconKey: iconKey,
+    accentKey: accentKey,
+  );
 
-  bool get hasCustomAlias => alias?.trim().isNotEmpty == true;
+  String get displayTitle => identity.displayTitle;
+
+  bool get hasCustomAlias => identity.hasCustomAlias;
   bool get hasCustomIcon => iconKey?.trim().isNotEmpty == true;
 
   String get secondaryLabel {

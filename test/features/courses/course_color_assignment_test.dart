@@ -3,9 +3,8 @@ import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:learn_y/core/database/database.dart' as db;
-import 'package:learn_y/core/design/app_materials.dart';
 import 'package:learn_y/features/courses/providers/course_color_assignment.dart';
-import 'package:learn_y/features/courses/providers/course_color_provider.dart';
+import 'package:learn_y/features/courses/providers/course_identity_provider.dart';
 import 'package:learn_y/features/courses/providers/course_queries.dart';
 import 'package:learn_y/features/courses/providers/course_workbench_controller.dart';
 import 'package:learn_y/features/courses/providers/course_workbench_models.dart';
@@ -105,7 +104,7 @@ void main() {
               updatedAt: '2026-09-12',
             ),
           );
-      final repository = CourseColorRepository(database);
+      final repository = CourseIdentityRepository(database);
       final initial = await repository.watchOwner('alice').first;
       final stored = await database.select(database.courseDisplayPrefs).get();
       final customized = stored.singleWhere((pref) => pref.courseId == ids[0]);
@@ -113,7 +112,10 @@ void main() {
       expect(customized.iconKey, 'biology');
       expect(customized.sortOrder, 2);
       expect(initial, hasLength(3));
-      expect(initial[ids[0]], isNot(initial[ids[1]]));
+      expect(initial[ids[0]]!.accentKey, isNot(initial[ids[1]]!.accentKey));
+      expect(initial[ids[0]]!.displayTitle, '简称');
+      expect(initial[ids[0]]!.iconKey, 'biology');
+      expect(initial[ids[2]]!.courseName, ids[2]);
       expect(await repository.watchOwner('alice').first, initial);
 
       final courses = await database.getCoursesBySemester('fall');
@@ -136,7 +138,7 @@ void main() {
         ],
       );
       final changed = await repository.watchOwner('alice').first;
-      expect(changed[cards.first.course.id], StudyTone.coral);
+      expect(changed[cards.first.course.id]!.accentKey, 'coral');
       final after = await database.select(database.courseDisplayPrefs).get();
       expect(after, hasLength(3));
       expect(
@@ -145,7 +147,9 @@ void main() {
             .alias,
         isNull,
       );
-      await repository.watchOwner('bob').first;
+      final bob = await repository.watchOwner('bob').first;
+      expect(bob[ids[0]]!.alias, isNull);
+      expect(bob[ids[0]]!.iconKey, isNull);
       expect(await repository.watchOwner('alice').first, changed);
       expect(
         (await database.select(database.courseDisplayPrefs).get()).where(
