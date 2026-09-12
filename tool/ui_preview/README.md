@@ -45,10 +45,27 @@ the logical viewport. `LEARNY_PREVIEW_WALLPAPER=warm_hills` and
 preview database; they do not change application defaults or the user's settings.
 
 Use `--plain-name 'render floating navigation motion'` for the mobile glass and
-navigation study. It captures actual light/dark course pages and frame sequences
+navigation study. It captures actual light/dark course pages, the selected home
+state, the profile header, and frame sequences
 under `build/ui_preview/liquid_navigation/`, exercising a partial horizontal drag,
 reversal/cancellation, and a direct tab selection. The selected indicator follows
 the real pager; the capture does not animate a mock indicator.
+
+Run `python tool/ui_preview/export_navigation_preview.py` in the aider environment
+to export cropped PNGs and motion previews. The lossless animated WebP is the
+visual reference; GIF uses an all-frame palette with dithering as a fallback.
+Do not build GIF palettes from only the first frame: when another page has a
+different background, that produces false bands in otherwise smooth glass.
+
+For actual Impeller refraction, run the isolated demo entry point on Android:
+
+```sh
+flutter run -d <android-device> --enable-impeller -t tool/ui_preview/device_preview.dart
+```
+
+It uses in-memory demo data and the same wallpaper/intensity defines, without a
+school account. Ordinary widget captures use Skia: they show the shared lighting,
+shadows, and blur fallback, but cannot prove Impeller backdrop refraction.
 
 Detail routes are pushed from the shell so captures include real return controls.
 The editor is opened through its real homework detail action; no submission is

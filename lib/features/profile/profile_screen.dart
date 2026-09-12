@@ -99,17 +99,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             ).accent.withAlpha(28),
                           ),
                         ),
-                        child: Center(
-                          child: Text(
-                            _initials(authState.username ?? ''),
-                            style: AppTypography.headlineMedium.copyWith(
-                              color: StudyPalette.of(
-                                context,
-                                StudyTone.jade,
-                              ).accent,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                        child: Icon(
+                          Icons.person_rounded,
+                          size: 34,
+                          color: StudyPalette.of(
+                            context,
+                            StudyTone.jade,
+                          ).accent,
                         ),
                       ),
                       const SizedBox(width: 18),
@@ -316,15 +312,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ],
       ),
     );
-  }
-
-  String _initials(String name) {
-    if (name.isEmpty) return '';
-    final chars = name.runes.toList();
-    if (chars.isNotEmpty && chars[0] > 127) {
-      return String.fromCharCode(chars[0]);
-    }
-    return name.substring(0, name.length >= 2 ? 2 : 1).toUpperCase();
   }
 
   Future<void> _changeAutoRelogin(bool enabled) async {

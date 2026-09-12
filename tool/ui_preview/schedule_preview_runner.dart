@@ -186,6 +186,11 @@ void main() {
       }
       expect(progress.value, 0);
       expect(tester.takeException(), isNull);
+      await settle();
+      await capture(tester, key, 'liquid_navigation/home_light');
+      router.go(Routes.profile);
+      await settle();
+      await capture(tester, key, 'liquid_navigation/profile_light');
       router.go(Routes.courses);
       await settle();
       await tester.runAsync(

@@ -477,22 +477,6 @@ class StudyLightScene {
     if (paint != null) canvas.drawRect(paintBounds, paint);
   }
 
-  /// Samples the same wallpaper and cover transform at explicit mesh coordinates.
-  /// Used for a bounded refracting rim; no screen capture or pixel readback.
-  void paintMesh(Canvas canvas, Size sceneSize, ui.Vertices mesh) {
-    canvas.drawVertices(
-      mesh,
-      BlendMode.srcOver,
-      Paint()
-        ..isAntiAlias = false
-        ..color = dark ? const Color(0xFF1B1D20) : const Color(0xFFF7F8FB),
-    );
-    final paint = _texturePaint(sceneSize);
-    if (paint != null) {
-      canvas.drawVertices(mesh, BlendMode.srcOver, paint..isAntiAlias = false);
-    }
-  }
-
   Paint? _texturePaint(Size size) {
     final texture = image;
     if (texture == null || strength <= 0) return null;

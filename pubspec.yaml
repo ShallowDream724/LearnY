@@ -98,6 +98,10 @@ dependency_overrides:
 flutter:
   uses-material-design: true
 
+  shaders:
+    - shaders/glass_refraction.frag
+    - shaders/glass_light.frag
+
   assets:
     - assets/calendar/academic_terms.json
     - assets/fonts/OFL.txt
