@@ -39,5 +39,29 @@ download and its persisted cache record remain usable; Dio's default
 `deleteOnError` behavior may already remove a staging file after transport
 failure, and cleanup is therefore idempotent.
 
+Download progress exposes only a previously published local path, never the
+future destination. Inline readers are mounted only after `downloaded`, after
+validation, publication and cache persistence; transfer progress reaching 100%
+alone is insufficient. During a replacement download the reader is unmounted,
+so completion opens the new file even when its path is unchanged. This applies
+to PDF, ZIP, images and text through the common file detail screen.
+
+Preview preparation awaits text/ZIP work inside its error boundary so asynchronous
+read/parse failures return the normal preview fallback.
+
+## PDF and ZIP Preview
+
+PDFs use the local `pdfrx` 2.2.24 Flutter viewer with `pdfrx_engine` 0.3.9/PDFium,
+after the download has been published. Reader controls, page navigation and
+text selection live in `PdfPreviewSurface`. This engine version maps every
+Windows open failure to `PdfPasswordException`, so that error alone does not
+prove encryption; attempting to open an unpublished path was one such failure.
+
+ZIP is an active preview capability: registry → preparation service → archive
+inspection → archive browser → selected-entry extraction → shared file preview.
+The archive service owns filename decoding, extraction paths and caching; the
+browser owns navigation and actions. It currently reads the whole archive and
+uses `archive`'s ZIP decoder; it is not a streaming archive implementation.
+
 The `.archive` directory under `LearnY Files` remains reserved for extracted
 archive previews.

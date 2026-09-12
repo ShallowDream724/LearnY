@@ -44,6 +44,7 @@ class FileDownloadState {
   final String fileId;
   final DownloadStatus status;
   final double progress; // 0.0 to 1.0
+  // Only a published, readable file; never the future download destination.
   final String? localPath;
   final String? errorMessage;
 
@@ -282,7 +283,7 @@ class FileDownloadNotifier
         assetKey: assetKey,
         downloadUrl: downloadUrl,
         temporaryPath: temporaryPath,
-        publishedPath: filePath,
+        availablePath: previousLocalPath,
         fileType: fileType,
         payloadInspector: payloadInspector,
       );
@@ -381,7 +382,7 @@ class FileDownloadNotifier
     required String assetKey,
     required String downloadUrl,
     required String temporaryPath,
-    required String publishedPath,
+    required String? availablePath,
     required String? fileType,
     required DownloadedPayloadInspector payloadInspector,
   }) async {
@@ -390,7 +391,7 @@ class FileDownloadNotifier
       assetKey: assetKey,
       downloadUrl: downloadUrl,
       temporaryPath: temporaryPath,
-      publishedPath: publishedPath,
+      availablePath: availablePath,
     );
     final firstValidation = await payloadInspector.inspect(
       file: File(temporaryPath),
@@ -419,7 +420,7 @@ class FileDownloadNotifier
       assetKey: assetKey,
       downloadUrl: downloadUrl,
       temporaryPath: temporaryPath,
-      publishedPath: publishedPath,
+      availablePath: availablePath,
     );
     final retryValidation = await payloadInspector.inspect(
       file: File(temporaryPath),
@@ -439,7 +440,7 @@ class FileDownloadNotifier
     required String assetKey,
     required String downloadUrl,
     required String temporaryPath,
-    required String publishedPath,
+    required String? availablePath,
   }) {
     return api.dio.download(
       downloadUrl,
@@ -453,7 +454,7 @@ class FileDownloadNotifier
               fileId: assetKey,
               status: DownloadStatus.downloading,
               progress: progress,
-              localPath: publishedPath,
+              localPath: availablePath,
             ),
           );
         }

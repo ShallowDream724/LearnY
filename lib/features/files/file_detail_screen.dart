@@ -200,27 +200,7 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
               trackedDownloadStates,
             );
 
-            return Stack(
-              children: [
-                _buildBody(file, resolvedState),
-                if (resolvedState.status == DownloadStatus.downloading &&
-                    resolvedState.localPath != null &&
-                    !_showInfo)
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: LinearProgressIndicator(
-                      value: resolvedState.progress > 0
-                          ? resolvedState.progress
-                          : null,
-                      minHeight: 3,
-                      backgroundColor: Colors.transparent,
-                      valueColor: AlwaysStoppedAnimation(c.infoAccent),
-                    ),
-                  ),
-              ],
-            );
+            return _buildBody(file, resolvedState);
           },
         ),
       ),
@@ -354,13 +334,9 @@ class _FileDetailScreenState extends ConsumerState<FileDetailScreen> {
   Widget _buildBody(FileDetailItem file, FileAssetRuntime fs) {
     switch (fs.status) {
       case DownloadStatus.downloading:
-        if (fs.localPath != null && !_showInfo && _canPreview(file)) {
-          return FilePreviewView(
-            item: file,
-            localPath: fs.localPath!,
-            onOpenExternal: () => _openExternal(file),
-          );
-        }
+        // A path (or 100% transfer progress) does not mean publication has
+        // finished. Mount a fresh reader only after the downloaded transition,
+        // including replacement downloads at the same path.
         return _DownloadingView(progress: fs.progress);
       case DownloadStatus.none:
         if (_downloadRequestError != null) {

@@ -65,6 +65,42 @@ void main() {
   });
 
   group('FileDownloadNotifier', () {
+    test(
+      'transfer progress never publishes an unreadable preview path',
+      () async {
+        final fixture = await _DownloadFixture.create();
+        addTearDown(fixture.dispose);
+        final progressStates = <FileDownloadState>[];
+        final subscription = fixture.container.listen(fileDownloadProvider, (
+          _,
+          next,
+        ) {
+          final state = next['asset-1'];
+          if (state?.status == DownloadStatus.downloading &&
+              state!.progress > 0) {
+            progressStates.add(state);
+          }
+        });
+        addTearDown(subscription.close);
+
+        await fixture.notifier.downloadAsset(
+          assetKey: 'asset-1',
+          courseId: 'course-a',
+          downloadUrl: 'https://example.test/first',
+          fileName: 'lecture.pdf',
+          fileType: 'pdf',
+        );
+        expect(progressStates, isNotEmpty);
+        expect(
+          progressStates.every((state) => state.localPath == null),
+          isTrue,
+        );
+        final ready = fixture.notifier.getFileState('asset-1');
+        expect(ready.status, DownloadStatus.downloaded);
+        expect(await File(ready.localPath!).readAsString(), 'first payload');
+      },
+    );
+
     test('stores same-title assets at distinct identity-based paths', () async {
       final fixture = await _DownloadFixture.create();
       addTearDown(fixture.dispose);
@@ -243,6 +279,7 @@ class _DownloadAdapter implements HttpClientAdapter {
       200,
       headers: {
         Headers.contentTypeHeader: ['application/pdf'],
+        Headers.contentLengthHeader: ['${payload.length}'],
       },
     );
   }

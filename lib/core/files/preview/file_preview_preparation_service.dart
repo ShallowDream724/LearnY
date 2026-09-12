@@ -38,7 +38,7 @@ class FilePreviewPreparationService {
             filePath: localPath,
           );
         case FilePreviewCapability.text:
-          return _prepareTextPreview(
+          return await _prepareTextPreview(
             descriptor: descriptor,
             localPath: localPath,
           );
@@ -58,7 +58,7 @@ class FilePreviewPreparationService {
             message: '演示文稿暂不支持内置预览，请使用外部应用打开。',
           );
         case FilePreviewCapability.archive:
-          return _archiveService.inspect(
+          return await _archiveService.inspect(
             descriptor: descriptor,
             localPath: localPath,
           );
