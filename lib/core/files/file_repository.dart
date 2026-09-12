@@ -9,7 +9,7 @@ import 'file_models.dart';
 
 abstract class FileRepository {
   Stream<List<db.CourseFile>> watchAllFiles();
-  Stream<List<db.CourseFile>> watchUnreadFiles();
+  Stream<List<db.CourseFile>> watchUnreadFiles(String semesterId);
   Stream<List<db.CourseFile>> watchFilesByCourse(String courseId);
   Stream<db.CourseFile?> watchFileById(String fileId);
   Stream<List<FileWithCourse>> watchAllFilesWithCourse(String? semesterId);
@@ -48,8 +48,8 @@ class DriftFileRepository implements FileRepository {
   Stream<List<db.CourseFile>> watchAllFiles() => _database.watchAllFiles();
 
   @override
-  Stream<List<db.CourseFile>> watchUnreadFiles() =>
-      _database.watchUnreadFiles();
+  Stream<List<db.CourseFile>> watchUnreadFiles(String semesterId) =>
+      _database.watchUnreadFilesBySemester(semesterId);
 
   @override
   Stream<List<db.CourseFile>> watchFilesByCourse(String courseId) =>

@@ -90,6 +90,11 @@ modern Android writes through MediaStore. iOS declares photo-library usage keys.
 
 ## File List Actions
 
+The home unread summary and expanded unread file page share the required-semester
+`FileRepository.watchUnreadFiles(semesterId)` query. The course identity index
+can resolve all cached semesters, but must never be used as the list's scope.
+Changing semesters drops the previous stream's displayed values while loading.
+
 `FileCard` and the home summary use one `showFileActionMenu` for long-press and
 right-click. The menu exposes favorite/read toggles, share and external open;
 redownload stays in file details. `FileAssetActions` owns availability and sharing,
@@ -105,6 +110,21 @@ list's undo receipt where available; asynchronous feedback uses a captured
 adapts its footprint in denser file rows. Pages do not draw a second paper/letter
 symbol. Undownloaded course-file bookmarks are resolved from course metadata and
 remain visible in favorites without requiring a cached asset record.
+
+## External Office Viewers
+
+Office files continue to open in the system's chosen application. The shared
+download/action chain waits for validated publication, preserves the final
+extension and supplies its MIME type. On Android, `open_filex` 4.7.0 uses
+`ACTION_VIEW`, a FileProvider content URI and a read-permission grant. The merged
+release manifest includes that provider and its app-document paths; Word, Excel
+and PowerPoint MIME mappings cover both legacy and OOXML formats.
+
+A 2026-09-12 source/merged-manifest check found no handoff defect explaining a
+Huawei viewer staying on its loading screen. Successful intent dispatch only
+confirms that Android opened a viewer, not that the viewer parsed the document.
+That device-specific symptom remains unconfirmed without viewer logs or a
+reproducible file; no speculative permission or MIME changes were made.
 
 ## Custom Wallpapers
 

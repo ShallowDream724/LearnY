@@ -117,8 +117,9 @@ final allFileFeedEntriesProvider = StreamProvider<List<FileFeedEntry>>((ref) {
 });
 
 final unreadFilesProvider = StreamProvider<List<db.CourseFile>>((ref) {
-  final database = ref.watch(databaseProvider);
-  return database.watchUnreadFiles();
+  final semesterId = ref.watch(currentSemesterIdProvider);
+  if (semesterId == null) return Stream.value(const <db.CourseFile>[]);
+  return ref.watch(fileRepositoryProvider).watchUnreadFiles(semesterId);
 });
 
 final fileDetailProvider = StreamProvider.family<db.CourseFile?, String>((

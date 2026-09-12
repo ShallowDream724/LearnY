@@ -54,16 +54,15 @@ class PendingAssignments extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Wrap(
-          alignment: WrapAlignment.spaceBetween,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 8,
-          runSpacing: 2,
+        Row(
           children: [
-            Text(
-              '待办作业',
-              style: AppTypography.headlineSmall.copyWith(color: titleColor),
+            Expanded(
+              child: Text(
+                '待办作业',
+                style: AppTypography.headlineSmall.copyWith(color: titleColor),
+              ),
             ),
+            const SizedBox(width: 8),
             Tooltip(
               message: '调整待办显示范围',
               child: TextButton(

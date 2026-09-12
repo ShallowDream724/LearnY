@@ -19,6 +19,7 @@ import 'package:learn_y/core/database/database.dart'
     show Semester, CourseDao, HomeworkDao, AppStateDao;
 import 'package:learn_y/core/router/router.dart';
 import 'package:learn_y/features/home/home_screen.dart';
+import 'package:learn_y/features/home/widgets/pending_assignments.dart';
 import 'package:learn_y/core/shell/app_bottom_navigation.dart';
 
 import '../../test/support/schedule_fixture.dart';
@@ -125,6 +126,72 @@ void main() {
       ],
       child: const LearnYApp(),
     ),
+  );
+
+  testWidgets(
+    'render release 014 headers and extreme timetable',
+    (tester) => withShadows(() async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.devicePixelRatio = 1;
+      await tester.runAsync(
+        () =>
+            demo.database.setState(AppStateKeys.deadlineThresholdHours, '8000'),
+      );
+      for (final width in [360.0, 1280.0]) {
+        tester.view.physicalSize = Size(width, 1080);
+        final key = GlobalKey();
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: key,
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: AppTheme.light.copyWith(
+                platform: width < 600
+                    ? TargetPlatform.android
+                    : TargetPlatform.windows,
+              ),
+              home: Scaffold(
+                body: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        ScheduleFixture(
+                          initialDate: DateTime(2025, 12, 12),
+                          snapshotBuilder: extremeScheduleSnapshot,
+                        ),
+                        const SizedBox(height: 16),
+                        ProviderScope(
+                          overrides: [
+                            databaseProvider.overrideWithValue(demo.database),
+                          ],
+                          child: const PendingAssignments(
+                            assignments: [],
+                            pendingAssignments: 0,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 100)),
+        );
+        await tester.pumpAndSettle();
+        await capture(tester, key, 'release014/headers_${width.toInt()}');
+        await tester.tap(find.byTooltip('查看整周课表'));
+        await tester.pumpAndSettle();
+        await capture(tester, key, 'release014/extreme_week_${width.toInt()}');
+        await tester.pumpWidget(const SizedBox());
+        await tester.pumpAndSettle();
+      }
+    }),
   );
 
   testWidgets(

@@ -79,6 +79,35 @@ HomeScheduleSnapshot scheduleFixtureSnapshot(
   );
 }
 
+HomeScheduleSnapshot extremeScheduleSnapshot(DateTime week) {
+  final days = buildHomeScheduleDays(week, today: scheduleToday);
+  final samples = [
+    (1, '综合实验', '13:30', '16:55'),
+    (2, '课程研讨', '15:20', '17:10'),
+    (3, '设计实践', '16:10', '18:40'),
+    (4, '通识选修', '19:20', '20:55'),
+    (5, '大学物理', '09:50', '11:25'),
+    (5, '专题讲座', '19:20', '21:45'),
+  ];
+  return HomeScheduleSnapshot(
+    days: days,
+    itemsByDateKey: {
+      for (final day in days)
+        day.dateKey: [
+          for (final sample in samples)
+            if (sample.$1 == day.date.weekday)
+              TodayScheduleItem(
+                courseId: sample.$2,
+                courseName: sample.$2,
+                startTime: sample.$3,
+                endTime: sample.$4,
+                location: '六教 301',
+              ),
+        ],
+    },
+  );
+}
+
 class ScheduleFixture extends StatefulWidget {
   const ScheduleFixture({
     super.key,
@@ -89,6 +118,8 @@ class ScheduleFixture extends StatefulWidget {
     this.scale = 1,
     this.estimated = false,
     this.semesters = const [],
+    this.initialDate,
+    this.snapshotBuilder,
   });
   final List<int> counts;
   final ValueChanged<String>? onOpen;
@@ -97,19 +128,20 @@ class ScheduleFixture extends StatefulWidget {
   final double scale;
   final bool estimated;
   final List<Semester> semesters;
+  final DateTime? initialDate;
+  final HomeScheduleSnapshot Function(DateTime)? snapshotBuilder;
   @override
   State<ScheduleFixture> createState() => _ScheduleFixtureState();
 }
 
 class _ScheduleFixtureState extends State<ScheduleFixture> {
-  DateTime selected = scheduleToday;
+  late DateTime selected = widget.initialDate ?? scheduleToday;
+  HomeScheduleSnapshot snapshotFor(DateTime week) =>
+      widget.snapshotBuilder?.call(week) ??
+      scheduleFixtureSnapshot(week, widget.counts, estimated: widget.estimated);
   @override
   Widget build(BuildContext context) {
-    final snapshot = scheduleFixtureSnapshot(
-      scheduleWeekStart(selected),
-      widget.counts,
-      estimated: widget.estimated,
-    );
+    final snapshot = snapshotFor(scheduleWeekStart(selected));
     return ProviderScope(
       overrides: [
         semesterCatalogProvider.overrideWith(
@@ -119,11 +151,7 @@ class _ScheduleFixtureState extends State<ScheduleFixture> {
         scheduleWeekProvider.overrideWith(
           (ref, week) => Stream.value(
             ScheduleState(
-              snapshot: scheduleFixtureSnapshot(
-                week,
-                widget.counts,
-                estimated: widget.estimated,
-              ),
+              snapshot: snapshotFor(week),
               hasCalendarData: true,
               failure: widget.failure,
             ),

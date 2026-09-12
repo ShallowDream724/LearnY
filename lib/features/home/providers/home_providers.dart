@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database.dart' as db;
+import '../../../core/files/file_repository.dart';
 import '../../../core/providers/providers.dart';
 import '../../../core/providers/sync_models.dart';
 import '../../../core/utils/deadline_time.dart';
@@ -22,7 +23,7 @@ final homeDataProvider = StreamProvider<HomeData>((ref) {
     database.watchCoursesBySemester(semesterId),
     database.watchHomeworksBySemester(semesterId),
     database.watchUnreadNotificationsBySemester(semesterId),
-    database.watchUnreadFilesBySemester(semesterId),
+    ref.watch(fileRepositoryProvider).watchUnreadFiles(semesterId),
     minuteTickStream(),
     (courses, homeworks, unreadNotifications, unreadFiles, now) {
       return _buildHomeData(

@@ -71,7 +71,7 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final files = ref.watch(unreadFilesProvider);
+    final files = ref.watch(unreadFilesProvider).unwrapPrevious();
     final identities = ref.watch(courseIdentitiesProvider).unwrapPrevious();
     final courseNames =
         identities.valueOrNull?.map(

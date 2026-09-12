@@ -4,6 +4,14 @@ Render actual Flutter application routes and schedule widgets with isolated demo
 This runner does not open application windows or connect to a school account.
 It is outside default regression test discovery.
 
+For the stable 0.1.4 layout changes, run only
+`--plain-name 'render release 014 headers and extreme timetable'` with
+`LEARNY_CAPTURE_UI=1`. It writes `build/ui_preview/release014/` captures of
+360 px Android and 1280 px Windows layouts. The actual daily header includes
+2025/12/12 and an 8000-hour pending range. The actual weekly dialog uses a shared
+fixture with a blank 08:00 slot, 13:30–16:55, 15:20–17:10, 16:10–18:40 and the
+two different 19:20 evening durations; tall captures show the entire axis.
+
 From PowerShell on Windows:
 
 ```powershell

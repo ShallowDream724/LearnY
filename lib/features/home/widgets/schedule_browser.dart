@@ -123,6 +123,36 @@ class _ScheduleBrowserState extends State<ScheduleBrowser> {
           children: [
             LayoutBuilder(
               builder: (context, constraints) {
+                final titleText = '${day.weekdayLabel} · $dateLabel';
+                final titleStyle = AppTypography.headlineSmall.copyWith(
+                  color: c.text,
+                  fontSize: desktopControls ? 18 : 16,
+                );
+                final actionStyle = AppTypography.bodySmall.copyWith(
+                  fontSize: 12,
+                );
+                double textWidth(String text, TextStyle style) {
+                  final painter = TextPainter(
+                    text: TextSpan(text: text, style: style),
+                    textDirection: Directionality.of(context),
+                    textScaler: MediaQuery.textScalerOf(context),
+                  )..layout();
+                  final width = painter.width;
+                  painter.dispose();
+                  return width;
+                }
+
+                // Measure the real date and controls, including accessibility
+                // scaling. Compact icon actions keep the date on the same row
+                // when there is physically no room for the full labels.
+                final actionWidth =
+                    textWidth('周课表', actionStyle) +
+                    12 +
+                    (!day.isToday ? textWidth('回到今天', actionStyle) + 16 : 0) +
+                    (desktopControls ? 80 : 0);
+                final iconActions =
+                    textWidth(titleText, titleStyle) + actionWidth + 12 >
+                    constraints.maxWidth;
                 final title = Tooltip(
                   message: '选择日期',
                   child: TextButton(
@@ -134,70 +164,78 @@ class _ScheduleBrowserState extends State<ScheduleBrowser> {
                       ),
                     ),
                     onPressed: _pickDate,
-                    child: Text(
-                      '${day.weekdayLabel} · $dateLabel',
-                      style: AppTypography.headlineSmall.copyWith(
-                        color: c.text,
-                      ),
-                    ),
+                    child: Text(titleText, style: titleStyle),
                   ),
                 );
-                final actions = Wrap(
-                  alignment: WrapAlignment.end,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 4,
-                  runSpacing: 2,
+                Widget action(
+                  String label,
+                  String tooltip,
+                  IconData icon,
+                  VoidCallback onPressed,
+                ) => iconActions
+                    ? IconButton(
+                        tooltip: tooltip,
+                        constraints: const BoxConstraints.tightFor(
+                          width: 40,
+                          height: 44,
+                        ),
+                        onPressed: onPressed,
+                        icon: Icon(icon, size: 19),
+                      )
+                    : Tooltip(
+                        message: tooltip,
+                        child: TextButton(
+                          style: TextButton.styleFrom(
+                            textStyle: actionStyle,
+                            minimumSize: const Size(0, 44),
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                          ),
+                          onPressed: onPressed,
+                          child: Text(label),
+                        ),
+                      );
+                final actions = Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     if (!day.isToday)
-                      Tooltip(
-                        message: '回到今天',
-                        child: TextButton(
-                          onPressed: () => widget.onDateSelected(widget.today),
-                          child: const Text('回到今天'),
-                        ),
+                      action(
+                        '回到今天',
+                        '回到今天',
+                        Icons.today_outlined,
+                        () => widget.onDateSelected(widget.today),
                       ),
-                    Tooltip(
-                      message: '查看整周课表',
-                      child: TextButton(
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                        ),
-                        onPressed: widget.onOpenWeek,
-                        child: const Text('周课表'),
-                      ),
+                    action(
+                      '周课表',
+                      '查看整周课表',
+                      Icons.calendar_view_week_outlined,
+                      widget.onOpenWeek,
                     ),
                     if (desktopControls)
                       IconButton(
                         tooltip: '前一天',
+                        constraints: const BoxConstraints.tightFor(
+                          width: 40,
+                          height: 44,
+                        ),
                         onPressed: () => _move(-1),
                         icon: const Icon(Icons.chevron_left, size: 18),
                       ),
                     if (desktopControls)
                       IconButton(
                         tooltip: '后一天',
+                        constraints: const BoxConstraints.tightFor(
+                          width: 40,
+                          height: 44,
+                        ),
                         onPressed: () => _move(1),
                         icon: const Icon(Icons.chevron_right, size: 18),
                       ),
                   ],
                 );
-                final rowWidth =
-                    (280 +
-                        (day.date.year == widget.today.year ? 0 : 48) +
-                        (desktopControls ? 96 : 0)) *
-                    scale;
-                if (constraints.maxWidth < rowWidth) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Align(alignment: Alignment.centerLeft, child: title),
-                      actions,
-                    ],
-                  );
-                }
                 return Row(
                   children: [
                     Expanded(child: title),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 4),
                     actions,
                   ],
                 );
