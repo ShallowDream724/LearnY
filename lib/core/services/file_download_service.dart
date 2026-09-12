@@ -18,6 +18,7 @@
 // 5. **Concurrent download guard**: Prevents the same file from being
 //    downloaded multiple times simultaneously.
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -109,6 +110,7 @@ class DownloadedPayloadInspector {
     if (statusCode != 200) {
       return DownloadedPayloadValidation.invalid(
         errorMessage: '文件下载失败 ($statusCode)',
+        looksLikeSessionExpired: statusCode == 401 || statusCode == 403,
       );
     }
 
@@ -124,26 +126,20 @@ class DownloadedPayloadInspector {
     final contentType =
         headers.value(Headers.contentTypeHeader)?.toLowerCase() ?? '';
 
-    final shouldInspectSnippet =
-        size <= 8192 ||
-        contentType.contains('html') ||
-        contentType.contains('text');
-    final snippet = shouldInspectSnippet ? await _readSnippet(file) : '';
+    final snippet = await _readSnippet(file);
     final lowerSnippet = snippet.toLowerCase();
 
-    if (!allowHtml && contentType.contains('text/html')) {
-      return DownloadedPayloadValidation.invalid(
+    if (looksLikeIdentityLoginPage(snippet) || looksLikeLearnSessionExpiredPage(snippet)) {
+      return const DownloadedPayloadValidation.invalid(
         errorMessage: '会话已过期，请重新登录',
-        looksLikeSessionExpired: _looksLikeSessionArtifact(lowerSnippet),
+        looksLikeSessionExpired: true,
       );
     }
 
     if (!allowHtml &&
-        (_looksLikeHtml(lowerSnippet) ||
-            _looksLikeSessionArtifact(lowerSnippet))) {
-      return DownloadedPayloadValidation.invalid(
-        errorMessage: '会话已过期，请重新登录',
-        looksLikeSessionExpired: true,
+        (contentType.contains('text/html') || _looksLikeHtml(lowerSnippet))) {
+      return const DownloadedPayloadValidation.invalid(
+        errorMessage: '服务器返回了网页，未取得文件',
       );
     }
 
@@ -152,9 +148,9 @@ class DownloadedPayloadInspector {
 
   Future<String> _readSnippet(File file) async {
     final bytes = await file
-        .openRead(0, 2048)
+        .openRead(0, 8192)
         .fold<List<int>>(<int>[], (buffer, chunk) => buffer..addAll(chunk));
-    return String.fromCharCodes(bytes);
+    return utf8.decode(bytes, allowMalformed: true);
   }
 
   bool _looksLikeHtml(String snippet) {
@@ -164,15 +160,6 @@ class DownloadedPayloadInspector {
         trimmed.startsWith('<?xml') && trimmed.contains('<html');
   }
 
-  bool _looksLikeSessionArtifact(String snippet) {
-    return snippet.contains('login_timeout') ||
-        snippet.contains('location.href') ||
-        snippet.contains('j_spring_security') ||
-        snippet.contains('id.tsinghua.edu.cn') ||
-        snippet.contains('统一身份认证') ||
-        snippet.contains('请重新登录') ||
-        snippet.contains('请登录');
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -404,7 +391,8 @@ class FileDownloadNotifier
     }
 
     await _deleteIfExists(temporaryPath);
-    if (!firstValidation.looksLikeSessionExpired) {
+    if (!firstValidation.looksLikeSessionExpired ||
+        !isLearnAssetUri(Uri.parse(downloadUrl))) {
       throw StateError(firstValidation.errorMessage ?? '文件下载失败');
     }
 
@@ -443,8 +431,9 @@ class FileDownloadNotifier
     required String? availablePath,
   }) {
     return api.dio.download(
-      downloadUrl,
+      withLearnAssetCsrf(Uri.parse(downloadUrl), api.getCSRFToken()).toString(),
       temporaryPath,
+      options: Options(validateStatus: (_) => true),
       onReceiveProgress: (received, total) {
         if (total > 0) {
           final progress = received / total;

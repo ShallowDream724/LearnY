@@ -1,7 +1,7 @@
 name: learn_y
 description: "LearnY - A premium client for Tsinghua University Web Learning"
 publish_to: 'none'
-version: 0.1.4-beta+24
+version: 0.1.4-beta+25
 
 environment:
   sdk: ^3.11.1
@@ -99,6 +99,7 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/calendar/academic_terms.json
     - assets/fonts/OFL.txt
     - assets/brand/app_icon.png
     - assets/artwork/landscape_light.webp

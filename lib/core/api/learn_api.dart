@@ -29,6 +29,8 @@ import 'identity_auth_api.dart';
 import 'learning_read_api.dart';
 import 'models.dart';
 import 'registrar_calendar_api.dart';
+import 'session_page_detection.dart';
+import 'school_list_loader.dart';
 import 'urls.dart' as urls;
 import 'utils.dart';
 
@@ -40,6 +42,7 @@ export 'identity_auth_api.dart'
         buildIdentityCheckFormData,
         buildIdentityCheckHeaders,
         encryptIdentityPassword;
+export 'session_page_detection.dart';
 
 // ---------------------------------------------------------------------------
 // Credential
@@ -67,59 +70,6 @@ class HelperConfig {
     this.onCampusVerificationChanged,
     this.generatePreviewUrlForFirstPage = true,
   });
-}
-
-@visibleForTesting
-bool isIdentityLoginUri(Uri? uri) {
-  if (uri == null) {
-    return false;
-  }
-
-  final identityHost = Uri.parse(urls.idPrefix).host;
-  if (uri.host == identityHost) {
-    return true;
-  }
-
-  final normalized = uri.toString();
-  return normalized.contains('login_timeout') ||
-      normalized.contains('/do/off/ui/auth/login/');
-}
-
-@visibleForTesting
-bool looksLikeIdentityLoginPage(String pageSource) {
-  if (pageSource.isEmpty) {
-    return false;
-  }
-
-  final normalized = pageSource.toLowerCase();
-  return normalized.contains('id="theform"') ||
-      normalized.contains("id='theform'") ||
-      normalized.contains('id="sm2publickey"') ||
-      normalized.contains("id='sm2publickey'") ||
-      normalized.contains('name="i_user"') ||
-      normalized.contains("name='i_user'") ||
-      normalized.contains('name="i_pass"') ||
-      normalized.contains("name='i_pass'") ||
-      normalized.contains('统一身份认证');
-}
-
-/// Learn also serves its own expiry/error pages with HTTP 200 at the original
-/// protected URL. Detect the page structure, not words in a course's JSON data.
-@visibleForTesting
-bool looksLikeLearnSessionExpiredPage(String pageSource) {
-  if (!pageSource.trimLeft().startsWith('<')) return false;
-  final document = html_parser.parse(pageSource);
-  if (document.querySelector('title')?.text.trim() == '登录超时') {
-    return true;
-  }
-  final panel = document.querySelector('.bground');
-  if (panel == null) return false;
-  if (panel.querySelector('.infoo')?.text.trim() == '您未登录或登录失效') {
-    return true;
-  }
-  return panel.querySelector(r'img[src$="/log_fail.png"]') != null &&
-      panel.querySelector('.chongxin')?.text.trim() == '登录网络学堂' &&
-      RegExp(r'错误码为\s*[:：]\s*(401|403)\b').hasMatch(panel.text);
 }
 
 @visibleForTesting
@@ -1177,18 +1127,19 @@ class Learn2018Helper implements LearningReadApi {
     CourseType courseType,
     bool expired,
   ) async {
-    final json = await _fetchJson(
-      urls.learnNotificationList(courseType, expired),
-      method: 'POST',
-      data: FormData.fromMap(urls.learnPageListFormData(courseID: courseID)),
+    final result = await loadSchoolTable(
+      (offset, length) => _fetchJson(
+        urls.learnNotificationList(courseType, expired),
+        method: 'POST',
+        data: FormData.fromMap(
+          urls.learnPageListFormData(
+            courseID: courseID,
+            offset: offset,
+            length: length,
+          ),
+        ),
+      ),
     );
-    if (json['result'] != 'success') {
-      throw ApiError(reason: FailReason.invalidResponse, extra: json);
-    }
-
-    final result =
-        (json['object']?['aaData'] ?? json['object']?['resultsList'] ?? [])
-            as List;
 
     final notifications = <Notification>[];
     for (final n in result) {
@@ -1244,19 +1195,10 @@ class Learn2018Helper implements LearningReadApi {
     String courseID, {
     CourseType courseType = CourseType.student,
   }) async {
-    final json = await _fetchJson(urls.learnFileList(courseID, courseType));
-    if (json['result'] != 'success') {
-      throw ApiError(reason: FailReason.invalidResponse, extra: json);
-    }
-
-    List result;
-    if (json['object'] is List) {
-      result = json['object'];
-    } else if (json['object'] is Map && json['object']['resultsList'] is List) {
-      result = json['object']['resultsList'];
-    } else {
-      result = [];
-    }
+    final result = await loadSchoolSizedList(
+      (size) =>
+          _fetchJson(urls.learnFileList(courseID, courseType, size: size)),
+    );
 
     // Fetch file categories
     final categories = <String, FileCategory>{};
@@ -1355,6 +1297,11 @@ class Learn2018Helper implements LearningReadApi {
       } catch (e, st) {
         debugPrint('[API] Failed to parse file: $e\n$st');
       }
+    }
+    if (parsed.length != result.length ||
+        parsed.any((file) => file.id.isEmpty || file.fileId.isEmpty) ||
+        parsed.map((file) => file.id).toSet().length != parsed.length) {
+      throw const ApiError(reason: FailReason.invalidResponse);
     }
     return parsed;
   }
@@ -1571,16 +1518,19 @@ class Learn2018Helper implements LearningReadApi {
     bool submitted,
     bool graded,
   ) async {
-    final json = await _fetchJson(
-      url,
-      method: 'POST',
-      data: FormData.fromMap(urls.learnPageListFormData(courseID: courseID)),
+    final result = await loadSchoolTable(
+      (offset, length) => _fetchJson(
+        url,
+        method: 'POST',
+        data: FormData.fromMap(
+          urls.learnPageListFormData(
+            courseID: courseID,
+            offset: offset,
+            length: length,
+          ),
+        ),
+      ),
     );
-    if (json['result'] != 'success') {
-      throw ApiError(reason: FailReason.invalidResponse, extra: json);
-    }
-
-    final result = (json['object']?['aaData'] ?? []) as List;
 
     // Try to fetch excellent homework list (non-blocking)
     Map<String, List<ExcellentHomework>> excellentMap = {};

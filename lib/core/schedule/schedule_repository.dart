@@ -10,6 +10,7 @@ import '../sync/sync_operation.dart';
 import '../semester/academic_calendar.dart';
 import '../courses/course_catalog_repository.dart';
 import 'schedule_cache_codec.dart';
+import 'calendar_range_repository.dart';
 import 'schedule_models.dart';
 import 'schedule_projection.dart';
 import 'semester_schedule_cache.dart' show parseCourseSchedule;
@@ -17,7 +18,7 @@ import 'semester_schedule_cache.dart' show parseCourseSchedule;
 class ScheduleRepository {
   // The v1 cache codec names this field semesterId; the calendar now has one
   // date-based scope, independent of the selected Learn semester.
-  static const calendarCacheScope = 'calendar-v2';
+  static const calendarCacheScope = CalendarRangeRepository.snapshotScope;
   ScheduleRepository({
     required AppDatabase database,
     required LearningReadApi apiClient,
@@ -36,6 +37,26 @@ class ScheduleRepository {
   final DateTime Function() _now;
   final AcademicCalendar academicCalendar;
   final CourseCatalogRepository _courseCatalog;
+  late final _calendarRanges = CalendarRangeRepository(
+    database: _database,
+    apiClient: _apiClient,
+    now: _now,
+    failureFor: _failureFor,
+  );
+
+  void dispose() => _calendarRanges.dispose();
+
+  AcademicTermDates? _termForDays(
+    List<HomeScheduleDayOption> days,
+    List<Semester> semesters,
+  ) {
+    final terms = semesters
+        .map(academicCalendar.datesFor)
+        .whereType<AcademicTermDates>()
+        .where((term) => days.any((day) => term.contains(day.date)))
+        .toList();
+    return terms.length == 1 ? terms.single : null;
+  }
 
   Stream<ScheduleState> watch({
     required List<HomeScheduleDayOption> days,
@@ -51,7 +72,7 @@ class ScheduleRepository {
       semesterId,
       days.first.dateKey,
     );
-    final refreshKey = AppStateKeys.scheduleWeekRefresh(
+    final weekRefreshKey = AppStateKeys.scheduleWeekRefresh(
       semesterId,
       days.first.dateKey,
     );
@@ -60,6 +81,10 @@ class ScheduleRepository {
         var courses = storedCourses;
         operation.ensureActive();
         final semesters = await _database.getAllSemesters();
+        final term = _termForDays(days, semesters);
+        final refreshKey = term == null
+            ? weekRefreshKey
+            : _calendarRanges.refreshKey(term);
         var withdrawn = {
           for (final semester in semesters)
             semester.id: await _courseCatalog.withdrawnCourseIdsByName(
@@ -188,15 +213,30 @@ class ScheduleRepository {
           // The shared campus session may be recovering for another date range.
           // Its HTTP requests own timeouts; abandoning this future would leave
           // authentication running after the UI had already reported failure.
-          final events = await _apiClient.getCalendar(
-            days.first.dateKey,
-            days.last.dateKey,
-          );
+          HomeScheduleSnapshot remote;
+          if (term != null) {
+            await _calendarRanges.refresh(term);
+            operation.ensureActive();
+            final raw = await _database.getState(snapshotKey);
+            remote = raw == null
+                ? emptyScheduleSnapshot(days)
+                : decodeHomeScheduleSnapshotCachePayload(
+                        semesterId: semesterId,
+                        days: days,
+                        raw: raw,
+                      ) ??
+                      emptyScheduleSnapshot(days);
+          } else {
+            final events = await _apiClient.getCalendar(
+              days.first.dateKey,
+              days.last.dateKey,
+            );
+            remote = buildHomeScheduleSnapshotFromCalendarEvents(
+              days: days,
+              events: events,
+            );
+          }
           operation.ensureActive();
-          final remote = buildHomeScheduleSnapshotFromCalendarEvents(
-            days: days,
-            events: events,
-          );
           // Match only courses whose semester includes the occurrence date.
           final linkedRemote = _linkCourses(
             remote,
@@ -210,27 +250,31 @@ class ScheduleRepository {
               ? linkedRemote
               : _linkCourses(cached, semesters, courses, withdrawn);
           final merged = _reconcile(retained, fallback, courses);
-          await _database.transaction(() async {
-            operation.ensureActive();
-            await _database.setState(
-              snapshotKey,
-              encodeHomeScheduleSnapshotCachePayload(
-                semesterId: semesterId,
-                snapshot: retained,
-              ),
-            );
-            await _database.setState(
-              refreshKey,
-              encodeHomeScheduleRemoteRefreshPayload(
-                HomeScheduleRemoteRefreshState(
+          // Full-term snapshots and freshness belong to the account transfer.
+          // A late view must not overwrite that shared result or timestamp.
+          if (term == null) {
+            await _database.transaction(() async {
+              operation.ensureActive();
+              await _database.setState(
+                snapshotKey,
+                encodeHomeScheduleSnapshotCachePayload(
                   semesterId: semesterId,
-                  lastAttemptAt: _now(),
-                  hasSuccessfulRefresh: true,
+                  snapshot: retained,
                 ),
-              ),
-            );
-            operation.ensureActive();
-          });
+              );
+              await _database.setState(
+                refreshKey,
+                encodeHomeScheduleRemoteRefreshPayload(
+                  HomeScheduleRemoteRefreshState(
+                    semesterId: semesterId,
+                    lastAttemptAt: _now(),
+                    hasSuccessfulRefresh: true,
+                  ),
+                ),
+              );
+              operation.ensureActive();
+            });
+          }
           operation.ensureActive();
           displayed = merged;
           hasCalendarData = true;
@@ -243,16 +287,18 @@ class ScheduleRepository {
           return;
         } catch (error) {
           operation.ensureActive();
-          await _saveRefreshState(
-            HomeScheduleRemoteRefreshState(
-              semesterId: semesterId,
-              lastAttemptAt: _now(),
-              hasSuccessfulRefresh: false,
-              failure: _failureFor(error),
-            ),
-            operation,
-            refreshKey,
-          );
+          if (term == null) {
+            await _saveRefreshState(
+              HomeScheduleRemoteRefreshState(
+                semesterId: semesterId,
+                lastAttemptAt: _now(),
+                hasSuccessfulRefresh: false,
+                failure: _failureFor(error),
+              ),
+              operation,
+              refreshKey,
+            );
+          }
           operation.ensureActive();
           yield ScheduleState(
             snapshot: displayed,
@@ -278,7 +324,10 @@ class ScheduleRepository {
       AppStateKeys.scheduleWeekRefresh(calendarCacheScope, firstDay),
     );
     final days = buildHomeScheduleDays(DateTime.parse(firstDay));
-    for (final semester in await _database.getAllSemesters()) {
+    final semesters = await _database.getAllSemesters();
+    final term = _termForDays(days, semesters);
+    if (term != null) await _calendarRanges.reset(term);
+    for (final semester in semesters) {
       final bounds = academicCalendar.datesFor(semester);
       if (bounds != null && days.any((day) => bounds.contains(day.date))) {
         await _database.deleteState(

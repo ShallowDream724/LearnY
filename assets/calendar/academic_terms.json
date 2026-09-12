@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "terms": [
+    {
+      "id": "2025-2026-1",
+      "audience": "undergraduate",
+      "start": "2025-09-15",
+      "end": "2026-01-18",
+      "source": "https://www.tsinghua.edu.cn/xl/2025qiuji.jpg",
+      "verifiedOn": "2026-09-12",
+      "note": "包含期末考试周；本科生寒假从 1 月 19 日开始。"
+    },
+    {
+      "id": "2025-2026-2",
+      "audience": "undergraduate",
+      "start": "2026-02-25",
+      "end": "2026-06-28",
+      "source": "https://www.tsinghua.edu.cn/xl/2026chunji.jpg",
+      "verifiedOn": "2026-09-12",
+      "note": "正式上课从周三 2 月 25 日开始；第一教学周的周一为 2 月 23 日。"
+    },
+    {
+      "id": "2025-2026-3",
+      "audience": "undergraduate",
+      "start": "2026-06-29",
+      "end": "2026-09-13",
+      "source": "https://www.tsinghua.edu.cn/xl/2026chunji.jpg",
+      "verifiedOn": "2026-09-12",
+      "note": "夏季学期边界与秋季校历衔接；不代表每天均有课程。"
+    },
+    {
+      "id": "2026-2027-1",
+      "audience": "undergraduate",
+      "start": "2026-09-14",
+      "end": "2027-01-17",
+      "source": "https://www.tsinghua.edu.cn/xl/2026qiuji.jpg",
+      "verifiedOn": "2026-09-12",
+      "note": "18 周，包含期末考试周；寒假不计入本学期课表范围。"
+    },
+    {
+      "id": "2026-2027-2",
+      "audience": "undergraduate",
+      "start": "2027-02-22",
+      "end": "2027-06-27",
+      "source": "https://www.tsinghua.edu.cn/xl/2027chunji.jpg",
+      "verifiedOn": "2026-09-12",
+      "note": "18 周，包含期末考试周。"
+    },
+    {
+      "id": "2026-2027-3",
+      "audience": "undergraduate",
+      "start": "2027-06-28",
+      "end": "2027-09-12",
+      "source": "https://www.tsinghua.edu.cn/xl/2027chunji.jpg",
+      "verifiedOn": "2026-09-12",
+      "note": "本科生夏季学期及暑假；课程是否开设以教务事件和课程排课为准。"
+    }
+  ]
+}

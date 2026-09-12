@@ -9,6 +9,10 @@ import 'core/database/connection.dart';
 import 'core/database/database.dart';
 import 'core/providers/providers.dart';
 import 'core/services/file_storage_workspace_service.dart';
+import 'core/semester/academic_calendar_catalog.dart';
+import 'core/semester/academic_calendar.dart';
+import 'core/semester/bundled_academic_calendar_source.dart';
+import 'core/semester/semester_repository.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,10 +24,20 @@ void main() async {
     storage: FileStorage('${appDir.path}/cookies/'),
   );
   final bootstrap = await _resolveBootstrapState();
+  var calendar = const AcademicCalendar();
+  try {
+    calendar = (await BundledAcademicCalendarSource().load()).forAudience(
+      CalendarAudience.undergraduate,
+    );
+  } catch (error) {
+    // A bad optional calendar must not prevent login or absolute-date browsing.
+    debugPrint('[LearnY] Teaching calendar unavailable: $error');
+  }
 
   runApp(
     ProviderScope(
       overrides: [
+        academicCalendarProvider.overrideWithValue(calendar),
         cookieJarProvider.overrideWithValue(cookieJar),
         initialAuthUsernameProvider.overrideWithValue(
           bootstrap.initialAuthUsername,

@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:learn_y/core/api/learn_api.dart';
@@ -6,6 +7,29 @@ import 'package:learn_y/core/auth/credential_vault.dart';
 
 void main() {
   group('AuthReloginService', () {
+    test(
+      'enrollment timeout does not resubmit credentials or save them',
+      () async {
+        final vault = CredentialVault(_MemorySecureStorage());
+        var clients = 0;
+        final helper = _RecordingLearnHelper()..failWithTimeout = true;
+        final service = AuthReloginService(
+          vault,
+          helperFactory: () {
+            clients++;
+            return helper;
+          },
+        );
+        final result = await service.enrollCredential(
+          username: 'student',
+          password: 'example',
+        );
+        expect(result.succeeded, isFalse);
+        expect(clients, 1);
+        expect(helper.calls, hasLength(1));
+        expect(await vault.read(), isNull);
+      },
+    );
     test(
       'saveVerifiedCredential verifies and persists exact fingerprint fields',
       () async {
@@ -128,6 +152,7 @@ void main() {
 
 class _RecordingLearnHelper extends Learn2018Helper {
   final List<_LoginCall> calls = <_LoginCall>[];
+  bool failWithTimeout = false;
 
   @override
   Future<void> login([
@@ -150,6 +175,12 @@ class _RecordingLearnHelper extends Learn2018Helper {
         singleLoginEnabled: singleLoginEnabled,
       ),
     );
+    if (failWithTimeout) {
+      throw DioException(
+        requestOptions: RequestOptions(path: '/login'),
+        type: DioExceptionType.receiveTimeout,
+      );
+    }
   }
 }
 

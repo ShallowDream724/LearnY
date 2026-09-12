@@ -78,11 +78,15 @@ String learnCourseTimeLocation(String courseID) =>
 // Files
 // ---------------------------------------------------------------------------
 
-String learnFileList(String courseID, CourseType courseType) {
+String learnFileList(
+  String courseID,
+  CourseType courseType, {
+  int size = _maxSize,
+}) {
   if (courseType == CourseType.student) {
-    return '$learnPrefix/b/wlxt/kj/wlkc_kjxxb/student/kjxxbByWlkcidAndSizeForStudent?wlkcid=$courseID&size=$_maxSize';
+    return '$learnPrefix/b/wlxt/kj/wlkc_kjxxb/student/kjxxbByWlkcidAndSizeForStudent?wlkcid=$courseID&size=$size';
   } else {
-    return '$learnPrefix/b/wlxt/kj/v_kjxxb_wjwjb/teacher/queryByWlkcid?wlkcid=$courseID&size=$_maxSize';
+    return '$learnPrefix/b/wlxt/kj/v_kjxxb_wjwjb/teacher/queryByWlkcid?wlkcid=$courseID&size=$size';
   }
 }
 
@@ -309,15 +313,17 @@ String learnCommentList({ContentType? type}) =>
 // Page list (common form data for paginated endpoints)
 // ---------------------------------------------------------------------------
 
-Map<String, String> learnPageListFormData({String? courseID}) {
+Map<String, String> learnPageListFormData({
+  String? courseID,
+  int? offset,
+  int? length,
+}) {
   return {
-    'aoData': jsonEncode(
-      courseID != null
-          ? [
-              {'name': 'wlkcid', 'value': courseID},
-            ]
-          : [],
-    ),
+    'aoData': jsonEncode([
+      if (courseID != null) {'name': 'wlkcid', 'value': courseID},
+      if (offset != null) {'name': 'iDisplayStart', 'value': offset},
+      if (length != null) {'name': 'iDisplayLength', 'value': length},
+    ]),
   };
 }
 

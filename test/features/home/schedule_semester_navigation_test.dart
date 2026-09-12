@@ -19,9 +19,12 @@ import 'package:learn_y/features/home/providers/home_schedule_provider.dart';
 import 'package:learn_y/features/home/widgets/home_schedule_section.dart';
 import 'package:learn_y/features/home/widgets/weekly_timetable.dart';
 
+import '../../support/academic_calendar_fixture.dart';
+
 const summer = '2025-2026-3';
 const autumn = '2026-2027-1';
 const spring = '2025-2026-2';
+const unknownSpring = '2024-2025-2';
 final today = DateTime(2026, 9, 12);
 final _clock = StateProvider<DateTime>((ref) => today);
 
@@ -195,7 +198,7 @@ void main() {
     await tap(tester, find.byTooltip('查看整周课表'));
     await tap(tester, find.byTooltip('切换课表学期'));
     final tile = find.ancestor(
-      of: find.text('2025-2026 春季学期'),
+      of: find.text('2024-2025 春季学期'),
       matching: find.byType(ListTile),
     );
     expect(tester.widget<ListTile>(tile).enabled, isFalse);
@@ -230,6 +233,7 @@ class _Fixture {
   late final ProviderContainer container;
   static Future<_Fixture> create() async {
     final fixture = _Fixture();
+    final academicCalendar = await loadUndergraduateAcademicCalendarFixture();
     await SemesterRepository(
       database: fixture.database,
       apiClient: fixture.client,
@@ -241,6 +245,7 @@ class _Fixture {
         apiClientProvider.overrideWithValue(fixture.client),
         authProvider.overrideWith((ref) => _Auth()),
         initialCurrentSemesterIdProvider.overrideWithValue(summer),
+        academicCalendarProvider.overrideWithValue(academicCalendar),
         homeScheduleTodayProvider.overrideWith((ref) => ref.watch(_clock)),
         scheduleWeekProvider.overrideWith(
           (ref, week) => Stream.value(
@@ -278,7 +283,12 @@ class _Auth extends StateNotifier<AuthState> implements AuthController {
 class _Api extends Learn2018Helper {
   Completer<List<api.CourseInfo>>? pendingCourses;
   @override
-  Future<List<String>> getSemesterIdList() async => [autumn, summer, spring];
+  Future<List<String>> getSemesterIdList() async => [
+    autumn,
+    summer,
+    spring,
+    unknownSpring,
+  ];
   @override
   Future<api.SemesterInfo> getCurrentSemester() async => const api.SemesterInfo(
     id: summer,

@@ -502,7 +502,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final recoveryMethod = status.recoveryMethodDisplayLabel;
     final recoveryAt = status.lastRecoveryAt;
     if (recoveryMethod != null && recoveryAt != null) {
-      lines.add('最近恢复：$recoveryMethod · ${_formatStatusTime(recoveryAt)}');
+      lines.add('最近学堂恢复：$recoveryMethod · ${_formatStatusTime(recoveryAt)}');
     }
     return lines.join('\n');
   }

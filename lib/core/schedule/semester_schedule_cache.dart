@@ -137,6 +137,9 @@ resolveSemesterScheduleItemsByDateKey({
     for (final date in dates)
       DateFormat('yyyy-MM-dd').format(date): <_ScheduledOccurrence>[],
   };
+  final firstWeekMonday = semesterStart.subtract(
+    Duration(days: semesterStart.weekday - DateTime.monday),
+  );
 
   for (final course in cache.courses) {
     for (final date in dates) {
@@ -145,7 +148,7 @@ resolveSemesterScheduleItemsByDateKey({
         continue;
       }
 
-      final weekNumber = (dayOffset ~/ 7) + 1;
+      final weekNumber = (date.difference(firstWeekMonday).inDays ~/ 7) + 1;
       if (weekNumber > _fullWeekCount) continue;
       final dateKey = DateFormat('yyyy-MM-dd').format(date);
       final dayOccurrences = occurrencesByDateKey[dateKey]!;

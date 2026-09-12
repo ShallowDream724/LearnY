@@ -19,7 +19,8 @@ void main() {
 
     test('rejects session-expired html payloads for non-html files', () async {
       final file = await _writeTempFile(
-        'login_timeout<script>location.href="/login"</script>',
+        '<html><title>登录超时</title><div class="bground">'
+        '<p class="infoo">您未登录或登录失效</p></div></html>',
       );
 
       addTearDown(() async {
@@ -62,6 +63,47 @@ void main() {
       expect(result.isValid, isTrue);
       expect(result.looksLikeSessionExpired, isFalse);
     });
+
+    test(
+      'ordinary HTML does not request credentials; expiry does even for HTML attachments',
+      () async {
+        final file = await _writeTempFile('');
+        addTearDown(() => file.parent.delete(recursive: true));
+        for (final sample in [
+          (
+            '<html><p>统一身份认证教程</p><script>location.href="lesson.html"</script></html>',
+            'pdf',
+            false,
+            false,
+          ),
+          (
+            '<html><form id="theform">Example</form></html>',
+            'html',
+            true,
+            false,
+          ),
+          ('<html><title>登录超时</title></html>', 'html', false, true),
+        ]) {
+          await file.writeAsString(sample.$1);
+          final result = await inspector.inspect(
+            file: file,
+            headers: Headers.fromMap({
+              'content-type': ['text/html'],
+            }),
+            statusCode: 200,
+            expectedFileType: sample.$2,
+          );
+          expect(result.isValid, sample.$3);
+          expect(result.looksLikeSessionExpired, sample.$4);
+        }
+        final forbidden = await inspector.inspect(
+          file: file,
+          headers: Headers(),
+          statusCode: 403,
+        );
+        expect(forbidden.looksLikeSessionExpired, isTrue);
+      },
+    );
   });
 
   group('FileDownloadNotifier', () {

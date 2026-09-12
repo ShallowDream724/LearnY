@@ -8,6 +8,7 @@ import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 
 import '../api/urls.dart' as urls;
+import '../api/session_page_detection.dart';
 import '../api/utils.dart';
 import '../auth/session_recovery_coordinator.dart';
 import '../design/app_theme_colors.dart';
@@ -448,11 +449,9 @@ class _AuthenticatedHtmlImageState
     }
 
     final api = ref.read(apiClientProvider);
-    final preparedUri = _appendCsrfIfNeeded(uri, api.getCSRFToken());
-
     Future<Response<List<int>>> request() {
       return api.dio.getUri<List<int>>(
-        preparedUri,
+        withLearnAssetCsrf(uri, api.getCSRFToken()),
         options: Options(
           responseType: ResponseType.bytes,
           validateStatus: (status) => status != null && status < 500,
@@ -461,7 +460,7 @@ class _AuthenticatedHtmlImageState
     }
 
     var response = await request();
-    if (_looksLikeTimedOutHtml(response)) {
+    if (isLearnAssetUri(uri) && _looksLikeTimedOutHtml(response)) {
       final recovered = await ref
           .read(sessionRecoveryCoordinatorProvider)
           .recoverSession(apiClient: api);
@@ -471,7 +470,10 @@ class _AuthenticatedHtmlImageState
     }
 
     final bytes = response.data;
-    if (response.statusCode != 200 || bytes == null || bytes.isEmpty) {
+    if (response.statusCode != 200 ||
+        bytes == null ||
+        bytes.isEmpty ||
+        _looksLikeTimedOutHtml(response)) {
       throw StateError('image_fetch_failed');
     }
     return Uint8List.fromList(bytes);
@@ -492,31 +494,18 @@ class _AuthenticatedHtmlImageState
   }
 
   bool _looksLikeTimedOutHtml(Response<List<int>> response) {
-    final contentType =
-        response.headers.value(Headers.contentTypeHeader)?.toLowerCase() ?? '';
-    if (!contentType.contains('text/html')) {
-      return false;
-    }
+    if (response.statusCode == 401 || response.statusCode == 403) return true;
+    if (isIdentityLoginUri(response.realUri)) return true;
     final bytes = response.data;
     if (bytes == null || bytes.isEmpty) {
       return false;
     }
-    final preview = utf8.decode(bytes, allowMalformed: true);
-    return _isIdentityLoginUri(response.realUri) ||
-        _looksLikeIdentityLoginPage(preview);
-  }
-
-  Uri _appendCsrfIfNeeded(Uri uri, String csrfToken) {
-    if (csrfToken.isEmpty) {
-      return uri;
-    }
-    if (!uri.host.endsWith('tsinghua.edu.cn')) {
-      return uri;
-    }
-    if (uri.queryParameters.containsKey('_csrf')) {
-      return uri;
-    }
-    return Uri.parse(urls.addCSRFTokenToUrl(uri.toString(), csrfToken));
+    final preview = utf8.decode(
+      bytes.take(8192).toList(),
+      allowMalformed: true,
+    );
+    return looksLikeIdentityLoginPage(preview) ||
+        looksLikeLearnSessionExpiredPage(preview);
   }
 
   @override
@@ -637,36 +626,4 @@ class _AuthenticatedHtmlImageState
       },
     );
   }
-}
-
-bool _isIdentityLoginUri(Uri? uri) {
-  if (uri == null) {
-    return false;
-  }
-
-  final identityHost = Uri.parse(urls.idPrefix).host;
-  if (uri.host == identityHost) {
-    return true;
-  }
-
-  final normalized = uri.toString();
-  return normalized.contains('login_timeout') ||
-      normalized.contains('/do/off/ui/auth/login/');
-}
-
-bool _looksLikeIdentityLoginPage(String pageSource) {
-  if (pageSource.isEmpty) {
-    return false;
-  }
-
-  final normalized = pageSource.toLowerCase();
-  return normalized.contains('id="theform"') ||
-      normalized.contains("id='theform'") ||
-      normalized.contains('id="sm2publickey"') ||
-      normalized.contains("id='sm2publickey'") ||
-      normalized.contains('name="i_user"') ||
-      normalized.contains("name='i_user'") ||
-      normalized.contains('name="i_pass"') ||
-      normalized.contains("name='i_pass'") ||
-      normalized.contains('统一身份认证');
 }

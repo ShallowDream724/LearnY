@@ -38,6 +38,28 @@ credentials and must remain untracked.
 
 ## Why this exists
 
+The 2026-09-12 protocol findings and coverage boundaries are maintained in
+[SCHOOL_INTERFACES.md](../../docs/SCHOOL_INTERFACES.md). Additional runner flags:
+
+| Environment variable | Meaning |
+| --- | --- |
+| `LEARNY_PROBE_FULL_TERM=1` | Query the verified 2026 autumn range once |
+| `LEARNY_PROBE_READ_CONTRACTS=1` | Sample semester/roster, notification, homework/feedback and file read contracts |
+| `LEARNY_PROBE_DENSE_SAMPLE=1` | Sample a prior spring course ranked by content counts |
+| `LEARNY_PROBE_PAGINATION=1` | Add size-one file and notification requests to verify pagination semantics |
+| `LEARNY_PROBE_PASSWORD_LIMIT=0` | Disable identity password submissions; use for cookie-only follow-ups |
+| `LEARNY_PROBE_SKIP_CREDENTIAL_LOGIN=1` | Skip the initial explicit credential-login stage |
+| `LEARNY_PROBE_IDENTITY_URL` | Optional previously observed identity form to inspect |
+| `LEARNY_PROBE_CREDENTIAL_JSON` | Optional in-process credential, never print or persist this value |
+| `LEARNY_PROBE_SNAPSHOT_OUTPUT` | Export resulting cookies to a separate ignored snapshot, never the original source |
+
+The read probe uses production parsers, logs shapes/counts rather than bodies,
+and consumes at most a 4096-byte download prefix. Some school downloads ignore
+Range; the probe stops reading the stream after the prefix. It never calls
+homework submission, favorites, mark-read, or other mutation endpoints. The
+runner returning a passing test does not imply every reported service succeeded:
+inspect its classified report. Keep all cookie exports and browser profiles ignored.
+
 - Keep auth debugging out of production UI flows.
 - Reuse the real `Learn2018Helper` and auth core instead of writing a second
   login implementation.

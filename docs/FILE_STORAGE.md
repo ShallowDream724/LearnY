@@ -49,6 +49,16 @@ to PDF, ZIP, images and text through the common file detail screen.
 Preview preparation awaits text/ZIP work inside its error boundary so asynchronous
 read/parse failures return the normal preview fallback.
 
+Downloads and inline HTML images share structural session-page detection with
+the API client. Learn's HTTP 200 expiry pages and HTTP 401/403 can trigger one
+recovery; ordinary HTML, redirects mentioned in course prose, and transport
+failures cannot trigger credential submission. Even an HTML attachment is
+rejected if it is an actual login page. CSRF is attached only to the exact Learn
+HTTPS host and recomputed for each attempt after recovery. The inspector decodes
+an 8192-byte prefix as UTF-8 so Chinese error markers remain recognizable.
+MIME is not treated as proof of file format; see the bounded production samples
+in [SCHOOL_INTERFACES.md](SCHOOL_INTERFACES.md).
+
 ## PDF and ZIP Preview
 
 PDFs use the local `pdfrx` 2.2.24 Flutter viewer with `pdfrx_engine` 0.3.9/PDFium,

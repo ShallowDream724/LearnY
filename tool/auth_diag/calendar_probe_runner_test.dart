@@ -10,12 +10,15 @@ import 'package:html/parser.dart' as html;
 import 'package:learn_y/core/api/learn_api.dart';
 import 'package:learn_y/core/api/models.dart';
 import 'package:learn_y/core/api/registrar_calendar_api.dart';
+import 'package:learn_y/core/auth/credential_vault.dart';
 import 'package:learn_y/core/database/database.dart';
 import 'package:learn_y/core/schedule/schedule_repository.dart';
 import 'package:learn_y/core/schedule/schedule_projection.dart';
 import 'package:learn_y/core/sync/sync_operation.dart';
 import 'package:learn_y/core/semester/semester_repository.dart';
+import 'package:learn_y/core/semester/academic_calendar_catalog.dart';
 import 'package:drift/native.dart';
+import 'school_read_contract_probe.dart';
 
 /// Explicit local probe. Cookie changes live in memory and logs contain no payloads.
 void main() {
@@ -28,6 +31,9 @@ void main() {
       debugPrint = (message, {wrapWidth}) {};
       addTearDown(() => debugPrint = oldDebugPrint);
       final storage = _SnapshotStorage(cookiePath);
+      final credential = StoredCredential.fromJsonString(
+        Platform.environment['LEARNY_PROBE_CREDENTIAL_JSON'],
+      );
       final persisted = PersistCookieJar(storage: storage);
       final gatewayCapture =
           Platform.environment['LEARNY_PROBE_GATEWAY_COOKIES'];
@@ -65,6 +71,17 @@ void main() {
       helper = Learn2018Helper(
         config: HelperConfig(
           cookieJar: persisted,
+          campusCredentialProvider: credential == null
+              ? null
+              : () async => Credential(
+                  username: credential.username,
+                  password: credential.password,
+                  fingerPrint: credential.fingerPrint,
+                  fingerGenPrint: credential.fingerGenPrint,
+                  fingerGenPrint3: credential.fingerGenPrint3,
+                  deviceName: credential.deviceName,
+                  singleLoginEnabled: credential.singleLoginEnabled,
+                ),
           sessionRecoveryHandler: () => helper.attemptSilentSessionRecovery(),
         ),
       );
@@ -79,13 +96,37 @@ void main() {
         );
       }
       final requests = <Map<String, Object?>>[];
+      final courseScores = <String, int>{};
+      var passwordPosts = 0;
+      final passwordLimit =
+          int.tryParse(
+            Platform.environment['LEARNY_PROBE_PASSWORD_LIMIT'] ?? '1',
+          ) ??
+          1;
       helper.dio.interceptors.add(
         InterceptorsWrapper(
+          onRequest: (options, handler) {
+            if (options.method == 'POST' &&
+                options.uri.host == 'id.tsinghua.edu.cn' &&
+                options.uri.path == '/do/off/ui/auth/login/check' &&
+                ++passwordPosts > passwordLimit) {
+              handler.reject(
+                DioException(
+                  requestOptions: options,
+                  type: DioExceptionType.cancel,
+                  error: 'Diagnostic password submission limit reached',
+                ),
+              );
+              return;
+            }
+            handler.next(options);
+          },
           onResponse: (response, handler) {
             final location = Uri.tryParse(
               response.headers.value('location') ?? '',
             );
             requests.add({
+              'method': response.requestOptions.method,
               'host': response.requestOptions.uri.host,
               'path': response.requestOptions.uri.path.replaceAll(
                 RegExp(r';[^/]*'),
@@ -97,6 +138,31 @@ void main() {
                 'redirect':
                     '${location.scheme}://${location.host}${location.path.replaceAll(RegExp(r';[^/]*'), '')}',
             });
+            if (Platform.environment['LEARNY_PROBE_READ_CONTRACTS'] == '1') {
+              try {
+                final data = response.data is String
+                    ? jsonDecode(response.data)
+                    : response.data;
+                if (data is Map || data is List) {
+                  requests.last['shape'] = _shape(data);
+                }
+                if (response.requestOptions.uri.path.contains(
+                      '/loadCourseBySemesterId/',
+                    ) &&
+                    data is Map) {
+                  for (final course
+                      in (data['resultList'] as List).whereType<Map>()) {
+                    int count(String key) =>
+                        int.tryParse(course[key]?.toString() ?? '') ?? 0;
+                    courseScores[course['wlkcid'].toString()] =
+                        (count('ggs') > 0 ? 1000 : 0) +
+                        (count('zls') > 0 ? 100 : 0) +
+                        (count('zys') > 0 ? 100 : 0) -
+                        count('zys');
+                  }
+                }
+              } catch (_) {}
+            }
             if (response.requestOptions.uri.host == 'id.tsinghua.edu.cn' &&
                 response.statusCode == 200) {
               final page = html.parse(response.data?.toString() ?? '');
@@ -113,7 +179,30 @@ void main() {
                 'singleLogin': (response.data ?? '').contains('checkSingle'),
                 'forms': page
                     .querySelectorAll('form[action]')
-                    .map((node) => destination(node.attributes['action']!))
+                    .map(
+                      (node) => {
+                        'action': destination(node.attributes['action']!),
+                        'inputs': node.querySelectorAll('input').map((input) {
+                          final value = input.attributes['value'] ?? '';
+                          return {
+                            'name': input.attributes['name'],
+                            'type': input.attributes['type'],
+                            'valueKind': value.isEmpty
+                                ? 'empty'
+                                : {
+                                    'on',
+                                    'off',
+                                    'true',
+                                    'false',
+                                    '0',
+                                    '1',
+                                  }.contains(value)
+                                ? value
+                                : 'opaque:${value.length}',
+                          };
+                        }).toList(),
+                      },
+                    )
                     .toList(),
                 'links': page
                     .querySelectorAll('a[href]')
@@ -148,7 +237,40 @@ void main() {
           },
         ),
       );
+      final identityUrl = Platform.environment['LEARNY_PROBE_IDENTITY_URL'];
+      if (identityUrl != null) {
+        await helper.dio.get<String>(
+          identityUrl,
+          options: Options(
+            followRedirects: false,
+            responseType: ResponseType.plain,
+            validateStatus: (_) => true,
+          ),
+        );
+        stdout.writeln(const JsonEncoder.withIndent('  ').convert(requests));
+        return;
+      }
       final result = <String, Object?>{};
+      if (credential != null &&
+          Platform.environment['LEARNY_PROBE_SKIP_CREDENTIAL_LOGIN'] != '1') {
+        try {
+          await helper.login(
+            credential.username,
+            credential.password,
+            credential.fingerPrint,
+            credential.fingerGenPrint,
+            credential.fingerGenPrint3,
+            credential.deviceName,
+            credential.singleLoginEnabled,
+          );
+          result['credentialRecovery'] = 'success';
+        } catch (error) {
+          result['credentialRecovery'] = _error(error);
+          result['requests'] = requests;
+          stdout.writeln(const JsonEncoder.withIndent('  ').convert(result));
+          return;
+        }
+      }
       try {
         final semester = await helper.getCurrentSemester();
         result['learn'] = {
@@ -160,9 +282,27 @@ void main() {
       } catch (error) {
         result['learn'] = _error(error);
       }
+      if (Platform.environment['LEARNY_PROBE_READ_CONTRACTS'] == '1') {
+        try {
+          result['readContracts'] = await probeSchoolReadContracts(
+            helper,
+            (result['learn'] as Map)['semester'] as String,
+            courseScores,
+          );
+        } catch (error) {
+          result['readContracts'] = _error(error);
+        }
+        result['requests'] = requests;
+        stdout.writeln(const JsonEncoder.withIndent('  ').convert(result));
+        return;
+      }
       for (final range in [
-        ('2026-09-07', '2026-09-13'),
-        if (Platform.environment['LEARNY_PROBE_SINGLE_RANGE'] != '1')
+        if (Platform.environment['LEARNY_PROBE_FULL_TERM'] == '1')
+          ('2026-09-14', '2027-01-17')
+        else
+          ('2026-09-07', '2026-09-13'),
+        if (Platform.environment['LEARNY_PROBE_FULL_TERM'] != '1' &&
+            Platform.environment['LEARNY_PROBE_SINGLE_RANGE'] != '1')
           ('2026-09-14', '2026-09-20'),
         if (Platform.environment['LEARNY_PROBE_EXTENDED'] == '1')
           ('2026-04-20', '2026-04-26'),
@@ -204,17 +344,25 @@ void main() {
             throw StateError('Autumn semester missing from the server catalog');
           }
           final operation = SyncOperation();
-          final projected =
-              await ScheduleRepository(database: database, apiClient: helper)
-                  .watch(
-                    days: buildHomeScheduleDays(DateTime(2026, 9, 14)),
-                    fetchRemote: true,
-                    operation: operation,
-                  )
-                  .firstWhere(
-                    (state) =>
-                        !state.isRefreshing && state.snapshot.hasRoutineData,
-                  );
+          addTearDown(operation.cancel);
+          final calendar = AcademicCalendarCatalog.parse(
+            await File('assets/calendar/academic_terms.json').readAsString(),
+          ).forAudience(CalendarAudience.undergraduate);
+          final repository = ScheduleRepository(
+            database: database,
+            apiClient: helper,
+            academicCalendar: calendar,
+          );
+          addTearDown(repository.dispose);
+          final projected = await repository
+              .watch(
+                days: buildHomeScheduleDays(DateTime(2026, 9, 14)),
+                fetchRemote: true,
+                operation: operation,
+              )
+              .firstWhere(
+                (state) => !state.isRefreshing && state.snapshot.hasRoutineData,
+              );
           final courses = await database.getCoursesBySemester('2026-2027-1');
           result['fallLearnCourses'] = {
             'count': courses.length,
@@ -238,6 +386,9 @@ void main() {
         }
       }
       result['requests'] = requests;
+      final snapshotOutput =
+          Platform.environment['LEARNY_PROBE_SNAPSHOT_OUTPUT'];
+      if (snapshotOutput != null) await storage.exportTo(snapshotOutput);
       stdout.writeln(const JsonEncoder.withIndent('  ').convert(result));
     },
     timeout: const Timeout(Duration(minutes: 3)),
@@ -251,6 +402,44 @@ Map<String, Object?> _error(Object error) => {
   if (error is RegistrarException) 'reason': error.failure.name,
   if (error is DioException) 'reason': error.type.name,
 };
+
+Object _shape(Object? value, [int depth = 0]) {
+  if (value is List) {
+    return {
+      'count': value.length,
+      if (value.firstOrNull is Map)
+        'rowKeys': (value.first as Map).keys.toList(),
+    };
+  }
+  if (value is Map) {
+    return {
+      'keys': value.keys.toList(),
+      for (final key in [
+        'iTotalRecords',
+        'iTotalDisplayRecords',
+        'iDisplayStart',
+        'iDisplayLength',
+        'total',
+        'totalCount',
+        'records',
+      ])
+        if (num.tryParse(value[key]?.toString() ?? '') != null)
+          key: num.parse(value[key].toString()),
+      if (depth < 2)
+        for (final key in [
+          'object',
+          'result',
+          'aaData',
+          'resultList',
+          'resultsList',
+          'rows',
+        ])
+          if (value[key] is Map || value[key] is List)
+            key: _shape(value[key], depth + 1),
+    };
+  }
+  return value.runtimeType.toString();
+}
 
 class _SnapshotStorage implements Storage {
   _SnapshotStorage(this.path);
@@ -286,5 +475,18 @@ class _SnapshotStorage implements Storage {
   @override
   Future<void> deleteAll(List<String> keys) async {
     _data.clear();
+  }
+
+  Future<void> exportTo(String destination) async {
+    if (Directory(destination).absolute.path == Directory(path).absolute.path) {
+      throw StateError('Cannot overwrite the source cookie snapshot');
+    }
+    final directory = await Directory(
+      '$destination/ie0_ps1',
+    ).create(recursive: true);
+    for (final entry in _data.entries) {
+      if (!RegExp(r'^[.a-zA-Z0-9_-]+$').hasMatch(entry.key)) continue;
+      await File('${directory.path}/${entry.key}').writeAsString(entry.value);
+    }
   }
 }

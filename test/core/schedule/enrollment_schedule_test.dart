@@ -10,6 +10,8 @@ import 'package:learn_y/core/schedule/schedule_projection.dart';
 import 'package:learn_y/core/schedule/schedule_repository.dart';
 import 'package:learn_y/core/sync/sync_operation.dart';
 
+import '../../support/academic_calendar_fixture.dart';
+
 void main() {
   test(
     'failed schedule metadata preserves cached recurrence, a successful empty value clears it',
@@ -45,10 +47,12 @@ void main() {
       );
       final client = _Api()..courses = [_course('old')];
       final catalog = CourseCatalogRepository(database: db, apiClient: client);
+      final academicCalendar = await loadUndergraduateAcademicCalendarFixture();
       final repository = ScheduleRepository(
         database: db,
         apiClient: client,
         courseCatalog: catalog,
+        academicCalendar: academicCalendar,
         now: () => DateTime(2026, 9, 7),
       );
       final days = buildHomeScheduleDays(DateTime(2026, 9, 14));
@@ -83,6 +87,7 @@ void main() {
         database: db,
         apiClient: client,
         courseCatalog: catalog,
+        academicCalendar: academicCalendar,
         now: () => DateTime(2026, 9, 21),
       ).watch(days: days, fetchRemote: false, operation: SyncOperation()).first;
       expect(

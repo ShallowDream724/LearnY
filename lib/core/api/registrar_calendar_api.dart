@@ -294,7 +294,8 @@ class RegistrarCalendarApi {
           target.path == '/thu-oauth/callback';
       final oauthCallback =
           target.host == 'oauth.tsinghua.edu.cn' &&
-          target.path.startsWith('/lb-auth/');
+          (target.path == '/thu-oauth/callback' ||
+              target.path.startsWith('/lb-auth/'));
       if (identityCallback || oauthCallback) destinations.add(target);
     }
     // The SSO success page uses a callback anchor instead of an HTTP redirect.
@@ -303,6 +304,12 @@ class RegistrarCalendarApi {
   }
 
   void _verify(Response<String> response, {bool landingPage = false}) {
+    final path = response.requestOptions.uri.path;
+    if (path.endsWith('/sso_fail.jsp') || path.endsWith('/timeout.jsp')) {
+      // The service ticket can be lost/consumed while WebVPN establishes its
+      // own session. Renew the registrar ticket once, using the existing VPN.
+      throw const RegistrarException(RegistrarFailure.authorization);
+    }
     final status = response.statusCode ?? 0;
     if (status == 401 || status == 403) {
       throw const RegistrarException(RegistrarFailure.authorization);

@@ -11,6 +11,36 @@ import 'package:learn_y/core/api/registrar_calendar_api.dart';
 import 'package:learn_y/core/api/utils.dart';
 
 void main() {
+  for (final failurePage in ['sso_fail.jsp', 'timeout.jsp']) {
+    test('HTTP 200 $failurePage renews the registrar ticket once', () async {
+      final dio = Dio();
+      addTearDown(() => dio.close());
+      var tickets = 0;
+      dio.httpClientAdapter = _Adapter((options, _) {
+        final path = options.uri.path;
+        if (path == '/j_acegi_login.do') {
+          return tickets == 1
+              ? _redirect('/$failurePage')
+              : _response('authorized');
+        }
+        if (path == '/$failurePage') {
+          return _response('<html>service error</html>');
+        }
+        return _response(
+          '$jsonpExtractorName([{ "nq":"20261231", "nr":"Course" }])',
+        );
+      });
+      final api = RegistrarCalendarApi(
+        dio: dio,
+        fetchTicket: () async => 'ticket-${++tickets}',
+        authenticateIdentity: (_) async =>
+            fail('ticket renewal must reuse identity'),
+      );
+      final events = await api.getCalendar('2026-09-14', '2027-01-17');
+      expect(tickets, 2);
+      expect(events.single.date, '20261231');
+    });
+  }
   test(
     'campus challenge preserves WebVPN entry for browser OAuth state',
     () async {
@@ -127,7 +157,7 @@ void main() {
           expect(body, contains('fingerGenPrint=trusted'));
           expect(options.headers['Referer'], endsWith('/form/campus/0'));
           return _response(
-            '<a href="/thu-oauth/callback?ticket=campus">Continue</a>',
+            '<a href="https://oauth.tsinghua.edu.cn/thu-oauth/callback?ticket=campus">Continue</a>',
           );
         }
         if (uri.path == '/thu-oauth/callback') {

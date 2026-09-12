@@ -10,6 +10,23 @@ import 'package:learn_y/core/api/urls.dart' as urls;
 
 void main() {
   group('learn auth page detection', () {
+    test('asset retry replaces CSRF only on the exact Learn HTTPS origin', () {
+      final uri = Uri.parse(
+        'https://learn.tsinghua.edu.cn/image?id=1&id=2&_csrf=old',
+      );
+      final first = withLearnAssetCsrf(uri, 'first');
+      final retry = withLearnAssetCsrf(first, 'fresh');
+      expect(retry.queryParameters['_csrf'], 'fresh');
+      expect(retry.queryParametersAll['id'], ['1', '2']);
+      for (final target in [
+        'https://example.tsinghua.edu.cn/image',
+        'https://learn.tsinghua.edu.cn.example.org/image',
+        'http://learn.tsinghua.edu.cn/image',
+      ]) {
+        final external = Uri.parse(target);
+        expect(withLearnAssetCsrf(external, 'secret'), external);
+      }
+    });
     test('recognizes the school HTTP 200 expiry and wrapped 403 pages', () {
       for (final page in [_expiredPage, _forbiddenPage]) {
         expect(looksLikeLearnSessionExpiredPage(page), isTrue);

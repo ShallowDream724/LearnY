@@ -14,12 +14,14 @@ import '../../../core/sync/sync_operation.dart';
 import '../../../core/utils/deadline_time.dart';
 
 final scheduleRepositoryProvider = Provider<ScheduleRepository>((ref) {
-  return ScheduleRepository(
+  final repository = ScheduleRepository(
     database: ref.watch(databaseProvider),
     apiClient: ref.watch(learningReadApiProvider),
     courseCatalog: ref.watch(courseCatalogRepositoryProvider),
     academicCalendar: ref.watch(academicCalendarProvider),
   );
+  ref.onDispose(repository.dispose);
+  return repository;
 });
 
 final scheduleSemesterNavigationProvider = Provider<ScheduleSemesterNavigation>(

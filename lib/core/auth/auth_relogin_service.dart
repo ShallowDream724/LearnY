@@ -128,7 +128,7 @@ class AuthReloginService {
   Future<AuthReloginResult> _verifyAndPersistCredential(
     StoredCredential credential,
   ) async {
-    final verification = await _verifyCredentialWithRetry(credential);
+    final verification = await _verifyCredential(credential);
     if (!verification.succeeded) {
       return verification;
     }
@@ -137,40 +137,22 @@ class AuthReloginService {
     return verification;
   }
 
-  Future<AuthReloginResult> _verifyCredentialWithRetry(
+  Future<AuthReloginResult> _verifyCredential(
     StoredCredential credential,
   ) async {
-    final delays = <Duration>[
-      Duration.zero,
-      const Duration(milliseconds: 900),
-      const Duration(milliseconds: 1800),
-    ];
-
-    AuthReloginResult? lastResult;
-    for (var attempt = 0; attempt < delays.length; attempt++) {
-      final delay = delays[attempt];
-      if (delay > Duration.zero) {
-        await Future<void>.delayed(delay);
-      }
-
-      final helper = _helperFactory();
-      final result = await _attemptLogin(
+    // A transport failure may occur after the school accepted the password.
+    // Fresh clients would reset the identity submission budget on every retry.
+    final helper = _helperFactory();
+    try {
+      return await _attemptLogin(
         helper,
         credential,
-        attemptCount: attempt + 1,
+        attemptCount: 1,
         flowLabel: 'Enrollment verification',
       );
-      if (result.succeeded) {
-        return result;
-      }
-      lastResult = result;
-      if (!result.shouldRetry) {
-        break;
-      }
+    } finally {
+      helper.dio.close();
     }
-
-    return lastResult ??
-        const AuthReloginResult.failure(stage: AuthReloginFailureStage.unknown);
   }
 
   Future<AuthReloginResult> _attemptLogin(

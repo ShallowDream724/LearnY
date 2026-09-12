@@ -108,6 +108,8 @@ Windows 本地运行、热重载和人工验收见 [Windows 开发文档](docs/W
 
 Android 模拟器的本机启动参数、安装和课程页验证见 [Android 开发文档](docs/ANDROID_DEVELOPMENT.md)。
 
+学校接口、认证链路和实测边界见[学校接口文档](docs/SCHOOL_INTERFACES.md)；开学日、考试周和后续年度的数据维护见[教学校历维护](docs/ACADEMIC_CALENDAR.md)。
+
 ```bash
 flutter pub get
 flutter run

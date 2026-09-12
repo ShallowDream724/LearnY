@@ -14,70 +14,61 @@ import 'package:learn_y/core/schedule/schedule_models.dart';
 import 'package:learn_y/core/schedule/schedule_projection.dart';
 import 'package:learn_y/core/schedule/schedule_repository.dart';
 import 'package:learn_y/core/sync/sync_operation.dart';
-import 'package:learn_y/core/semester/academic_calendar.dart';
+
+import '../../support/academic_calendar_fixture.dart';
 
 void main() {
   const semester = ScheduleRepository.calendarCacheScope;
   final days = buildHomeScheduleDays(DateTime(2026, 9, 7));
 
   test(
-    'local recurrence respects both semester bounds and updates when dates arrive',
+    'local recurrence uses maintained teaching bounds instead of Learn metadata',
     () async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
-      Future<void> saveTerm(String id, String start, String end) =>
-          db.upsertSemester(
-            SemestersCompanion.insert(
-              id: id,
-              startDate: start,
-              endDate: end,
-              startYear: 2026,
-              endYear: 2027,
-              type: 'fall',
-            ),
-          );
-      await saveTerm('2025-2026-3', '2026-06-29', '2026-09-13');
-      await saveTerm('2026-2027-1', '', '');
-      for (final id in ['2025-2026-3', '2026-2027-1']) {
-        await db.upsertCourse(
-          CoursesCompanion.insert(
-            id: id,
-            name: id,
-            chineseName: id,
-            courseType: 'student',
-            semesterId: id,
-            timeAndLocationJson: Value(jsonEncode(['星期一第1节(全周)，六教101'])),
-          ),
-        );
-      }
+      await _saveAutumnTerm(db);
+      await db.upsertCourse(
+        CoursesCompanion.insert(
+          id: 'autumn-course',
+          name: 'Autumn course',
+          chineseName: 'Autumn course',
+          courseType: 'student',
+          semesterId: '2026-2027-1',
+          timeAndLocationJson: Value(jsonEncode(['星期一第1节(全周)，六教101'])),
+        ),
+      );
       final repository = ScheduleRepository(
         database: db,
         apiClient: CalendarFake(),
-        academicCalendar: const AcademicCalendar(supplement: []),
+        academicCalendar: await loadUndergraduateAcademicCalendarFixture(),
       );
-      final subscription = StreamIterator(
-        repository.watch(
-          days: buildHomeScheduleDays(DateTime(2026, 9, 14)),
-          fetchRemote: false,
-          operation: SyncOperation(),
-        ),
-      );
-      addTearDown(subscription.cancel);
-      await subscription.moveNext();
+      addTearDown(repository.dispose);
+      final beforeTeachingTerm = await repository
+          .watch(
+            days: buildHomeScheduleDays(DateTime(2026, 9, 7)),
+            fetchRemote: false,
+            operation: SyncOperation(),
+          )
+          .first;
       expect(
-        subscription.current.snapshot.itemsByDateKey.values.expand(
+        beforeTeachingTerm.snapshot.itemsByDateKey.values.expand(
           (items) => items,
         ),
         isEmpty,
       );
-      await saveTerm('2026-2027-1', '2026-09-14', '2027-01-17');
-      await subscription.moveNext();
+      final firstTeachingWeek = await repository
+          .watch(
+            days: buildHomeScheduleDays(DateTime(2026, 9, 14)),
+            fetchRemote: false,
+            operation: SyncOperation(),
+          )
+          .first;
       expect(
-        subscription.current.snapshot.itemsByDateKey.values
+        firstTeachingWeek.snapshot.itemsByDateKey.values
             .expand((items) => items)
             .single
             .courseId,
-        '2026-2027-1',
+        'autumn-course',
       );
     },
   );
@@ -101,7 +92,7 @@ void main() {
   });
 
   test(
-    'each week is fetched and cached independently, including a confirmed empty week',
+    'an unknown range keeps independent weekly fetches and empty-week caches',
     () async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
@@ -136,6 +127,91 @@ void main() {
           isNull,
         );
       }
+    },
+  );
+
+  test(
+    'known term shares one full-range request and caches every week for offline use',
+    () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await _saveAutumnTerm(db);
+      final client = CalendarFake()
+        ..pending = Completer<List<api.CalendarEvent>>();
+      final repository = ScheduleRepository(
+        database: db,
+        apiClient: client,
+        academicCalendar: await loadUndergraduateAcademicCalendarFixture(),
+        now: () => DateTime(2026, 9, 14),
+      );
+      addTearDown(repository.dispose);
+      final firstOperation = SyncOperation();
+      final firstTask = repository
+          .watch(
+            days: buildHomeScheduleDays(DateTime(2026, 9, 14)),
+            fetchRemote: true,
+            operation: firstOperation,
+          )
+          .toList();
+      await client.started.future;
+      expect(client.calls, ['2026-09-14/2027-01-17']);
+
+      final secondDays = buildHomeScheduleDays(DateTime(2026, 9, 21));
+      final secondRefreshing = Completer<void>();
+      final secondTask = repository
+          .watch(
+            days: secondDays,
+            fetchRemote: true,
+            operation: SyncOperation(),
+          )
+          .firstWhere((state) {
+            if (state.isRefreshing && !secondRefreshing.isCompleted) {
+              secondRefreshing.complete();
+            }
+            return !state.isRefreshing &&
+                state.snapshot.itemsFor(secondDays.first).isNotEmpty;
+          });
+      await secondRefreshing.future;
+      firstOperation.cancel();
+      client.pending!.complete([_eventOn('2026-09-21')]);
+      await firstTask;
+      final second = await secondTask;
+      expect(
+        second.snapshot.itemsFor(secondDays.first).single.courseName,
+        'Remote course',
+      );
+      expect(client.calls, hasLength(1));
+
+      for (
+        var week = DateTime(2026, 9, 14);
+        !week.isAfter(DateTime(2027, 1, 17));
+        week = week.add(const Duration(days: 7))
+      ) {
+        final key = AppStateKeys.scheduleWeekSnapshot(
+          semester,
+          buildHomeScheduleDays(week).first.dateKey,
+        );
+        expect(await db.getState(key), isNotNull, reason: key);
+      }
+
+      client.fail = true;
+      final offlineRepository = ScheduleRepository(
+        database: db,
+        apiClient: client,
+        academicCalendar: await loadUndergraduateAcademicCalendarFixture(),
+        now: () => DateTime(2026, 9, 14),
+      );
+      addTearDown(offlineRepository.dispose);
+      final offline = await offlineRepository
+          .watch(
+            days: secondDays,
+            fetchRemote: true,
+            operation: SyncOperation(),
+          )
+          .first;
+      expect(offline.snapshot.itemsFor(secondDays.first), hasLength(1));
+      expect(offline.isRefreshing, isFalse);
+      expect(client.calls, hasLength(1));
     },
   );
 
@@ -224,31 +300,46 @@ void main() {
   );
 
   test(
-    'cancelling a request prevents late results from repopulating cleared account data',
+    'disposing the account repository prevents a late term result from refilling cleared data',
     () async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
+      await _saveAutumnTerm(db);
       final client = CalendarFake()
         ..pending = Completer<List<api.CalendarEvent>>();
-      final operation = SyncOperation();
-      final repository = ScheduleRepository(database: db, apiClient: client);
+      final repository = ScheduleRepository(
+        database: db,
+        apiClient: client,
+        academicCalendar: await loadUndergraduateAcademicCalendarFixture(),
+        now: () => DateTime(2026, 9, 14),
+      );
       final task = repository
-          .watch(days: days, fetchRemote: true, operation: operation)
+          .watch(
+            days: buildHomeScheduleDays(DateTime(2026, 9, 14)),
+            fetchRemote: true,
+            operation: SyncOperation(),
+          )
           .toList();
       await client.started.future;
-      operation.cancel();
+      expect(client.calls, ['2026-09-14/2027-01-17']);
+      repository.dispose();
       await db.clearUserScopedData();
-      client.pending!.complete([event]);
+      client.pending!.complete([_eventOn('2026-09-14')]);
       await task;
+      for (final firstDay in ['2026-09-14', '2027-01-11']) {
+        expect(
+          await db.getState(
+            AppStateKeys.scheduleWeekSnapshot(semester, firstDay),
+          ),
+          isNull,
+        );
+      }
       expect(
         await db.getState(
-          AppStateKeys.scheduleWeekSnapshot(semester, days.first.dateKey),
-        ),
-        isNull,
-      );
-      expect(
-        await db.getState(
-          AppStateKeys.scheduleWeekRefresh(semester, days.first.dateKey),
+          AppStateKeys.scheduleWeekRefresh(
+            'calendar-term-v1',
+            '2026-2027-1:2026-09-14:2027-01-17',
+          ),
         ),
         isNull,
       );
@@ -305,6 +396,32 @@ const event = api.CalendarEvent(
   date: '2026-09-07',
   courseName: 'Remote course',
 );
+
+api.CalendarEvent _eventOn(String date) => api.CalendarEvent(
+  location: event.location,
+  status: event.status,
+  startTime: event.startTime,
+  endTime: event.endTime,
+  date: date,
+  courseName: event.courseName,
+);
+
+Future<void> _saveAutumnTerm(AppDatabase db) async {
+  await db.upsertSemester(
+    SemestersCompanion.insert(
+      id: '2026-2027-1',
+      startDate: '2026-09-12',
+      endDate: '2027-02-14',
+      startYear: 2026,
+      endYear: 2027,
+      type: 'fall',
+    ),
+  );
+  await db.setState(
+    AppStateKeys.courseCatalogUpdatedAt('2026-2027-1'),
+    DateTime(2026, 9, 14).toIso8601String(),
+  );
+}
 
 class CalendarFake implements LearningReadApi {
   final calls = <String>[];
