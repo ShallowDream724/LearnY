@@ -28,7 +28,7 @@ class HomeworkStatusHeader extends ConsumerWidget {
     final status = StudyPalette.of(context, statusTone);
 
     return StudySurface(
-      tone: StudyPalette.course(homework.courseId),
+      tone: StudyPalette.course(context, homework.courseId),
       padding: const EdgeInsets.all(22),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

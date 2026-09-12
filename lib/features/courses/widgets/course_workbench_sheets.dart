@@ -6,6 +6,8 @@ import '../../../core/design/colors.dart';
 import '../../../core/design/typography.dart';
 import '../../../core/design/responsive.dart';
 import '../../../core/design/course_icons/course_icon_catalog.dart';
+import '../../../core/design/app_materials.dart';
+import '../providers/course_color_assignment.dart';
 import '../providers/course_workbench_models.dart';
 
 export 'course_icon_picker.dart'
@@ -13,6 +15,7 @@ export 'course_icon_picker.dart'
 
 enum CourseWorkbenchMenuAction {
   chooseIcon,
+  chooseColor,
   editAlias,
   restoreDefault,
   moveEarlier,
@@ -64,6 +67,11 @@ Future<CourseWorkbenchMenuAction?> showCourseWorkbenchMenu(
           CourseWorkbenchMenuAction.chooseIcon,
           Icons.grid_view_rounded,
           '更换图标',
+        ),
+        item(
+          CourseWorkbenchMenuAction.chooseColor,
+          Icons.palette_outlined,
+          '更换颜色',
         ),
         item(
           CourseWorkbenchMenuAction.editAlias,
@@ -142,6 +150,14 @@ Future<CourseWorkbenchMenuAction?> showCourseWorkbenchMenu(
                   ).pop(CourseWorkbenchMenuAction.chooseIcon),
                 ),
                 _WorkbenchActionTile(
+                  icon: Icons.palette_outlined,
+                  title: '更换颜色',
+                  subtitle: StudyTone.fromKey(card.accentKey)?.label ?? '自动分配',
+                  onTap: () => Navigator.of(
+                    context,
+                  ).pop(CourseWorkbenchMenuAction.chooseColor),
+                ),
+                _WorkbenchActionTile(
                   icon: Icons.short_text_rounded,
                   title: '设置简称',
                   subtitle: card.alias?.trim().isNotEmpty == true
@@ -154,7 +170,7 @@ Future<CourseWorkbenchMenuAction?> showCourseWorkbenchMenu(
                 _WorkbenchActionTile(
                   icon: Icons.restart_alt_rounded,
                   title: '恢复默认',
-                  subtitle: '清除图标与简称自定义',
+                  subtitle: '清除图标、简称与颜色自定义',
                   onTap: () => Navigator.of(
                     context,
                   ).pop(CourseWorkbenchMenuAction.restoreDefault),
@@ -166,6 +182,138 @@ Future<CourseWorkbenchMenuAction?> showCourseWorkbenchMenu(
       },
     ),
   );
+}
+
+Future<String?> showCourseColorPickerSheet(
+  BuildContext context, {
+  required ResolvedCourseCardModel card,
+  required List<ResolvedCourseCardModel> cards,
+}) {
+  return _showWorkbenchSheet<String>(
+    context,
+    maxHeightFactor: .82,
+    child: _CourseColorPicker(card: card, cards: cards),
+  );
+}
+
+class _CourseColorPicker extends StatefulWidget {
+  const _CourseColorPicker({required this.card, required this.cards});
+  final ResolvedCourseCardModel card;
+  final List<ResolvedCourseCardModel> cards;
+
+  @override
+  State<_CourseColorPicker> createState() => _CourseColorPickerState();
+}
+
+class _CourseColorPickerState extends State<_CourseColorPicker> {
+  late final String automaticKey = assignCourseColors(
+    courseIds: widget.cards.map((card) => card.course.id),
+    savedKeys: {
+      for (final card in widget.cards)
+        card.course.id: card.course.id == widget.card.course.id
+            ? null
+            : card.accentKey,
+    },
+  )[widget.card.course.id]!;
+  late String selectedKey = StudyTone.fromKey(widget.card.accentKey) == null
+      ? automaticKey
+      : widget.card.accentKey!;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final automatic = selectedKey.startsWith('auto:');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('更换颜色', style: AppTypography.titleLarge.copyWith(color: c.text)),
+        const SizedBox(height: 6),
+        Text(
+          widget.card.displayTitle,
+          style: AppTypography.bodySmall.copyWith(color: c.subtitle),
+        ),
+        const SizedBox(height: 16),
+        ChoiceChip(
+          label: Text(
+            '自动分配 · ${StudyTone.fromKey(automatic ? selectedKey : automaticKey)!.label}',
+          ),
+          selected: automatic,
+          onSelected: (_) => setState(() => selectedKey = automaticKey),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final tone in StudyTone.values)
+              Builder(
+                builder: (context) {
+                  final usedBy = widget.cards
+                      .where(
+                        (card) =>
+                            card.course.id != widget.card.course.id &&
+                            StudyTone.fromKey(card.accentKey) == tone,
+                      )
+                      .map((card) => card.displayTitle)
+                      .toList();
+                  return Tooltip(
+                    message: usedBy.isEmpty
+                        ? tone.label
+                        : '${tone.label} · ${usedBy.join('、')}正在使用',
+                    child: Semantics(
+                      label: usedBy.isEmpty
+                          ? tone.label
+                          : '${tone.label}，已有${usedBy.length}门课使用',
+                      child: ChoiceChip(
+                        avatar: CircleAvatar(
+                          radius: 10,
+                          backgroundColor: StudyPalette.of(
+                            context,
+                            tone,
+                          ).accent,
+                        ),
+                        label: Text(
+                          '${tone.label}${usedBy.isEmpty ? '' : ' ·'}',
+                        ),
+                        selected:
+                            !automatic &&
+                            StudyTone.fromKey(selectedKey) == tone,
+                        onSelected: (_) =>
+                            setState(() => selectedKey = tone.name),
+                      ),
+                    ),
+                  );
+                },
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Text(
+          '带 · 的颜色已有课程使用，仍可选择。',
+          style: AppTypography.bodySmall.copyWith(color: c.subtitle),
+        ),
+        const SizedBox(height: 20),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('取消'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: FilledButton(
+                onPressed: () => Navigator.of(context).pop(selectedKey),
+                child: const Text('完成'),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }
 
 Future<CourseAliasEditorResult?> showCourseAliasEditorSheet(

@@ -97,7 +97,7 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
       final confirmed = await AppActionSheet.show(
         context,
         title: '放弃当前课程编排？',
-        subtitle: '未保存的顺序、图标和简称修改会丢失。',
+        subtitle: '未保存的顺序、图标、简称和颜色修改会丢失。',
         confirmLabel: '放弃修改',
         confirmColor: AppColors.error,
       );
@@ -160,6 +160,15 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
       case CourseWorkbenchMenuAction.chooseIcon:
         await _chooseCardIcon(card);
         break;
+      case CourseWorkbenchMenuAction.chooseColor:
+        final key = await showCourseColorPickerSheet(
+          context,
+          card: card,
+          cards: ref.read(courseWorkbenchControllerProvider).draftCards,
+        );
+        if (!mounted || key == null) return;
+        controller.updateColor(card.course.id, key);
+        break;
       case CourseWorkbenchMenuAction.editAlias:
         final result = await showCourseAliasEditorSheet(context, card: card);
         if (!mounted || result == null || !result.submitted) {
@@ -170,7 +179,7 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
       case CourseWorkbenchMenuAction.restoreDefault:
         controller.restoreCourseCustomization(card.course.id);
         if (mounted) {
-          AppToast.showInfo(context, message: '已恢复默认图标和简称');
+          AppToast.showInfo(context, message: '已恢复默认图标、简称和颜色');
         }
         break;
       case CourseWorkbenchMenuAction.moveEarlier:
@@ -204,6 +213,7 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
       selectedIconKey: card.iconKey,
       courseName: card.course.name,
       courseId: card.course.id,
+      accentKey: card.accentKey,
     );
     if (!mounted || result == null || !result.submitted) return;
     _workbenchController.updateIcon(card.course.id, result.iconKey);

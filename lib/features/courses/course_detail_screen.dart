@@ -115,7 +115,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
                     child: StudySurface(
-                      tone: StudyPalette.course(widget.courseId),
+                      tone: StudyPalette.course(context, widget.courseId),
                       radius: 22,
                       padding: const EdgeInsets.all(20),
                       child: Row(

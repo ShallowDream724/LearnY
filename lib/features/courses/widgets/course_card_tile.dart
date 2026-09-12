@@ -125,7 +125,11 @@ class CourseCardTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final tone = StudyPalette.course(card.course.id);
+    final tone = StudyPalette.course(
+      context,
+      card.course.id,
+      accentKey: card.accentKey,
+    );
     final palette = StudyPalette.of(context, tone);
     final teacher = card.secondaryLabel;
     final labels = _statLabels(card);

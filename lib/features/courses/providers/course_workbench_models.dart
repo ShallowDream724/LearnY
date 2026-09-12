@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../../core/database/database.dart' as db;
+import 'course_color_assignment.dart';
 import 'course_queries.dart';
 
 @immutable
@@ -198,7 +199,13 @@ List<ResolvedCourseCardModel> buildResolvedCourseCards({
       stats[index].course.id: index,
   };
   final orderedPrefs =
-      prefs.where((pref) => statsByCourseId.containsKey(pref.courseId)).toList()
+      prefs
+          .where(
+            (pref) =>
+                pref.sortOrder >= 0 &&
+                statsByCourseId.containsKey(pref.courseId),
+          )
+          .toList()
         ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
   final orderedIds = <String>[];
   final seenCourseIds = <String>{};
@@ -215,12 +222,20 @@ List<ResolvedCourseCardModel> buildResolvedCourseCards({
     }
   }
 
+  final colors = assignCourseColors(
+    courseIds: statsByCourseId.keys,
+    savedKeys: {for (final pref in prefs) pref.courseId: pref.accentKey},
+  );
   return [
     for (var index = 0; index < orderedIds.length; index += 1)
       _toResolvedCourseCard(
         statsByCourseId[orderedIds[index]]!,
         prefByCourseId[orderedIds[index]],
         defaultSortOrder: defaultSortOrderByCourseId[orderedIds[index]]!,
+      ).copyWith(
+        accentKey:
+            prefByCourseId[orderedIds[index]]?.accentKey ??
+            colors[orderedIds[index]],
       ),
   ];
 }

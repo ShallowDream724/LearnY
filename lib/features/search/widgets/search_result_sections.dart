@@ -74,7 +74,7 @@ class SearchResultTile extends StatelessWidget {
     final c = context.colors;
     final course = StudyPalette.of(
       context,
-      StudyPalette.course(result.courseId),
+      StudyPalette.course(context, result.courseId),
     );
     final isCourse = result.kind == SearchResultKind.course;
     return Material(

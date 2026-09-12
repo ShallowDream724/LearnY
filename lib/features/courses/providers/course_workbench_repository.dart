@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/database.dart' as db;
 import '../../../core/providers/providers.dart';
 import 'course_queries.dart';
+import 'course_color_assignment.dart';
 import 'course_workbench_models.dart';
 
 class CourseDisplayPrefsRepository {
@@ -23,10 +24,14 @@ class CourseDisplayPrefsRepository {
     required List<ResolvedCourseCardModel> cards,
   }) {
     final now = DateTime.now().toIso8601String();
-    return _db.replaceCourseDisplayPrefs(
-      ownerKey: scope.ownerKey,
-      semesterId: scope.semesterId,
-      entries: [
+    final colors = assignCourseColors(
+      courseIds: cards.map((card) => card.course.id),
+      savedKeys: {for (final card in cards) card.course.id: card.accentKey},
+    );
+    // Keep preferences for temporarily absent courses so their identity survives
+    // a partial sync or a later return to the roster.
+    return _db.batch(
+      (batch) => batch.insertAllOnConflictUpdate(_db.courseDisplayPrefs, [
         for (var index = 0; index < cards.length; index += 1)
           db.CourseDisplayPrefsCompanion.insert(
             ownerKey: scope.ownerKey,
@@ -34,17 +39,13 @@ class CourseDisplayPrefsRepository {
             courseId: cards[index].course.id,
             sortOrder: Value(index),
             updatedAt: now,
-            iconKey: cards[index].iconKey == null
-                ? const Value.absent()
-                : Value(cards[index].iconKey),
-            alias: cards[index].alias == null
-                ? const Value.absent()
-                : Value(cards[index].alias),
-            accentKey: cards[index].accentKey == null
-                ? const Value.absent()
-                : Value(cards[index].accentKey),
+            iconKey: Value(cards[index].iconKey),
+            alias: Value(cards[index].alias),
+            accentKey: Value(
+              cards[index].accentKey ?? colors[cards[index].course.id],
+            ),
           ),
-      ],
+      ]),
     );
   }
 }

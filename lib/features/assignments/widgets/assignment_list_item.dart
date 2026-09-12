@@ -30,7 +30,7 @@ class AssignmentListItem extends StatelessWidget {
     final c = context.colors;
     final course = StudyPalette.of(
       context,
-      StudyPalette.course(homework.courseId),
+      StudyPalette.course(context, homework.courseId),
     );
     final deadline = tryParseEpochMillisToLocal(homework.deadline);
     final overdue =

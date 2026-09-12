@@ -25,11 +25,13 @@ Future<CourseIconPickerResult?> showCourseIconPickerSheet(
   required String? selectedIconKey,
   String courseName = '',
   String courseId = '',
+  String? accentKey,
 }) {
   Widget content(BuildContext context) => CourseIconPicker(
     selectedIconKey: selectedIconKey,
     courseName: courseName,
     courseId: courseId,
+    accentKey: accentKey,
   );
   if (MediaQuery.sizeOf(context).width >= 600) {
     return showDialog<CourseIconPickerResult>(
@@ -73,10 +75,12 @@ class CourseIconPicker extends StatefulWidget {
     required this.selectedIconKey,
     required this.courseName,
     required this.courseId,
+    this.accentKey,
   });
   final String? selectedIconKey;
   final String courseName;
   final String courseId;
+  final String? accentKey;
 
   @override
   State<CourseIconPicker> createState() => _CourseIconPickerState();
@@ -108,7 +112,11 @@ class _CourseIconPickerState extends State<CourseIconPicker> {
     final c = context.colors;
     final accent = StudyPalette.of(
       context,
-      StudyPalette.course(widget.courseId),
+      StudyPalette.course(
+        context,
+        widget.courseId,
+        accentKey: widget.accentKey,
+      ),
     ).accent;
     final selected = courseIconFor(
       key: widget.selectedIconKey,

@@ -345,7 +345,7 @@ class _DailyCourseTile extends StatelessWidget {
         height: 1.2,
         color: StudyPalette.of(
           context,
-          StudyPalette.course(item.courseId ?? item.courseName),
+          StudyPalette.course(context, item.courseId ?? item.courseName),
         ).accent,
         fontFeatures: const [FontFeature.tabularFigures()],
       ),
@@ -410,7 +410,10 @@ class _DailyCourseTile extends StatelessWidget {
       child: standalone
           ? StudySurface(
               radius: 12,
-              tone: StudyPalette.course(item.courseId ?? item.courseName),
+              tone: StudyPalette.course(
+                context,
+                item.courseId ?? item.courseName,
+              ),
               onTap: open,
               child: content,
             )

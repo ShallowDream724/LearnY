@@ -36,7 +36,7 @@ class NotificationCard extends StatelessWidget {
                       style: AppTypography.bodySmall.copyWith(
                         color: StudyPalette.of(
                           context,
-                          StudyPalette.course(notification.courseId),
+                          StudyPalette.course(context, notification.courseId),
                         ).accent,
                       ),
                     ),

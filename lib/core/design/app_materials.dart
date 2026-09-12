@@ -1,11 +1,61 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show mapEquals;
 
 import 'app_theme_colors.dart';
 import 'course_icons/course_icon.dart';
 import 'course_icons/course_icon_catalog.dart';
 
 /// Course identity is independent of urgency and of a course's list position.
-enum StudyTone { ink, jade, ochre, rose, slate, plum }
+enum StudyTone {
+  ink('靛蓝', 0xFF5966A9, 0xFF9BBDD7, 0xFF708DE0),
+  jade('青玉', 0xFF4C847F, 0xFF8EC2AD, 0xFF5CAF9E),
+  ochre('秋麦', 0xFFA5804C, 0xFFDDC194, 0xFFCEA868),
+  rose('烟粉', 0xFFAD7488, 0xFFD9A8AC, 0xFFCB8AA5),
+  slate('雾蓝', 0xFF6C7E99, 0xFFACBACA, 0xFF7AA4C4),
+  plum('藤紫', 0xFF8772AD, 0xFFC0B0D5, 0xFFA08ACD),
+  coral('珊瑚', 0xFFB66B61, 0xFFE0A79C, 0xFFD88B7E),
+  moss('苔绿', 0xFF72864F, 0xFFB5C68F, 0xFF96B16B),
+  lake('湖蓝', 0xFF407E9B, 0xFF8EC3DA, 0xFF60A6C5),
+  mauve('木槿', 0xFF9B659D, 0xFFD0A0CE, 0xFFBC87BC),
+  amber('琥珀', 0xFFAD7742, 0xFFE0B785, 0xFFD89C60),
+  pine('松青', 0xFF508565, 0xFF98C6A8, 0xFF72AB85),
+  periwinkle('长春', 0xFF7474B4, 0xFFB8B3E0, 0xFF9993D6),
+  raspberry('莓红', 0xFFAC6378, 0xFFDEA0B3, 0xFFD7809B),
+  teal('碧潭', 0xFF408B91, 0xFF88CBD0, 0xFF5DB7BE),
+  clay('陶棕', 0xFF986F59, 0xFFD3B098, 0xFFBF9376),
+  olive('橄榄', 0xFF8A8644, 0xFFC9C48B, 0xFFB4AF64),
+  iris('鸢尾', 0xFF8063A1, 0xFFBCA2D3, 0xFFA084C1),
+  steel('青灰', 0xFF577D84, 0xFF9BBEC4, 0xFF7DA5AE),
+  peach('杏橙', 0xFFB37D68, 0xFFE3B9A6, 0xFFDBA18A);
+
+  const StudyTone(this.label, this.light, this.dark, this.glass);
+  final String label;
+  final int light;
+  final int dark;
+  final int glass;
+
+  static StudyTone? fromKey(String? key) {
+    final name = key?.startsWith('auto:') == true ? key!.substring(5) : key;
+    for (final tone in values) {
+      if (tone.name == name) return tone;
+    }
+    return null;
+  }
+}
+
+/// Scoped course identities supplied by the app; design widgets need no store.
+class CourseColorScope extends InheritedWidget {
+  const CourseColorScope({
+    super.key,
+    required this.colors,
+    required super.child,
+  });
+  final Map<String, StudyTone> colors;
+
+  @override
+  bool updateShouldNotify(CourseColorScope oldWidget) =>
+      !mapEquals(colors, oldWidget.colors);
+}
 
 class StudyColors {
   const StudyColors(this.accent, this.fill, this.edge);
@@ -15,7 +65,19 @@ class StudyColors {
 }
 
 abstract final class StudyPalette {
-  static StudyTone course(String id) {
+  static StudyTone course(
+    BuildContext context,
+    String id, {
+    String? accentKey,
+  }) {
+    return StudyTone.fromKey(accentKey) ??
+        context
+            .dependOnInheritedWidgetOfExactType<CourseColorScope>()
+            ?.colors[id] ??
+        fallbackCourse(id);
+  }
+
+  static StudyTone fallbackCourse(String id) {
     var hash = 0;
     for (final unit in id.codeUnits) {
       hash = (hash * 31 + unit) & 0x1fffffff;
@@ -25,23 +87,7 @@ abstract final class StudyPalette {
 
   static StudyColors of(BuildContext context, StudyTone tone) {
     final dark = context.isDark;
-    final accent = (dark
-        ? const [
-            0xFF9BBDD7,
-            0xFF8EC2AD,
-            0xFFDDC194,
-            0xFFD9A8AC,
-            0xFFACBACA,
-            0xFFC0B0D5,
-          ]
-        : const [
-            0xFF5966A9,
-            0xFF4C847F,
-            0xFFA5804C,
-            0xFFAD7488,
-            0xFF6C7E99,
-            0xFF8772AD,
-          ])[tone.index];
+    final accent = dark ? tone.dark : tone.light;
     final color = Color(accent);
     return StudyColors(
       color,
@@ -155,7 +201,7 @@ class CourseSeal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tone = StudyPalette.course(courseId);
+    final tone = StudyPalette.course(context, courseId);
     final color = StudyPalette.of(context, tone).accent;
     return CourseIcon(
       option: courseIconFor(key: iconKey, courseName: courseName),

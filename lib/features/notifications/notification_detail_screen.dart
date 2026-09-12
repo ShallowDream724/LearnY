@@ -199,7 +199,10 @@ class _NotificationDetailScreenState
                         children: [
                           LayoutBuilder(
                             builder: (context, constraints) => StudySurface(
-                              tone: StudyPalette.course(widget.courseId),
+                              tone: StudyPalette.course(
+                                context,
+                                widget.courseId,
+                              ),
                               radius: 22,
                               padding: EdgeInsets.all(
                                 constraints.maxWidth >= 600 ? 36 : 22,

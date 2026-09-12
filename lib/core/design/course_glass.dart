@@ -35,16 +35,7 @@ class CourseGlassSurface extends StatelessWidget {
       radius: radius,
       dark: context.isDark,
       scene: StudyLightBackdrop.sceneOf(context),
-      tint: Color(
-        const [
-          0xFF708DE0,
-          0xFF5CAF9E,
-          0xFFCEA868,
-          0xFFCB8AA5,
-          0xFF7AA4C4,
-          0xFFA08ACD,
-        ][tone.index],
-      ),
+      tint: Color(tone.glass),
       child: ClipRRect(
         borderRadius: border,
         child: Material(

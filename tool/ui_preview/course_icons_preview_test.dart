@@ -99,7 +99,7 @@ void main() {
     previewCards = List.generate(samples.length, (index) {
       var suffix = 0;
       var id = 'glass-$index-$suffix';
-      while (StudyPalette.course(id) != tones[index]) {
+      while (StudyPalette.fallbackCourse(id) != tones[index]) {
         suffix++;
         id = 'glass-$index-$suffix';
       }

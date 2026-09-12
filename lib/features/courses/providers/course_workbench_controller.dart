@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'course_workbench_models.dart';
 import 'course_workbench_repository.dart';
+import 'course_color_assignment.dart';
 
 class CourseWorkbenchController extends StateNotifier<CourseWorkbenchState> {
   CourseWorkbenchController(this._ref) : super(const CourseWorkbenchState());
@@ -137,6 +138,24 @@ class CourseWorkbenchController extends StateNotifier<CourseWorkbenchState> {
         clearIconKey: true,
         clearAccentKey: true,
       ),
+    );
+    updateColor(courseId, null);
+  }
+
+  void updateColor(String courseId, String? accentKey) {
+    if (!state.isEditing) return;
+    final colors = assignCourseColors(
+      courseIds: state.draftCards.map((card) => card.course.id),
+      savedKeys: {
+        for (final card in state.draftCards)
+          card.course.id: card.course.id == courseId
+              ? accentKey
+              : card.accentKey,
+      },
+    );
+    _updateDraft(
+      courseId,
+      (card) => card.copyWith(accentKey: colors[courseId]),
     );
   }
 

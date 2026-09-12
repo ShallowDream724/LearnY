@@ -32,7 +32,10 @@ class FileCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.colors;
     final ext = FileTypeUtils.extractExt(item.title, item.fileType);
-    final course = StudyPalette.of(context, StudyPalette.course(item.courseId));
+    final course = StudyPalette.of(
+      context,
+      StudyPalette.course(context, item.courseId),
+    );
     final jade = StudyPalette.of(context, StudyTone.jade);
     final ochre = StudyPalette.of(context, StudyTone.ochre);
     final downloadStates = ref.watch(fileDownloadProvider);

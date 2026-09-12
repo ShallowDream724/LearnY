@@ -539,7 +539,7 @@ class _FileInfoPanel extends StatelessWidget {
                                 fontSize: 13,
                                 color: StudyPalette.of(
                                   context,
-                                  StudyPalette.course(file.courseId),
+                                  StudyPalette.course(context, file.courseId),
                                 ).accent,
                               ),
                             ),

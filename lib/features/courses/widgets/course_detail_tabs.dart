@@ -106,7 +106,7 @@ class CourseNotificationsTab extends ConsumerWidget {
                       child: StudySurface(
                         tone: isRead
                             ? StudyTone.slate
-                            : StudyPalette.course(courseId),
+                            : StudyPalette.course(context, courseId),
                         radius: 16,
                         padding: const EdgeInsets.all(18),
                         onTap: () => context.push(

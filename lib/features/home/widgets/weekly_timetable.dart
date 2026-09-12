@@ -312,7 +312,7 @@ class _TimetableEvent extends StatelessWidget {
     final dark = context.isDark;
     final colors = StudyPalette.of(
       context,
-      StudyPalette.course(item.courseId ?? item.courseName),
+      StudyPalette.course(context, item.courseId ?? item.courseName),
     );
     final color = colors.accent;
     final foreground = colors.accent;
