@@ -4,13 +4,13 @@
 
 清华大学网络学堂第三方客户端
 
-[![Release](https://img.shields.io/github/v/release/ShallowDream724/LearnY?display_name=tag&label=Release)](https://github.com/ShallowDream724/LearnY/releases)
-[![Platform](https://img.shields.io/badge/Platform-Android_APK-3DDC84?logo=android&logoColor=white)](https://github.com/ShallowDream724/LearnY/releases)
+[![Release](https://img.shields.io/github/v/release/ShallowDream724/LearnY?include_prereleases&display_name=tag&label=Release)](https://github.com/ShallowDream724/LearnY/releases)
+[![Platform](https://img.shields.io/badge/Platform-Windows_%7C_Android-3DDC84)](https://github.com/ShallowDream724/LearnY/releases)
 [![Flutter](https://img.shields.io/badge/Flutter-3.41-02569B?logo=flutter&logoColor=white)](https://flutter.dev/)
 [![Stars](https://img.shields.io/github/stars/ShallowDream724/LearnY?style=flat&label=Stars)](https://github.com/ShallowDream724/LearnY/stargazers)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-[下载最新版](https://github.com/ShallowDream724/LearnY/releases/latest) · [更新日志](CHANGELOG.md) · [问题反馈](https://github.com/ShallowDream724/LearnY/issues)
+[下载 0.1.4 Beta](https://github.com/ShallowDream724/LearnY/releases/tag/v0.1.4-beta) · [正式版](https://github.com/ShallowDream724/LearnY/releases/latest) · [更新日志](CHANGELOG.md) · [问题反馈](https://github.com/ShallowDream724/LearnY/issues)
 
 如果这个项目对你有帮助，欢迎点一个 Star，这会让 LearnY 更容易被更多同学看到。
 
@@ -20,7 +20,7 @@
 
 ## LearnY 是什么
 
-LearnY 面向清华大学网络学堂的日常使用场景，围绕课程、作业、通知和文件，提供一套更适合手机使用的客户端体验。
+LearnY 面向清华大学网络学堂的日常使用场景，围绕课程、作业、通知和文件，提供适合 Windows、手机和平板使用的客户端体验。
 
 它的目标不是把网页简单搬进 App，而是把真正高频的内容重新组织起来，让你更快看到今天该看的课、该交的作业、未读通知和需要处理的文件。
 
@@ -40,8 +40,8 @@ LearnY 面向清华大学网络学堂的日常使用场景，围绕课程、作�
 
 | 平台 | 状态 | 说明 |
 | --- | --- | --- |
-| Android | 已提供 | 当前公开发布以 APK 为主，请前往 GitHub Releases 下载 |
-| Windows | 开发中 | Flutter 原生工程可构建，提供隔离示例入口；尚未公开发布 |
+| Android | 已提供 Beta | 下载 APK 安装 |
+| Windows x64 | 已提供 Beta | 下载免安装 ZIP，完整解压后运行 `learn_y.exe`，保留同目录 DLL 与 `data/` |
 | iOS | 暂未公开提供 | 仓库中保留了 iOS 工程，但目前没有 macOS / Xcode 打包与签名环境 |
 
 目前仓库首页暂不放真实课程截图，避免把个人课程数据直接公开在宣传页里。后续如果补展示图，会使用假数据重新生成。
@@ -62,7 +62,7 @@ LearnY 面向清华大学网络学堂的日常使用场景，围绕课程、作�
 
 ### 课程
 
-- 课程列表支持排序与自定义图标
+- 课程列表支持排序、自定义图标、简称，以及 20 色自动避重和手动配色
 - 课程详情把通知、作业、文件整合到同一处
 - 课程内搜索直接覆盖课程相关内容，而不是只搜单一类型
 
