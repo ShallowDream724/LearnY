@@ -326,21 +326,7 @@ class _TimetableEvent extends StatelessWidget {
                             ),
                           ),
                         ),
-                        if (!short) ...[
-                          Text(
-                            compact &&
-                                    !item.endTimeInferred &&
-                                    item.endTime.isNotEmpty
-                                ? '${item.startTime}\n${item.endTime}'
-                                : item.timeLabel,
-                            maxLines: compact ? 2 : 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: compact ? 10 : 11,
-                              height: 1.3,
-                              color: foreground,
-                            ),
-                          ),
+                        if (!short)
                           Text(
                             item.location.isEmpty ? '地点待定' : item.location,
                             maxLines: 1,
@@ -351,7 +337,6 @@ class _TimetableEvent extends StatelessWidget {
                               color: foreground,
                             ),
                           ),
-                        ],
                       ],
                     ),
                   );

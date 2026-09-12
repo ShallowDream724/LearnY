@@ -12,6 +12,12 @@ For the stable 0.1.4 layout changes, run only
 fixture with a blank 08:00 slot, 13:30–16:55, 15:20–17:10, 16:10–18:40 and the
 two different 19:20 evening durations; tall captures show the entire axis.
 
+`--plain-name 'render phone timetable vertical scrolling'` uses an ordinary
+390×844 phone viewport with six classes per weekday. It verifies a real upward
+drag reaches the evening classes without moving the date header or changing the
+week, then opens an evening class to verify its complete time remains available.
+Screenshots before/after scrolling are in `build/ui_preview/weekly_scroll/`.
+
 From PowerShell on Windows:
 
 ```powershell

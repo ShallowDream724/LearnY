@@ -20,6 +20,7 @@ import 'package:learn_y/core/database/database.dart'
 import 'package:learn_y/core/router/router.dart';
 import 'package:learn_y/features/home/home_screen.dart';
 import 'package:learn_y/features/home/widgets/pending_assignments.dart';
+import 'package:learn_y/features/home/widgets/weekly_timetable.dart';
 import 'package:learn_y/core/shell/app_bottom_navigation.dart';
 
 import '../../test/support/schedule_fixture.dart';
@@ -126,6 +127,77 @@ void main() {
       ],
       child: const LearnYApp(),
     ),
+  );
+
+  testWidgets(
+    'render phone timetable vertical scrolling',
+    (tester) => withShadows(() async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      final key = GlobalKey();
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: key,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.light.copyWith(platform: TargetPlatform.android),
+            home: const Scaffold(
+              body: SingleChildScrollView(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: ScheduleFixture(counts: [6, 6, 6, 6, 6, 0, 0]),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('查看整周课表'));
+      await tester.pumpAndSettle();
+      final table = find.byType(WeeklyTimetable);
+      final scrollable = find.descendant(
+        of: table,
+        matching: find.byType(Scrollable),
+      );
+      final position = tester.state<ScrollableState>(scrollable).position;
+      final evening = find
+          .descendant(
+            of: table,
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is Tooltip &&
+                  (widget.message?.contains('19:20-20:55') ?? false),
+            ),
+          )
+          .first;
+      expect(position.maxScrollExtent, greaterThan(0));
+      expect(position.pixels, 0);
+      expect(
+        tester.getRect(evening).bottom,
+        greaterThan(tester.getRect(scrollable).bottom),
+      );
+      final week = find.text('2026年 9/7 - 9/13');
+      final headerPosition = tester.getTopLeft(week);
+      await capture(tester, key, 'weekly_scroll/phone_morning');
+      // Use a real vertical drag through the nested week pager, not jumpTo.
+      await tester.drag(scrollable, const Offset(0, -550));
+      await tester.pumpAndSettle();
+      expect(position.pixels, closeTo(position.maxScrollExtent, .1));
+      expect(
+        tester.getRect(evening).bottom,
+        lessThanOrEqualTo(tester.getRect(scrollable).bottom),
+      );
+      expect(tester.getTopLeft(week), headerPosition);
+      await capture(tester, key, 'weekly_scroll/phone_evening');
+      await tester.tap(evening);
+      await tester.pumpAndSettle();
+      expect(find.text('19:20-20:55\n六教 6A306'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+    }),
   );
 
   testWidgets(

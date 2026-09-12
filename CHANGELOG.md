@@ -2,6 +2,10 @@
 
 这里记录 LearnY 对外发布过的主要版本变化。更详细的下载记录可在 [GitHub Releases](https://github.com/ShallowDream724/LearnY/releases) 查看。
 
+## 待发布
+
+- 周课表课程块只保留名称与地点，移除两端重复的起止时间文字；完整时间仍可在详情与悬停提示查看
+
 ## 0.1.4 · 2026-09-12
 
 - 发布 Windows x64 免安装版与 Android APK 正式版，构建号 30
