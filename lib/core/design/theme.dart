@@ -224,6 +224,12 @@ abstract final class AppTheme {
                 .copyWith(
                   statusBarColor: Colors.transparent,
                   systemStatusBarContrastEnforced: false,
+                  systemNavigationBarColor: Colors.transparent,
+                  systemNavigationBarDividerColor: Colors.transparent,
+                  systemNavigationBarIconBrightness: isDark
+                      ? Brightness.light
+                      : Brightness.dark,
+                  systemNavigationBarContrastEnforced: false,
                 ),
       ),
 

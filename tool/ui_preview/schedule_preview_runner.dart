@@ -11,11 +11,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:learn_y/app/app.dart';
 import 'package:learn_y/core/design/theme.dart';
 import 'package:learn_y/core/design/app_font.dart';
+import 'package:learn_y/core/database/app_state_keys.dart';
 import 'package:learn_y/core/providers/providers.dart';
 import 'package:learn_y/core/providers/connectivity_provider.dart';
 import 'package:learn_y/demo/demo_environment.dart';
 import 'package:learn_y/core/database/database.dart'
-    show Semester, CourseDao, HomeworkDao;
+    show Semester, CourseDao, HomeworkDao, AppStateDao;
 import 'package:learn_y/core/router/router.dart';
 import 'package:learn_y/features/home/home_screen.dart';
 
@@ -28,6 +29,11 @@ void main() {
   final captureRoutes = Platform.environment['LEARNY_PREVIEW_ROUTES']
       ?.split(',')
       .toSet();
+  final captureRatio =
+      double.tryParse(
+        Platform.environment['LEARNY_PREVIEW_PIXEL_RATIO'] ?? '',
+      ) ??
+      1;
 
   late DemoEnvironment demo;
   setUpAll(() async {
@@ -56,6 +62,17 @@ void main() {
       AppFont.family,
     )..addFont(rootBundle.load(AppFont.asset))).load();
     demo = await DemoEnvironment.create(now: scheduleToday);
+    final wallpaper = Platform.environment['LEARNY_PREVIEW_WALLPAPER'];
+    if (wallpaper != null) {
+      await demo.database.setState(AppStateKeys.wallpaper, wallpaper);
+      final intensity = Platform.environment['LEARNY_PREVIEW_INTENSITY'];
+      if (intensity != null) {
+        await demo.database.setState(
+          AppStateKeys.wallpaperIntensity(wallpaper),
+          intensity,
+        );
+      }
+    }
   });
   tearDownAll(() => demo.dispose());
 
@@ -83,7 +100,7 @@ void main() {
     await tester.runAsync(() async {
       final boundary =
           key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
-      final rendered = await boundary.toImage(pixelRatio: 1);
+      final rendered = await boundary.toImage(pixelRatio: captureRatio);
       final png = await rendered.toByteData(format: ui.ImageByteFormat.png);
       final output = File('build/ui_preview/$name.png');
       await output.parent.create(recursive: true);

@@ -39,6 +39,11 @@ test framework's solid-outline substitute.
 theme behavior. The actual bundled family is loaded in both cases; rare missing
 glyphs that require system fallback remain part of real-device acceptance.
 
+`LEARNY_PREVIEW_PIXEL_RATIO=3` exports higher-resolution captures without changing
+the logical viewport. `LEARNY_PREVIEW_WALLPAPER=warm_hills` and
+`LEARNY_PREVIEW_INTENSITY=65` select a saved wallpaper/intensity in the isolated
+preview database; they do not change application defaults or the user's settings.
+
 Detail routes are pushed from the shell so captures include real return controls.
 The editor is opened through its real homework detail action; no submission is
 sent. Screenshots complement targeted behavioral assertions and do not replace

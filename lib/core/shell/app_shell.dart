@@ -104,6 +104,7 @@ class AppShell extends ConsumerWidget {
       strength: ref.watch(wallpaperIntensityProvider) / 100,
       child: Scaffold(
         backgroundColor: Colors.transparent,
+        extendBody: !rail,
         body: rail
             ? Row(
                 children: [
@@ -116,7 +117,7 @@ class AppShell extends ConsumerWidget {
                 ],
               )
             : content,
-        bottomNavigationBar: rail
+        bottomNavigationBar: rail || MediaQuery.viewInsetsOf(context).bottom > 0
             ? null
             : AppBottomNavigation(
                 destinations: _destinations,

@@ -75,6 +75,7 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop> {
   ImageStreamListener? _listener;
   late StudyLightScene _scene;
   Color? _statusSample;
+  Color? _navigationSample;
   Size? _sampleSize;
   int _sampleRevision = 0;
 
@@ -107,7 +108,7 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop> {
           wallpaper.assetFor(Theme.of(context).brightness, forMobile: mobile),
         );
     if (_provider == provider && _scene.dark == dark) {
-      if (_sampleSize != MediaQuery.sizeOf(context)) _sampleStatusBar();
+      if (_sampleSize != MediaQuery.sizeOf(context)) _sampleSystemBars();
       return;
     }
     _provider = provider;
@@ -163,43 +164,62 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop> {
     } else {
       setState(update);
     }
-    _sampleStatusBar();
+    _sampleSystemBars();
   }
 
-  Future<void> _sampleStatusBar() async {
+  Future<void> _sampleSystemBars() async {
     final image = _scene.image;
     if (image == null) return;
     final size = MediaQuery.sizeOf(context);
     _sampleSize = size;
-    final height = MediaQuery.viewPaddingOf(context).top.clamp(1.0, 80.0);
+    final padding = MediaQuery.viewPaddingOf(context);
+    final topHeight = padding.top.clamp(1.0, 80.0);
+    final bottomHeight = padding.bottom.clamp(1.0, 48.0);
     final revision = ++_sampleRevision;
     final texture = image.clone();
     final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder)..scale(16 / size.width, 4 / height);
-    StudyLightScene(
+    final canvas = Canvas(recorder);
+    final scene = StudyLightScene(
       dark: _scene.dark,
       image: texture,
       wallpaper: _scene.wallpaper,
       mobileArtwork: _scene.mobileArtwork,
       strength: 1,
-    ).paint(canvas, size);
+    );
+    void paintBand(double sourceY, double height, double targetY) {
+      canvas.save();
+      canvas.clipRect(Rect.fromLTWH(0, targetY, 16, 4));
+      canvas.translate(0, targetY);
+      canvas.scale(16 / size.width, 4 / height);
+      canvas.translate(0, -sourceY);
+      scene.paint(canvas, size);
+      canvas.restore();
+    }
+
+    paintBand(0, topHeight, 0);
+    paintBand(size.height - bottomHeight, bottomHeight, 4);
     final picture = recorder.endRecording();
     ui.Image? sample;
     try {
-      sample = await picture.toImage(16, 4);
+      sample = await picture.toImage(16, 8);
       final bytes = await sample.toByteData(format: ui.ImageByteFormat.rawRgba);
       if (!mounted || revision != _sampleRevision || bytes == null) return;
-      var r = 0;
-      var g = 0;
-      var b = 0;
-      for (var i = 0; i < bytes.lengthInBytes; i += 4) {
-        r += bytes.getUint8(i);
-        g += bytes.getUint8(i + 1);
-        b += bytes.getUint8(i + 2);
+      Color average(int start) {
+        var r = 0;
+        var g = 0;
+        var b = 0;
+        for (var i = start; i < start + 64 * 4; i += 4) {
+          r += bytes.getUint8(i);
+          g += bytes.getUint8(i + 1);
+          b += bytes.getUint8(i + 2);
+        }
+        return Color.fromARGB(255, r ~/ 64, g ~/ 64, b ~/ 64);
       }
-      setState(
-        () => _statusSample = Color.fromARGB(255, r ~/ 64, g ~/ 64, b ~/ 64),
-      );
+
+      setState(() {
+        _statusSample = average(0);
+        _navigationSample = average(64 * 4);
+      });
     } catch (_) {
       // Theme contrast remains the fallback if pixel sampling is unavailable.
     } finally {
@@ -213,18 +233,28 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop> {
     final base = _scene.dark
         ? const Color(0xFF1B1D20)
         : const Color(0xFFF7F8FB);
-    final color = _statusSample == null
-        ? base
-        : Color.alphaBlend(
-            _statusSample!.withValues(alpha: widget.strength.clamp(0, 1)),
-            base,
-          );
-    return (color.computeLuminance() > .179
+    Brightness iconBrightness(Color? sample) {
+      final color = sample == null
+          ? base
+          : Color.alphaBlend(
+              sample.withValues(alpha: widget.strength.clamp(0, 1)),
+              base,
+            );
+      return color.computeLuminance() > .179
+          ? Brightness.dark
+          : Brightness.light;
+    }
+
+    return (iconBrightness(_statusSample) == Brightness.dark
             ? SystemUiOverlayStyle.dark
             : SystemUiOverlayStyle.light)
         .copyWith(
           statusBarColor: Colors.transparent,
           systemStatusBarContrastEnforced: false,
+          systemNavigationBarColor: Colors.transparent,
+          systemNavigationBarDividerColor: Colors.transparent,
+          systemNavigationBarIconBrightness: iconBrightness(_navigationSample),
+          systemNavigationBarContrastEnforced: false,
         );
   }
 
@@ -263,7 +293,10 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop> {
             context,
           ).appBarTheme.copyWith(systemOverlayStyle: _systemBars()),
         ),
-        child: _SceneLayer(scene: _scene, child: widget.child),
+        child: AnnotatedRegion<SystemUiOverlayStyle>(
+          value: _systemBars(),
+          child: _SceneLayer(scene: _scene, child: widget.child),
+        ),
       ),
     ),
   );
