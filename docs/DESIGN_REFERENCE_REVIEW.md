@@ -41,6 +41,26 @@
 - 材质与排版示例主要来自 Web 和英文语境。中文阅读、Android 与 Windows 字体、Flutter 约束布局和混合输入需要独立判断。
 - 核心目标是可靠而自然的操作。依据用户的明确要求决定实施、审阅或比较阶段，原文的固定开场、委派数和强制停止不参与产品设计。
 
+## 壁纸与材质补充（2026-09-14）
+
+全局 `emil-design-eng` 的 `references/materials-and-contrast.md` 保存可跨项目复用的研究与设计规则，Apple 指南第 12 节已同步修正；项目内保留 LearnY 的选择与实施边界。
+
+本次来源为 [Apple Materials](https://developer.apple.com/design/human-interface-guidelines/materials)、[Microsoft Acrylic](https://learn.microsoft.com/en-us/windows/apps/design/style/acrylic) 与 [WCAG 文字对比基准](https://www.w3.org/WAI/WCAG21/Understanding/contrast-minimum.html)。公开指南描述的是材质分层、明度控制与语义前景等行为，不是 Apple 私有光学算法的实现规格。
+
+项目负责人确认同时改进 Windows 与 Android：悬浮控制保持轻盈，内容面板与正文按阅读任务提供稳定性；壁纸在组件间保留色彩，小字通过共享前景／材质规则获得对比。直接落在壁纸上的文字可使用区域深浅选择和柔和局部明度保护；卡片内优先稳定前景，不以描边、厚阴影、整屏灰罩补救。缓存共享背景分析，避免逐组件取样和滚动闪变。普通小字以至少 4.5:1 为对比基准，判断最终合成背景，不能只看颜色名称。
+
+此次仅更新设计规范，完整区域自适应尚未实现。Course X 待选课程和个人日程仍处于讨论阶段，不作为现有功能描述。
+
+## 日程参考项目（仅研读）
+
+项目负责人提供 [thu-info-community/thu-info-app](https://github.com/thu-info-community/thu-info-app)。2026-09-14 浅克隆到本机独立目录 `D:/learny-references/thu-info-app`，本次阅读固定于 `e684cf63bb76835fe6f86b6f81a766fedf038a4c`；路径仅用于本机查阅，应用与构建不依赖该目录。
+
+- `apps/thu-info-app/src/components/schedule/scheduleAdd.tsx`：共享添加／编辑入口，区分「周次＋节次」与「日期＋时间」，重复项可按本次或整组编辑。可借鉴任务组织，不直接搬用 React Native 控件。
+- `packages/thu-info-lib/src/models/schedule/schedule.ts`：14 小节的起止表，傍晚为 17:05–17:50、17:55–18:40，与 LearnY 当前解析表一致。自由时间仍应保留用户或上游的真实分钟值，不能吸附到模板。
+- `scheduleAdd.tsx` 的冲突确认会删除已有冲突安排再新增，`redux/scheduleData.ts` 的区间判断将端点相接也视作冲突。这两点不适合本项目：用户明确需要保留叠课与重叠日程，相接时段不应算冲突。
+
+后续讨论的边界：Course X 保留由第三方维护的网页，LearnY 提供将可靠课程信息加入个人课表并标为「待选」的本地能力；不执行学校选课，不把候选项当作已选课程上传。重复周以项目已核实校历为基础；完整编辑交互、重叠布局和数据模型仍待开发。
+
 ## 本轮应用结果
 
 - 空间关系：`ContentLayout` 注入扣除侧栏后的内容宽度；根详情页回退到窗口宽度。`ReadingWidth` 只约束行长，修复了它意外占满高度及课程固定标签栏的高度不一致问题。
