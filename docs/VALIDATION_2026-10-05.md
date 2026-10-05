@@ -71,3 +71,14 @@ build 33 最终验证：337 项全套测试通过，`flutter analyze --no-pub li
 - 本地分发：`dist/releases/v0.1.5-build34/`，包含 APK、完整 Windows 运行目录、便携 ZIP 与 SHA256SUMS。APK SHA-256 为 `078ada5fabca1261d775ea503a44de34d30ddeac8893934f4331e4464e600019`。没有推送或公开发布。
 
 源码提交 `de3b378`。验证日志：`output/review-full-tests.log`、`review-ui-analyze.log`、`review-ui-preview.log`、`review-package.log`；两端构建日志为 `overhaul-windows-build.log` / `overhaul-android-build.log`（当前内容属于 build 34）。
+
+## build 35：悬浮导航的选中对比
+
+用户提供 Android 设置页截图：白色内容面板下的玻璃选中透镜接近不可见。保留已有几何和手势，只调整材质的明暗范围、选中面淡色调与静止投影。`NavigationGlassAppearance` 与通用 `GlassSurface.backdropTone` 分离导航语义和光学实现，实际背景颜色通过同一 GPU 过滤层连续进入材质，不新增 CPU 取色或逐帧截图。
+
+- `flutter test --no-pub test/core/shell test/course_glass_test.dart test/core/design/material_contrast_test.dart`：8 项通过。新增渲染检查涵盖明暗主题各五种底色，选中面与栏体像素对比至少 1.2:1，图标与其所在面至少 3:1，背景变化仍改变材质颜色；高对比模式采用实心选中状态。原来的拖动、取消、页面协作和材质缓存检查继续通过。
+- `flutter analyze --no-pub lib test tool` 无问题。上述像素检查由 Skia 渲染，Android Impeller 观感继续由用户真机复核，未操作用户的应用窗口。
+- 两端生产构建与打包完成，内嵌版本 `0.1.5+35`。Windows 已覆盖原 `build/windows/x64/runner/Release`；APK 包名与签名延续 build 34，可覆盖更新。没有推送或公开发布。
+- 分发目录 `dist/releases/v0.1.5-build35/`；APK SHA-256 `95ca34e127871bfea3ff9d4a27dec7f502a6f2cb4a3523a5c47b7d6c4e9595be`。源码提交 `c322264`。
+
+日志：`output/nav-contrast-tests.log`、`nav-contrast-analyze.log`、`nav-contrast-package.log`。两端 `overhaul-*-build.log` 已更新为 build 35 记录。
