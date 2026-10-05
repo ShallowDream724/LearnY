@@ -14,6 +14,7 @@ import '../../core/design/colors.dart';
 import '../../core/design/typography.dart';
 import '../../core/design/wallpaper_picker.dart';
 import '../../core/design/study_sliver_app_bar.dart';
+import '../../core/design/study_readable_content.dart';
 import '../../core/providers/wallpaper_provider.dart';
 import '../../core/providers/providers.dart';
 import '../../core/router/router.dart';
@@ -288,18 +289,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 const SizedBox(height: 28),
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: TextButton(
-                    onPressed: _loggingOut ? null : _logout,
-                    style: TextButton.styleFrom(
-                      minimumSize: const Size(120, 48),
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      foregroundColor: AppColors.error,
-                    ),
-                    child: Text(
-                      _loggingOut ? '正在退出' : '退出登录',
-                      style: AppTypography.labelLarge.copyWith(
-                        color: AppColors.error,
+                  child: StudyReadingGroup(
+                    colors: [AppColors.error],
+                    builder: (_, inks) => TextButton(
+                      onPressed: _loggingOut ? null : _logout,
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(120, 48),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        foregroundColor: inks.single,
+                        disabledForegroundColor: inks.single,
+                        textStyle: AppTypography.labelLarge,
                       ),
+                      child: Text(_loggingOut ? '正在退出' : '退出登录'),
                     ),
                   ),
                 ),

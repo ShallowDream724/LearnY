@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/design/app_materials.dart';
 import '../../../core/design/app_theme_colors.dart';
 import '../../../core/design/typography.dart';
+import '../../../core/design/study_readable_content.dart';
 
 class SettingsSectionLabel extends StatelessWidget {
   const SettingsSectionLabel({super.key, required this.label});
@@ -11,9 +12,14 @@ class SettingsSectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.fromLTRB(2, 0, 2, 10),
-    child: Text(
-      label,
-      style: AppTypography.titleSmall.copyWith(color: context.colors.subtitle),
+    child: Align(
+      alignment: Alignment.centerLeft,
+      child: StudyReadableText(
+        label,
+        style: AppTypography.titleSmall.copyWith(
+          color: context.colors.subtitle,
+        ),
+      ),
     ),
   );
 }

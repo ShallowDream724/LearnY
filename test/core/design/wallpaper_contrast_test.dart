@@ -175,6 +175,7 @@ void main() {
       for (final dark in [false, true]) {
         final grid = _analyse(bytes, 64, 64, dark: dark, customDark: dark);
         final inks = [
+          readingForeground(AppColors.error, dark: dark),
           for (final tone in [StudyTone.ink, StudyTone.ochre, StudyTone.jade])
             readingForeground(Color(dark ? tone.dark : tone.light), dark: dark),
           readingForeground(

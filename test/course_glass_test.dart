@@ -3,6 +3,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:learn_y/core/design/app_light_scene.dart';
+import 'package:learn_y/core/design/study_readable_content.dart';
 import 'package:learn_y/core/design/app_materials.dart';
 import 'package:learn_y/core/design/course_glass.dart';
 import 'package:learn_y/core/design/wallpaper.dart';

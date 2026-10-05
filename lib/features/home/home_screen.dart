@@ -148,6 +148,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 StudySliverAppBar(
                   toolbarHeight: semesterToolbarHeight(context),
                   titleSpacing: gutter,
+                  actionsPadding: EdgeInsets.only(right: gutter - 8),
                   title: SemesterPageTitle(
                     title: '${_greeting()}，${authState.username ?? "LearnY"}',
                   ),
@@ -169,7 +170,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         onRefresh: _onRefresh,
                         refreshTooltip: '刷新全部内容和课表',
                       ),
-                    SizedBox(width: gutter - 8),
                   ],
                 ),
                 homeAsync.when(

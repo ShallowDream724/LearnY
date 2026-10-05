@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/design/app_theme_colors.dart';
 import '../../../core/design/typography.dart';
 import '../../../core/design/app_materials.dart';
-import '../../../core/design/app_light_scene.dart';
-import '../../../core/design/material_contrast.dart';
+import '../../../core/design/study_readable_content.dart';
 
 class StatCard extends StatelessWidget {
   const StatCard({
@@ -21,17 +20,9 @@ class StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = readingForeground(
-      StudyPalette.of(context, tone).accent,
-      dark: context.isDark,
-    );
-    final labelInk = readingForeground(
-      context.colors.subtitle,
-      dark: context.isDark,
-    );
-    return StudyReadableContent(
-      foregrounds: [accent, labelInk],
-      child: Material(
+    return StudyReadingGroup(
+      colors: [StudyPalette.of(context, tone).accent, context.colors.subtitle],
+      builder: (_, inks) => Material(
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
@@ -46,13 +37,13 @@ class StatCard extends StatelessWidget {
                   value,
                   style: AppTypography.statMedium.copyWith(
                     fontSize: 22,
-                    color: accent,
+                    color: inks[0],
                   ),
                 ),
                 const SizedBox(width: 8),
                 Text(
                   label,
-                  style: AppTypography.bodySmall.copyWith(color: labelInk),
+                  style: AppTypography.bodySmall.copyWith(color: inks[1]),
                 ),
               ],
             ),

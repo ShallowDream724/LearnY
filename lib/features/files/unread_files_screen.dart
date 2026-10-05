@@ -118,10 +118,11 @@ class _UnreadFilesScreenState extends ConsumerState<UnreadFilesScreen> {
             if (allFiles.isNotEmpty || _typeFilter != null)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Wrap(
+                child: OverflowBar(
+                  alignment: MainAxisAlignment.spaceBetween,
+                  overflowAlignment: OverflowBarAlignment.end,
                   spacing: 12,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
+                  overflowSpacing: 8,
                   children: [
                     SegmentedButton<_SortMode>(
                       segments: const [

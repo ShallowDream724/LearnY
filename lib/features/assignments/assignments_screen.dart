@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/design/app_surfaces.dart';
 import '../../core/design/study_sliver_app_bar.dart';
+import '../../core/design/study_readable_content.dart';
 import '../../core/design/app_materials.dart';
 import '../../core/design/app_theme_colors.dart';
 import '../../core/design/app_toast.dart';
@@ -93,6 +94,7 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
                   toolbarHeight: semesterToolbarHeight(context),
                   title: const SemesterPageTitle(title: '作业'),
                   titleSpacing: gutter,
+                  actionsPadding: EdgeInsets.only(right: gutter - 8),
                   actions: [
                     IconButton(
                       tooltip: '刷新作业',
@@ -104,7 +106,6 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
                             )
                           : const Icon(Icons.refresh, size: 20),
                     ),
-                    SizedBox(width: gutter - 8),
                   ],
                 ),
                 data.when(
@@ -335,36 +336,47 @@ class _AssignmentGroupHeading extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Row(
               children: [
-                Text(
-                  label,
-                  style: AppTypography.titleMedium.copyWith(
-                    color: colors.accent,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 7,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: colors.fill,
-                    borderRadius: BorderRadius.circular(5),
-                  ),
-                  child: Text(
-                    '$count',
-                    style: AppTypography.labelSmall.copyWith(
-                      color: colors.accent,
-                    ),
+                StudyReadingGroup(
+                  colors: [colors.accent],
+                  builder: (_, inks) => Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        label,
+                        style: AppTypography.titleMedium.copyWith(
+                          color: inks.single,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: colors.fill,
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: Text(
+                          '$count',
+                          style: AppTypography.labelSmall.copyWith(
+                            color: inks.single,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(child: Divider(color: context.colors.border)),
                 const SizedBox(width: 8),
-                Icon(
-                  collapsed ? Icons.expand_more : Icons.expand_less,
-                  size: 20,
-                  color: colors.accent,
+                StudyReadingGroup(
+                  colors: [colors.accent],
+                  builder: (_, inks) => Icon(
+                    collapsed ? Icons.expand_more : Icons.expand_less,
+                    size: 20,
+                    color: inks.single,
+                  ),
                 ),
               ],
             ),
@@ -417,9 +429,12 @@ class _AssignmentFilters extends StatelessWidget {
       return Row(
         children: [
           Expanded(
-            child: Text(
-              stats.pending == 0 ? '待交作业已处理完' : '${stats.pending} 项待提交',
-              style: Theme.of(context).textTheme.bodyMedium,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: StudyReadableText(
+                stats.pending == 0 ? '待交作业已处理完' : '${stats.pending} 项待提交',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -436,18 +451,21 @@ class _AssignmentFilters extends StatelessWidget {
                   child: Text('${_filterLabel(value)}  ${counts[value]}'),
                 ),
             ],
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    _filterLabel(current),
-                    style: TextStyle(color: context.colors.infoAccent),
-                  ),
-                  const SizedBox(width: 4),
-                  const Icon(Icons.expand_more, size: 18),
-                ],
+            child: StudyReadingGroup(
+              colors: [context.colors.infoAccent],
+              builder: (_, inks) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _filterLabel(current),
+                      style: TextStyle(color: inks.single),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(Icons.expand_more, size: 18, color: inks.single),
+                  ],
+                ),
               ),
             ),
           ),

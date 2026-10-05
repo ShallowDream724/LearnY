@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/design/app_theme_colors.dart';
+import '../../../core/design/study_menu_anchor.dart';
 
 class AppearanceMenu extends StatefulWidget {
   const AppearanceMenu({
@@ -45,9 +46,8 @@ class _AppearanceMenuState extends State<AppearanceMenu> {
       },
       child: Listener(
         onPointerDown: (_) => _pointerActivation = true,
-        child: MenuAnchor(
+        child: StudyMenuAnchor(
           childFocusNode: _focusNode,
-          consumeOutsideTap: true,
           onOpen: () => _openedWithPointer = _pointerActivation,
           onClose: _restoreFocus,
           menuChildren: [

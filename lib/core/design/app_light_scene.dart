@@ -3,7 +3,7 @@ import 'dart:isolate';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show compute, listEquals;
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
@@ -42,6 +42,12 @@ class StudyLightBackdrop extends StatefulWidget {
 
   static Listenable? motionOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<_SceneScope>()?.motion;
+
+  // SafeArea removes descendants' padding. Retain the scene's original system
+  // inset so an exterior reading feather cannot wash out status-bar icons.
+  static double statusInsetOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_SceneScope>()?.statusInset ??
+      0;
 
   static ({StudyLightScene scene, Size size, Offset origin}) locate(
     RenderBox surface, {
@@ -345,6 +351,7 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop> {
   Widget build(BuildContext context) => _SceneScope(
     scene: _scene,
     motion: _motion,
+    statusInset: MediaQuery.viewPaddingOf(context).top,
     child: NotificationListener<ScrollNotification>(
       onNotification: (_) {
         // Moving a cached PageView layer changes its sampling coordinates but
@@ -380,14 +387,17 @@ class _SceneScope extends InheritedWidget {
   const _SceneScope({
     required this.scene,
     required this.motion,
+    required this.statusInset,
     required super.child,
   });
   final StudyLightScene scene;
   final Listenable motion;
+  final double statusInset;
 
   @override
   bool updateShouldNotify(_SceneScope oldWidget) =>
-      !identical(scene, oldWidget.scene);
+      !identical(scene, oldWidget.scene) ||
+      statusInset != oldWidget.statusInset;
 }
 
 class _SceneMotion extends ChangeNotifier {
@@ -425,162 +435,6 @@ class _LightBackdrop extends RenderProxyBox {
     scene.paint(context.canvas, size);
     context.canvas.restore();
     super.paint(context, offset);
-  }
-}
-
-/// An opaque slice of the same scene for scrolling page headers: the wallpaper
-/// remains continuous while scrolled text cannot show through the toolbar.
-class StudyLightSurface extends LeafRenderObjectWidget {
-  const StudyLightSurface({super.key}) : _foregrounds = null;
-  const StudyLightSurface._scrim(this._foregrounds);
-  final List<Color>? _foregrounds;
-
-  @override
-  RenderObject createRenderObject(BuildContext context) => _SceneSurfaceBox(
-    StudyLightBackdrop.sceneOf(context),
-    context.isDark,
-    StudyLightBackdrop.motionOf(context),
-    _foregrounds,
-  );
-
-  @override
-  void updateRenderObject(BuildContext context, RenderObject renderObject) {
-    (renderObject as _SceneSurfaceBox).update(
-      StudyLightBackdrop.sceneOf(context),
-      context.isDark,
-      StudyLightBackdrop.motionOf(context),
-      _foregrounds,
-    );
-  }
-}
-
-/// Contrast belongs to the foreground group, not a wall-to-wall toolbar slab.
-/// The feather stays outside the glyphs; no image readback or backdrop blur.
-class StudyHeaderContent extends StatelessWidget {
-  const StudyHeaderContent({super.key, required this.child});
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => StudyReadableContent(
-    foregrounds: [
-      context.isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
-    ],
-    child: child,
-  );
-}
-
-/// A softly bounded reading ground for mixed semantic foregrounds. The scope
-/// is the actual content group, with no border, shadow or backdrop blur.
-class StudyReadableContent extends StatelessWidget {
-  const StudyReadableContent({
-    super.key,
-    required this.foregrounds,
-    required this.child,
-  }) : assert(foregrounds.length > 0);
-  final List<Color> foregrounds;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => Stack(
-    clipBehavior: Clip.none,
-    children: [
-      Positioned.fill(child: StudyLightSurface._scrim(foregrounds)),
-      child,
-    ],
-  );
-}
-
-class _SceneSurfaceBox extends RenderBox {
-  _SceneSurfaceBox(this.scene, this.dark, this.motion, this.foregrounds);
-  List<Color>? foregrounds;
-  StudyLightScene? scene;
-  bool dark;
-  Listenable? motion;
-  Offset _lastSceneOrigin = Offset.zero;
-
-  void update(
-    StudyLightScene? next,
-    bool nextDark,
-    Listenable? nextMotion,
-    List<Color>? nextForegrounds,
-  ) {
-    if (motion != nextMotion) {
-      if (attached) motion?.removeListener(markNeedsPaint);
-      motion = nextMotion;
-      if (attached) motion?.addListener(markNeedsPaint);
-    }
-    if (identical(scene, next) &&
-        dark == nextDark &&
-        listEquals(foregrounds, nextForegrounds)) {
-      return;
-    }
-    scene = next;
-    dark = nextDark;
-    foregrounds = nextForegrounds;
-    markNeedsPaint();
-  }
-
-  @override
-  void attach(PipelineOwner owner) {
-    super.attach(owner);
-    motion?.addListener(markNeedsPaint);
-  }
-
-  @override
-  void detach() {
-    motion?.removeListener(markNeedsPaint);
-    super.detach();
-  }
-
-  @override
-  bool get sizedByParent => true;
-  @override
-  Size computeDryLayout(BoxConstraints constraints) => constraints.biggest;
-
-  @override
-  void paint(PaintingContext context, Offset offset) {
-    final backdrop = StudyLightBackdrop.locate(
-      this,
-      dark: dark,
-      fallbackOrigin: _lastSceneOrigin,
-    );
-    _lastSceneOrigin = backdrop.origin;
-    context.canvas.save();
-    context.canvas.translate(
-      offset.dx - backdrop.origin.dx,
-      offset.dy - backdrop.origin.dy,
-    );
-    final coverage = backdrop.origin & size;
-    final inks = foregrounds;
-    if (inks == null) {
-      backdrop.scene.paint(context.canvas, backdrop.size, coverage: coverage);
-    } else {
-      var alpha = 0.0;
-      for (final ink in inks) {
-        final needed = backdrop.scene.readingOpacity(
-          coverage,
-          backdrop.size,
-          minimum: 0,
-          foreground: ink,
-        );
-        if (needed > alpha) alpha = needed;
-      }
-      // Account for the feather's slight falloff inside the content bounds.
-      alpha = (alpha / .94).clamp(0.0, 1.0);
-      if (alpha > 0) {
-        context.canvas.drawRRect(
-          RRect.fromRectAndRadius(
-            coverage.inflate(18),
-            const Radius.circular(22),
-          ),
-          Paint()
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12)
-            ..color = (dark ? const Color(0xFF20242D) : Colors.white)
-                .withValues(alpha: alpha),
-        );
-      }
-    }
-    context.canvas.restore();
   }
 }
 

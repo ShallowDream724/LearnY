@@ -95,3 +95,18 @@ build 33 最终验证：337 项全套测试通过，`flutter analyze --no-pub li
 - 分发 `dist/releases/v0.1.5-build36/`；APK SHA-256 `80d21eb99d9417dd4938038618dc3b8903056b086122d9c1717242de6d93183d`。没有推送或公开发布。
 
 日志：`output/stats-reading-tests.log`、`stats-reading-analyze.log`、`stats-reading-layout.log`、`stats-reading-package.log`。`overhaul-*-build.log` 当前记录 build 36。
+
+## build 37：统一阅读保护、标题边界与菜单返回
+
+用户批准局部底色方案，并明确要求内容内部强度恒定、渐变向外发生。本轮将阅读颜色解析与绘制从壁纸生命周期模块拆出，共用 `StudyReadingGroup`；覆盖课程整理及顶栏操作、同步异常图标、作业待交摘要/筛选/全部分组、设置分组和红色退出按钮。各页面保留业务动作与布局。普通滚动标题取消壁纸切片重绘，固定/浮动标题继续遮住经过的内容，仅在工具栏外渐隐；标题不再把外侧保护截成硬边，并在系统状态栏前归零。
+
+未读文件排序在左、类型按钮在右；空间不足时换行后仍靠右。原 `MenuAnchor` 没有注册路由返回拦截，返回页面时覆盖层随退出转场结束才被移除。类型和外观菜单改用共享 `StudyMenuAnchor`，菜单打开时先消费系统返回；选择、Esc 和外部点击共用关闭路径，焦点由触发器持有并释放。
+
+- `flutter test --no-pub test/core/design test/course_glass_test.dart test/core/shell test/features/profile/appearance_menu_test.dart test/features/files/file_type_filter_navigation_test.dart`：29 项通过。像素检查覆盖保护内部平坦、外部渐隐、工具栏边界连续性、系统顶部 inset、固定标题在 30%/100% 下与经过内容的衔接；明暗主题按钮使用实际受保护色，混合纹理对比同时覆盖红色退出语义。系统返回测试要求一帧关闭菜单、保留页面，再次返回才退页；原焦点、外壳手势和底栏对比回归继续通过。
+- `flutter analyze --no-pub lib test tool` 无问题。生产页面与隔离演示仓储的 Flutter 布局检查通过，使用 `alpine` 100% 强度，覆盖首页、作业、课程、设置及未读文件，包含 390/800/1440 宽度、大字号与明暗主题。未启动应用窗口代替用户审美或真机验收。
+- 阅读标签没有新增模糊、离屏层、图片读回或图片分析任务；仅固定/浮动标题的遮挡有一个工具栏范围的临时 GPU 合成层，详细资源边界见 [材质文档](GLASS_MATERIAL.md)。没有用局部优化宣称长期应用内存问题全部解决。
+
+- Windows 与 Android 最终生产构建、内嵌版本和签名检查完成，版本均为 `0.1.5+37`。Windows 已覆盖用户原 `build/windows/x64/runner/Release`；Android 使用已有依赖离线构建，包名 `com.learny.learn_y`，签名与 build 36 一致。
+- 本地分发：`dist/releases/v0.1.5-build37/`。APK SHA-256 `a779822c5f33d8157f5dc62383daf7910b152dc534312fd43a018b19b4eb8d4f`，Windows ZIP `67c89c9114ec81cedf33bbe2866b61c9f4e16bcd0577dbe9baf0f4f103a30012`；完整运行目录和 SHA256SUMS 同时保留，没有推送或公开发布。
+
+日志：`output/reading-groups-tests.log`、`reading-groups-analyze.log`、`reading-groups-layout.log`、`reading-groups-package.log`；`overhaul-*-build.log` 当前记录最终 build 37。
