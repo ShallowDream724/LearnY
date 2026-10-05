@@ -146,3 +146,9 @@ build 33 最终验证：337 项全套测试通过，`flutter analyze --no-pub li
 最终 Windows 与 Android 生产构建均为 `0.1.6+39`。Windows 已覆盖用户原 `build/windows/x64/runner/Release`；Android 依赖离线构建，包名 `com.learny.learn_y`，证书 SHA-256 与前版一致（`a103a8442a1431d781f05e9d2ef2bf5c4ead155934fa7a343dc2e1a115833269`）。打包脚本核对两端内嵌版本，额外确认 Windows 和 APK 内均包含三份玻璃/阅读 shader。
 
 分发目录 `dist/releases/v0.1.6-build39/`，APK SHA-256 `24c1a5f9d67a6c75bcbe7defe9bb77eebc16ba415f82a881e803dec28a5a4c8a`，Windows ZIP `1cb957cbd1c5ccec19a2a69c194fbe43980921dabf929426e7a3643a3e97eff2`；两份产物通过 `sha256sum --check`。源码和文档本地提交，未推送或公开发布，既有 0.1.5 tag 与资产保持不变。构建日志保存在 `output/ui39-windows-build.log`、`ui39-android-build.log`，版本、资源、签名和打包记录见 `ui39-package.log`、`ui39-apk-signature.log`。
+
+## 0.1.5 build 40 替换发布
+
+用户随后明确授权替换公开 0.1.5，限定只做发布。本轮只将内嵌版本统一为 `0.1.5+40` 并同步发布信息；`lib/`、Android/Windows 工程、资源、shader 和依赖锁文件与已验证的 `997a921` 无差异，不重做功能检查或增加实现。两端正式入口重新构建，Windows 与 APK 版本检查通过；APK 包名和证书延续 build 39，三份 shader 均存在于两端包内。
+
+本地分发为 `dist/releases/v0.1.5-build40/`，APK SHA-256 `cc85b95515a4b338f92a17dd02b1f10b48182bae392e4dd370723c6ffcecf78c`，Windows ZIP `094b43046a0c3996378776e2908e60eefddb8b6a4e50c9729f7f96fe5ba6fdfd`，两份文件通过 `sha256sum --check`。替换使用原 Release ID `403753619`、tag `v0.1.5`、既有资产名称和下载 URL；源码 tag 按本次授权更新，其他历史 tag 保留。构建、签名、打包和远端核对记录保存在本机 `output/release015-*.log`。
