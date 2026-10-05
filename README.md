@@ -12,7 +12,7 @@
 
 [下载 0.1.4](https://github.com/ShallowDream724/LearnY/releases/tag/v0.1.4) · [最新版本](https://github.com/ShallowDream724/LearnY/releases/latest) · [更新日志](CHANGELOG.md) · [问题反馈](https://github.com/ShallowDream724/LearnY/issues)
 
-当前源码为 0.1.5 build 32 本地候选版本，公开下载仍为 0.1.4。本轮修复与验证范围见 [验收记录](docs/VALIDATION_2026-10-05.md)。
+当前源码为 0.1.5 build 33 本地候选版本，公开下载仍为 0.1.4。本轮修复与验证范围见 [验收记录](docs/VALIDATION_2026-10-05.md)。
 
 如果这个项目对你有帮助，欢迎点一个 Star，这会让 LearnY 更容易被更多同学看到。
 
