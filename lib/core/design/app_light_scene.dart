@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 
 import 'app_theme_colors.dart';
 import 'wallpaper.dart';
+import 'material_contrast.dart';
+import 'colors.dart';
 
 /// One authored landscape spans the shell. Glass samples this same scene at
 /// paint time, so scrolling does not need measurements or per-card image loads.
@@ -102,11 +104,24 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop> {
     final dark = context.isDark;
     final wallpaper = widget.wallpaper;
     final mobile = widget.mobileArtwork;
-    final provider =
+    final sourceProvider =
         widget.imageProvider ??
         AssetImage(
           wallpaper.assetFor(Theme.of(context).brightness, forMobile: mobile),
         );
+    final size = MediaQuery.sizeOf(context);
+    final ratio = MediaQuery.devicePixelRatioOf(context).clamp(1.0, 2.0);
+    // Custom photos may contain tens of megapixels. Decode only the display
+    // budget, quantized so window resizing does not fill the image cache.
+    final provider = widget.imageProvider == null
+        ? sourceProvider
+        : ResizeImage(
+            sourceProvider,
+            width: ((size.width * ratio / 128).ceil() * 128).clamp(128, 2560),
+            height: ((size.height * ratio / 128).ceil() * 128).clamp(128, 2560),
+            policy: ResizeImagePolicy.fit,
+            allowUpscaling: false,
+          );
     if (_provider == provider && _scene.dark == dark) {
       if (_sampleSize != MediaQuery.sizeOf(context)) _sampleSystemBars();
       return;
@@ -172,9 +187,6 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop> {
     if (image == null) return;
     final size = MediaQuery.sizeOf(context);
     _sampleSize = size;
-    final padding = MediaQuery.viewPaddingOf(context);
-    final topHeight = padding.top.clamp(1.0, 80.0);
-    final bottomHeight = padding.bottom.clamp(1.0, 48.0);
     final revision = ++_sampleRevision;
     final texture = image.clone();
     final recorder = ui.PictureRecorder();
@@ -186,22 +198,12 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop> {
       mobileArtwork: _scene.mobileArtwork,
       strength: 1,
     );
-    void paintBand(double sourceY, double height, double targetY) {
-      canvas.save();
-      canvas.clipRect(Rect.fromLTWH(0, targetY, 16, 4));
-      canvas.translate(0, targetY);
-      canvas.scale(16 / size.width, 4 / height);
-      canvas.translate(0, -sourceY);
-      scene.paint(canvas, size);
-      canvas.restore();
-    }
-
-    paintBand(0, topHeight, 0);
-    paintBand(size.height - bottomHeight, bottomHeight, 4);
+    canvas.scale(16 / size.width, 32 / size.height);
+    scene.paint(canvas, size);
     final picture = recorder.endRecording();
     ui.Image? sample;
     try {
-      sample = await picture.toImage(16, 8);
+      sample = await picture.toImage(16, 32);
       final bytes = await sample.toByteData(format: ui.ImageByteFormat.rawRgba);
       if (!mounted || revision != _sampleRevision || bytes == null) return;
       Color average(int start) {
@@ -218,7 +220,16 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop> {
 
       setState(() {
         _statusSample = average(0);
-        _navigationSample = average(64 * 4);
+        _navigationSample = average((16 * 32 - 64) * 4);
+        _scene = _scene.withSamples([
+          for (var i = 0; i < 16 * 32 * 4; i += 4)
+            Color.fromARGB(
+              255,
+              bytes.getUint8(i),
+              bytes.getUint8(i + 1),
+              bytes.getUint8(i + 2),
+            ),
+        ]);
       });
     } catch (_) {
       // Theme contrast remains the fallback if pixel sampling is unavailable.
@@ -237,7 +248,7 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop> {
       final color = sample == null
           ? base
           : Color.alphaBlend(
-              sample.withValues(alpha: widget.strength.clamp(0, 1)),
+              sample.withValues(alpha: wallpaperTransmission(widget.strength)),
               base,
             );
       return color.computeLuminance() > .179
@@ -430,6 +441,18 @@ class _SceneSurfaceBox extends RenderBox {
       backdrop.size,
       coverage: backdrop.origin & size,
     );
+    final coverage = backdrop.origin & size;
+    context.canvas.drawRect(
+      coverage,
+      Paint()
+        ..color = (dark ? const Color(0xFF20242D) : Colors.white).withValues(
+          alpha: backdrop.scene.readingOpacity(
+            coverage,
+            backdrop.size,
+            minimum: .12,
+          ),
+        ),
+    );
     context.canvas.restore();
   }
 }
@@ -443,12 +466,15 @@ class StudyLightScene {
     this.wallpaper = StudyWallpaper.dunes,
     this.mobileArtwork = false,
     this.strength = .3,
+    this.samples = const [],
   });
   final bool dark;
   final ui.Image? image;
   final StudyWallpaper wallpaper;
   final bool mobileArtwork;
   final double strength;
+  final List<Color> samples;
+  final _opacityCache = <(int, int, int, int, double), double>{};
   ui.Shader? _shader;
   Size? _shaderSize;
 
@@ -459,9 +485,57 @@ class StudyLightScene {
           wallpaper: wallpaper,
           mobileArtwork: mobileArtwork,
           strength: strength,
+          samples: samples,
         )
         .._shader = _shader
         .._shaderSize = _shaderSize;
+
+  StudyLightScene withSamples(List<Color> next) =>
+      StudyLightScene(
+          dark: dark,
+          image: image,
+          wallpaper: wallpaper,
+          mobileArtwork: mobileArtwork,
+          strength: strength,
+          samples: next,
+        )
+        .._shader = _shader
+        .._shaderSize = _shaderSize;
+
+  double readingOpacity(Rect area, Size viewport, {double minimum = .25}) {
+    if (samples.isEmpty || viewport.isEmpty) return dark ? .75 : .85;
+    final left = (area.left / viewport.width * 16).floor().clamp(0, 15);
+    final right = (area.right / viewport.width * 16).ceil().clamp(left + 1, 16);
+    final top = (area.top / viewport.height * 32).floor().clamp(0, 31);
+    final bottom = (area.bottom / viewport.height * 32).ceil().clamp(
+      top + 1,
+      32,
+    );
+    final key = (left, right, top, bottom, minimum);
+    if (_opacityCache[key] case final cached?) return cached;
+    var alpha = minimum;
+    final base = dark ? const Color(0xFF1B1D20) : const Color(0xFFF7F8FB);
+    for (var y = top; y < bottom; y++) {
+      for (var x = left; x < right; x++) {
+        final color = Color.alphaBlend(
+          samples[y * 16 + x].withValues(
+            alpha: wallpaperTransmission(strength),
+          ),
+          base,
+        );
+        final needed = contrastOpacity(
+          color,
+          dark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+          dark: dark,
+          minimum: minimum,
+        );
+        if (needed > alpha) alpha = needed;
+      }
+    }
+    if (_opacityCache.length >= 128) _opacityCache.clear();
+    _opacityCache[key] = alpha;
+    return alpha;
+  }
 
   static Offset source(Size size) =>
       Offset(-size.width * .12, -size.height * .3);
@@ -481,7 +555,7 @@ class StudyLightScene {
     final texture = image;
     if (texture == null || strength <= 0) return null;
     final paint = Paint()
-      ..color = Colors.white.withValues(alpha: strength.clamp(0, 1));
+      ..color = Colors.white.withValues(alpha: wallpaperTransmission(strength));
     if (dark && wallpaper == StudyWallpaper.custom) {
       paint.colorFilter = customWallpaperDarkFilter;
     }

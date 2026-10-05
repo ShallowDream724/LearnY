@@ -68,6 +68,25 @@ void main() {
       await tester.pumpAndSettle();
       controller.jumpToPage(1);
       await tester.pumpAndSettle();
+      // Contrast sampling includes an asynchronous GPU readback. Wait for the
+      // scene to finish loading before comparing two navigation methods.
+      for (var attempt = 0; attempt < 50; attempt++) {
+        if (StudyLightBackdrop.sceneOf(
+          tester.element(find.byType(StudyLightSurface)),
+        )!.samples.isNotEmpty) {
+          break;
+        }
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump();
+      }
+      expect(
+        StudyLightBackdrop.sceneOf(
+          tester.element(find.byType(StudyLightSurface)),
+        )!.samples,
+        isNotEmpty,
+      );
       Future<List<int>> pixels() async {
         final image =
             await (header.currentContext!.findRenderObject()!

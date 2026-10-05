@@ -491,9 +491,11 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
       builder: (context, constraints) {
         final gutter = pageGutterForWidth(constraints.crossAxisExtent);
         final width = constraints.crossAxisExtent - gutter * 2;
+        // A phone's logical viewport can be only 360 dp even on a large
+        // physical display. Fit two useful cards, then grow with text scaling.
         final minCardWidth = MediaQuery.textScalerOf(
           context,
-        ).scale(constraints.crossAxisExtent < 600 ? 170 : 230);
+        ).scale(constraints.crossAxisExtent < 600 ? 152 : 230);
         final cols = ((width + 12) / (minCardWidth + 12))
             .floor()
             .clamp(1, 4)

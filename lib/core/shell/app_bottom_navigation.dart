@@ -1,9 +1,9 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'dart:math' as math;
-
+import 'package:flutter/services.dart';
 import '../design/app_theme_colors.dart';
-import '../design/app_surfaces.dart';
-import '../design/frosted_navigation_surface.dart';
+import '../design/glass_surface.dart';
+import '../design/interactive_spring.dart';
 import 'shell_layout_metrics.dart';
 import 'shell_navigation_progress.dart';
 
@@ -30,57 +30,236 @@ class AppBottomNavigation extends StatefulWidget {
   final int selectedIndex;
   final ShellNavigationProgress progress;
   final ValueChanged<int> onTap;
-
   @override
   State<AppBottomNavigation> createState() => _AppBottomNavigationState();
 }
 
 class _AppBottomNavigationState extends State<AppBottomNavigation>
-    with SingleTickerProviderStateMixin {
-  late final _position = AnimationController.unbounded(
-    vsync: this,
-    value: widget.progress.value,
-  );
+    with TickerProviderStateMixin {
+  late final _position = InteractiveSpring(this, widget.progress.value);
+  late final _press = InteractiveSpring(this, 0);
+  late final _motion = Listenable.merge([_position, _press]);
+  int? _pointer;
+  VelocityTracker? _velocity;
+  Offset? _down;
+  bool _dragged = false;
+  int? _hovered;
+  int? _focused;
+  int? _mouseHovered;
+  bool _animationsDisabled = false;
+  double _width = 1;
+  bool get _reduceMotion => MediaQuery.disableAnimationsOf(context);
+  double get _slot => (_width - 8) / widget.destinations.length;
 
   @override
   void initState() {
     super.initState();
-    widget.progress.addListener(_followProgress);
+    widget.progress.addListener(_follow);
   }
 
   @override
   void didUpdateWidget(AppBottomNavigation oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.progress != widget.progress) {
-      oldWidget.progress.removeListener(_followProgress);
-      widget.progress.addListener(_followProgress);
-      _followProgress();
+      oldWidget.progress.removeListener(_follow);
+      widget.progress.addListener(_follow);
+      _follow();
+    }
+    if (_pointer == null && oldWidget.selectedIndex != widget.selectedIndex) {
+      _follow();
     }
   }
 
-  void _followProgress() {
-    if (widget.progress.animate && !MediaQuery.disableAnimationsOf(context)) {
-      _position.animateTo(
-        widget.progress.value,
-        duration: const Duration(milliseconds: 230),
-        curve: Curves.easeInOutCubic,
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final disabled = _reduceMotion;
+    if (disabled && !_animationsDisabled) {
+      _position.moveTo(
+        _pointer == null ? widget.progress.value : _position.target,
+        immediate: true,
       );
-    } else {
-      _position.value = widget.progress.value;
+      _press.moveTo(_pointer == null ? 0 : 1, immediate: true);
     }
+    _animationsDisabled = disabled;
+  }
+
+  void _follow() {
+    if (_pointer != null) return;
+    _position.moveTo(
+      widget.progress.value,
+      immediate: _reduceMotion || !widget.progress.animate,
+    );
+  }
+
+  double _at(Offset point) {
+    final x = Directionality.of(context) == TextDirection.rtl
+        ? _width - point.dx
+        : point.dx;
+    final raw = (x - 4) / _slot - .5;
+    final bounded = raw.clamp(0.0, widget.destinations.length - 1.0);
+    final excess = raw - bounded;
+    return bounded + .3 * excess / (1 + excess.abs());
+  }
+
+  int _index(double value) =>
+      value.round().clamp(0, widget.destinations.length - 1);
+  void _begin(PointerDownEvent event) {
+    if (_pointer != null || event.buttons & kPrimaryButton == 0) return;
+    _pointer = event.pointer;
+    _down = event.localPosition;
+    _dragged = false;
+    _velocity = VelocityTracker.withKind(event.kind)
+      ..addPosition(event.timeStamp, event.localPosition);
+    _hovered = _index(_at(event.localPosition));
+    _position.moveTo(_hovered!.toDouble(), immediate: _reduceMotion);
+    _press.moveTo(1, immediate: _reduceMotion);
+  }
+
+  void _move(PointerMoveEvent event) {
+    if (event.pointer != _pointer) return;
+    _velocity?.addPosition(event.timeStamp, event.localPosition);
+    _dragged |= (event.localPosition.dx - _down!.dx).abs() > kTouchSlop;
+    if (!_dragged) return;
+    final position = _at(event.localPosition);
+    final next = _index(position);
+    if (next != _hovered) {
+      _hovered = next;
+      if (event.kind == PointerDeviceKind.touch) {
+        HapticFeedback.selectionClick();
+      }
+    }
+    _position.moveTo(position, tracking: true, immediate: _reduceMotion);
+  }
+
+  void _end(PointerEvent event) {
+    if (event.pointer != _pointer) return;
+    final commit =
+        event is PointerUpEvent &&
+        event.localPosition.dx >= -28 &&
+        event.localPosition.dx <= _width + 28 &&
+        event.localPosition.dy >= -28 &&
+        event.localPosition.dy <= kShellBottomNavBaseHeight + 28;
+    var next = widget.selectedIndex;
+    if (commit) {
+      final direction = Directionality.of(context) == TextDirection.rtl
+          ? -1
+          : 1;
+      final speed =
+          (_velocity?.getVelocity().pixelsPerSecond.dx ?? 0) *
+          direction /
+          _slot;
+      final underFinger = _index(_at(event.localPosition));
+      next = _dragged
+          ? _index(
+              (_at(event.localPosition) + speed * .1).clamp(
+                underFinger - 1.0,
+                underFinger + 1.0,
+              ),
+            )
+          : underFinger;
+      if (_dragged && !_reduceMotion) _position.velocity = speed.clamp(-12, 12);
+    }
+    _pointer = null;
+    _velocity = null;
+    _down = null;
+    _press.moveTo(0, immediate: _reduceMotion);
+    _position.moveTo(next.toDouble(), immediate: _reduceMotion);
+    if (commit && next != widget.selectedIndex) widget.onTap(next);
   }
 
   @override
   void dispose() {
-    widget.progress.removeListener(_followProgress);
+    widget.progress.removeListener(_follow);
     _position.dispose();
+    _press.dispose();
     super.dispose();
   }
 
+  void _activate(int index) {
+    _position.moveTo(index.toDouble(), immediate: _reduceMotion);
+    widget.onTap(index);
+  }
+
+  Widget _icons({required Color color}) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 4),
+    child: Row(
+      children: [
+        for (var i = 0; i < widget.destinations.length; i++)
+          Expanded(
+            child: Center(
+              child: Icon(
+                i == widget.selectedIndex
+                    ? widget.destinations[i].selectedIcon
+                    : widget.destinations[i].icon,
+                size: 27,
+                color: color,
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
+
+  Widget _controls(Color foreground) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 4),
+    child: Row(
+      children: [
+        for (var i = 0; i < widget.destinations.length; i++)
+          Expanded(
+            child: Semantics(
+              button: true,
+              selected: i == widget.selectedIndex,
+              label: widget.destinations[i].label,
+              onTap: () => _activate(i),
+              child: Tooltip(
+                message: widget.destinations[i].label,
+                excludeFromSemantics: true,
+                child: FocusableActionDetector(
+                  mouseCursor: SystemMouseCursors.click,
+                  onShowFocusHighlight: (show) => setState(() {
+                    _focused = show ? i : (_focused == i ? null : _focused);
+                  }),
+                  onShowHoverHighlight: (show) => setState(() {
+                    _mouseHovered = show
+                        ? i
+                        : (_mouseHovered == i ? null : _mouseHovered);
+                  }),
+                  shortcuts: const {
+                    SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+                    SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+                  },
+                  actions: {
+                    ActivateIntent: CallbackAction<ActivateIntent>(
+                      onInvoke: (_) {
+                        _activate(i);
+                        return null;
+                      },
+                    ),
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.all(5),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(999),
+                      border: _focused == i
+                          ? Border.all(color: foreground, width: 2)
+                          : null,
+                      color: _mouseHovered == i
+                          ? foreground.withValues(alpha: .08)
+                          : null,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
   @override
   Widget build(BuildContext context) {
     final dark = context.isDark;
-    final foreground = dark ? const Color(0xFFF0F2F8) : const Color(0xFF20242C);
+    final foreground = dark ? const Color(0xFFF4F5F9) : const Color(0xFF252D40);
     return SafeArea(
       top: false,
       child: Padding(
@@ -93,59 +272,127 @@ class _AppBottomNavigationState extends State<AppBottomNavigation>
         child: Align(
           heightFactor: 1,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: FrostedNavigationSurface(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: CustomPaint(
-                          painter: _SelectionLens(
-                            position: _position,
-                            count: widget.destinations.length,
-                            dark: dark,
-                            highContrast: MediaQuery.highContrastOf(context),
+            constraints: const BoxConstraints(maxWidth: 336),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                _width = constraints.maxWidth;
+                final normalIcons = _icons(color: foreground);
+                final lensIcons = _icons(
+                  color: dark
+                      ? const Color(0xFFDBE1FF)
+                      : const Color(0xFF384681),
+                );
+                final controls = _controls(foreground);
+                return Listener(
+                  behavior: HitTestBehavior.opaque,
+                  onPointerDown: _begin,
+                  onPointerMove: _move,
+                  onPointerUp: _end,
+                  onPointerCancel: _end,
+                  child: SizedBox(
+                    height: kShellBottomNavBaseHeight,
+                    child: AnimatedBuilder(
+                      animation: _motion,
+                      builder: (context, _) {
+                        final lift = _press.value.clamp(0.0, 1.0);
+                        final stretch = _reduceMotion
+                            ? 0.0
+                            : (_position.velocity.abs() / 8).clamp(0.0, 1.0) *
+                                  .25;
+                        final centerX = 4 + _slot * (_position.value + .5);
+                        final physicalX =
+                            Directionality.of(context) == TextDirection.rtl
+                            ? _width - centerX
+                            : centerX;
+                        final lens = Rect.fromCenter(
+                          center: Offset(
+                            physicalX,
+                            kShellBottomNavBaseHeight / 2,
                           ),
-                        ),
-                      ),
+                          width: (_slot - 6 + 28 * lift) * (1 + stretch),
+                          height:
+                              (kShellBottomNavBaseHeight - 12 + 24 * lift) *
+                              (1 - stretch * .5),
+                        );
+                        return Transform.scale(
+                          scale: 1 + (_reduceMotion ? 0 : .025 * lift),
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              const Positioned.fill(
+                                child: GlassSurface(
+                                  radius: 999,
+                                  optics: GlassOptics(
+                                    blurSigma: 4,
+                                    refraction: 9,
+                                  ),
+                                  child: SizedBox.expand(),
+                                ),
+                              ),
+                              Positioned.fill(
+                                child: IgnorePointer(
+                                  child: ExcludeSemantics(
+                                    child: ClipPath(
+                                      clipper: _LensClip(lens, outside: true),
+                                      child: normalIcons,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Positioned.fromRect(
+                                rect: lens,
+                                child: IgnorePointer(
+                                  child: GlassSurface(
+                                    radius: 999,
+                                    tint: dark
+                                        ? Color.lerp(
+                                            const Color(0x283C4560),
+                                            const Color(0x64485470),
+                                            lift,
+                                          )
+                                        : Color.lerp(
+                                            const Color(0x78FFFFFF),
+                                            const Color(0xB8FFFFFF),
+                                            lift,
+                                          ),
+                                    optics: GlassOptics(
+                                      blurSigma: 0,
+                                      refraction: lift * 8,
+                                      light: .45,
+                                      shadow: .3 * lift,
+                                    ),
+                                    child: const SizedBox.expand(),
+                                  ),
+                                ),
+                              ),
+                              Positioned.fill(
+                                child: IgnorePointer(
+                                  child: ExcludeSemantics(
+                                    child: ClipPath(
+                                      clipper: _LensClip(lens),
+                                      child: Transform.scale(
+                                        scale: 1 + .12 * lift,
+                                        origin:
+                                            lens.center -
+                                            Offset(
+                                              _width / 2,
+                                              kShellBottomNavBaseHeight / 2,
+                                            ),
+                                        child: lensIcons,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Positioned.fill(child: controls),
+                            ],
+                          ),
+                        );
+                      },
                     ),
-                    NavigationBarTheme(
-                      data: NavigationBarTheme.of(context).copyWith(
-                        iconTheme: WidgetStatePropertyAll(
-                          IconThemeData(color: foreground, size: 28),
-                        ),
-                      ),
-                      child: NavigationBar(
-                        height: kShellBottomNavBaseHeight,
-                        backgroundColor: Colors.transparent,
-                        surfaceTintColor: Colors.transparent,
-                        shadowColor: Colors.transparent,
-                        elevation: 0,
-                        indicatorColor: Colors.transparent,
-                        indicatorShape: const StadiumBorder(),
-                        labelBehavior:
-                            NavigationDestinationLabelBehavior.alwaysHide,
-                        animationDuration: AppMotion.duration(
-                          context,
-                          AppMotion.feedback,
-                        ),
-                        selectedIndex: widget.selectedIndex,
-                        onDestinationSelected: widget.onTap,
-                        destinations: [
-                          for (final destination in widget.destinations)
-                            NavigationDestination(
-                              icon: Icon(destination.icon),
-                              selectedIcon: Icon(destination.icon),
-                              label: destination.label,
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+                  ),
+                );
+              },
             ),
           ),
         ),
@@ -154,67 +401,20 @@ class _AppBottomNavigationState extends State<AppBottomNavigation>
   }
 }
 
-class _SelectionLens extends CustomPainter {
-  _SelectionLens({
-    required this.position,
-    required this.count,
-    required this.dark,
-    required this.highContrast,
-  }) : super(repaint: position);
-
-  final Animation<double> position;
-  final int count;
-  final bool dark;
-  final bool highContrast;
-
+class _LensClip extends CustomClipper<Path> {
+  const _LensClip(this.rect, {this.outside = false});
+  final Rect rect;
+  final bool outside;
   @override
-  void paint(Canvas canvas, Size size) {
-    final slot = size.width / count;
-    final rect = Rect.fromCenter(
-      center: Offset(slot * (position.value + .5), size.height / 2),
-      width: math.min(64, slot - 8),
-      height: size.height - 16,
+  Path getClip(Size size) {
+    final path = Path()..fillType = PathFillType.evenOdd;
+    if (outside) path.addRect(Offset.zero & size);
+    return path..addRRect(
+      RRect.fromRectAndRadius(rect, Radius.circular(rect.height / 2)),
     );
-    final shape = RRect.fromRectAndRadius(rect, const Radius.circular(24));
-    canvas.drawRRect(
-      shape,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: dark
-              ? [
-                  Colors.white.withAlpha(highContrast ? 85 : 38),
-                  Colors.white.withAlpha(18),
-                ]
-              : [
-                  Colors.white.withAlpha(highContrast ? 230 : 145),
-                  const Color(0x163C3B3A),
-                ],
-        ).createShader(rect),
-    );
-    canvas.drawRRect(
-      shape.deflate(.4),
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = .8
-        ..color = dark ? const Color(0x48FFFFFF) : const Color(0xA8FFFFFF),
-    );
-    if (highContrast) {
-      canvas.drawRRect(
-        shape,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5
-          ..color = dark ? Colors.white : Colors.black54,
-      );
-    }
   }
 
   @override
-  bool shouldRepaint(_SelectionLens oldDelegate) =>
-      position != oldDelegate.position ||
-      count != oldDelegate.count ||
-      dark != oldDelegate.dark ||
-      highContrast != oldDelegate.highContrast;
+  bool shouldReclip(_LensClip oldClipper) =>
+      oldClipper.rect != rect || oldClipper.outside != outside;
 }

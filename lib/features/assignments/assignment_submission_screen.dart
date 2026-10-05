@@ -17,6 +17,7 @@ import '../../core/router/router.dart';
 import 'submission/homework_submission_controller.dart';
 import 'submission/homework_submission_models.dart';
 import 'widgets/homework_detail_sections.dart';
+import 'widgets/homework_workspace.dart';
 
 class AssignmentSubmissionScreen extends ConsumerStatefulWidget {
   const AssignmentSubmissionScreen({
@@ -171,7 +172,7 @@ class _AssignmentSubmissionScreenState
               mainAxisSize: MainAxisSize.min,
               children: [
                 ReadingWidth(
-                  maxWidth: 1000,
+                  maxWidth: 1240,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -219,71 +220,33 @@ class _AssignmentSubmissionScreenState
                 title: '提交成功',
                 message: widget.homework.title,
               )
-            : SingleChildScrollView(
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                child: ReadingWidth(
-                  maxWidth: 1000,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        widget.homework.title,
-                        style: AppTypography.headlineSmall.copyWith(
-                          color: c.text,
-                        ),
+            : HomeworkWorkspace(
+                identity: 'submit-${widget.homework.id}',
+                header: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      widget.homework.title,
+                      style: AppTypography.headlineSmall.copyWith(
+                        color: c.text,
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        widget.courseName,
-                        style: AppTypography.bodyMedium.copyWith(
-                          color: c.subtitle,
-                        ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      widget.courseName,
+                      style: AppTypography.bodyMedium.copyWith(
+                        color: c.subtitle,
                       ),
-                      const SizedBox(height: 24),
-                      HomeworkDeadlineCard(homework: widget.homework),
-                      const SizedBox(height: 24),
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          final editor = _buildEditor(state);
-                          final requirements = _buildRequirements();
-                          if (constraints.maxWidth >= 880) {
-                            return Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  flex: 2,
-                                  child: HomeworkSectionCard(
-                                    title: '作业要求',
-                                    child: requirements,
-                                  ),
-                                ),
-                                const SizedBox(width: 24),
-                                Expanded(flex: 3, child: editor),
-                              ],
-                            );
-                          }
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              ExpansionTile(
-                                tilePadding: EdgeInsets.zero,
-                                childrenPadding: const EdgeInsets.only(
-                                  bottom: 20,
-                                ),
-                                title: const Text('作业要求'),
-                                children: [requirements],
-                              ),
-                              const SizedBox(height: 20),
-                              editor,
-                            ],
-                          );
-                        },
-                      ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 12),
+                    HomeworkDeadlineCard(homework: widget.homework),
+                  ],
                 ),
+                requirements: HomeworkSectionCard(
+                  title: '作业要求',
+                  child: _buildRequirements(),
+                ),
+                work: _buildEditor(state),
               ),
       ),
     );
@@ -304,6 +267,8 @@ class _AssignmentSubmissionScreenState
       children: [
         if (hasMeaningfulHomeworkHtml(hw.description)) ...[
           HomeworkHtmlText(html: hw.description!, baseUri: baseUri),
+        ] else if (hw.attachmentJson?.isNotEmpty != true) ...[
+          const Text('暂无文字要求'),
         ],
         if (hw.attachmentJson?.isNotEmpty == true) ...[
           const SizedBox(height: 16),

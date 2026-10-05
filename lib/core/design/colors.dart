@@ -86,7 +86,7 @@ abstract final class AppColors {
 
   static const Color lightTextPrimary = Color(0xFF2D3348);
   static const Color lightTextSecondary = Color(0xFF626B82);
-  static const Color lightTextTertiary = Color(0xFF777F94);
+  static const Color lightTextTertiary = Color(0xFF626B82);
 
   // ─────────────────────────────────────────────
   //  Unread / notification badge

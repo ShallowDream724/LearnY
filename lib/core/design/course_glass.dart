@@ -226,9 +226,9 @@ class _GlassOptics {
     canvas.drawRect(
       bounds,
       Paint()
-        ..color = dark
-            ? const Color(0x44202429)
-            : Colors.white.withValues(alpha: scene.wallpaper.paneOpacity),
+        ..color = (dark ? const Color(0xFF20242D) : Colors.white).withValues(
+          alpha: scene.readingOpacity(origin & size, sceneSize),
+        ),
     );
     canvas.drawRect(
       bounds,

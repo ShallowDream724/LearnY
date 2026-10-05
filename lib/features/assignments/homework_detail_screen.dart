@@ -15,6 +15,7 @@ import '../../core/router/router.dart';
 import 'assignment_submission_screen.dart';
 import 'providers/assignments_providers.dart';
 import 'widgets/homework_detail_sections.dart';
+import 'widgets/homework_workspace.dart';
 
 class HomeworkDetailScreen extends ConsumerWidget {
   const HomeworkDetailScreen({
@@ -87,7 +88,7 @@ class HomeworkDetailScreen extends ConsumerWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     ReadingWidth(
-                      maxWidth: 1000,
+                      maxWidth: 1240,
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 16,
@@ -266,44 +267,18 @@ class HomeworkDetailScreen extends ConsumerWidget {
                 ),
               ),
           ];
-          return SingleChildScrollView(
-            key: PageStorageKey('homework-detail-$homeworkId'),
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
-            child: ReadingWidth(
-              maxWidth: 1000,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  HomeworkStatusHeader(homework: hw),
-                  const SizedBox(height: 12),
-                  HomeworkDeadlineCard(homework: hw),
-                  const SizedBox(height: 24),
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      if (constraints.maxWidth >= 880) {
-                        return Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              flex: 3,
-                              child: _SectionList(children: requirements),
-                            ),
-                            const SizedBox(width: 20),
-                            Expanded(
-                              flex: 2,
-                              child: _SectionList(children: submission),
-                            ),
-                          ],
-                        );
-                      }
-                      return _SectionList(
-                        children: [...requirements, ...submission],
-                      );
-                    },
-                  ),
-                ],
-              ),
+          return HomeworkWorkspace(
+            identity: 'homework-$homeworkId',
+            header: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                HomeworkStatusHeader(homework: hw),
+                const SizedBox(height: 12),
+                HomeworkDeadlineCard(homework: hw),
+              ],
             ),
+            requirements: _SectionList(children: requirements),
+            work: _SectionList(children: submission),
           );
         },
       ),
