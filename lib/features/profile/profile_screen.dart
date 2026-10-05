@@ -14,7 +14,7 @@ import '../../core/design/colors.dart';
 import '../../core/design/typography.dart';
 import '../../core/design/wallpaper_picker.dart';
 import '../../core/design/study_sliver_app_bar.dart';
-import '../../core/design/study_control_surface.dart';
+import '../../core/design/study_reading_ink.dart';
 import '../../core/providers/wallpaper_provider.dart';
 import '../../core/providers/providers.dart';
 import '../../core/router/router.dart';
@@ -273,7 +273,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 const SizedBox(height: 28),
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: StudyControlSurface(
+                  child: StudyReadingInk(
                     colors: [AppColors.error],
                     builder: (_, inks) => TextButton(
                       onPressed: _loggingOut ? null : _logout,

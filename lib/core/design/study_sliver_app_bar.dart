@@ -18,14 +18,21 @@ class StudySliverAppBar extends SliverAppBar {
     super.snap,
     Color backgroundColor = Colors.transparent,
   }) : super(
-         title: StudyHeaderContent(child: title),
+         title: StudyHeaderContent(
+           onWallpaper: backgroundColor.a == 0,
+           child: title,
+         ),
          leading: leading == null
              ? null
-             : StudyHeaderContent.actions(child: leading),
+             : StudyHeaderContent.actions(
+                 onWallpaper: backgroundColor.a == 0,
+                 child: leading,
+               ),
          actions: actions.isEmpty
              ? null
              : [
                  StudyHeaderContent.actions(
+                   onWallpaper: backgroundColor.a == 0,
                    child: Row(
                      mainAxisSize: MainAxisSize.min,
                      children: actions,

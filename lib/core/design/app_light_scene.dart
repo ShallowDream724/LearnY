@@ -6,12 +6,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/scheduler.dart';
 
 import 'app_theme_colors.dart';
 import 'wallpaper.dart';
 import 'material_contrast.dart';
 import 'colors.dart';
 import 'wallpaper_contrast_grid.dart';
+
+typedef SceneReadingPainter =
+    void Function(
+      Canvas canvas,
+      StudyLightScene scene,
+      Size viewport,
+      Rect bounds,
+    );
 
 /// One authored landscape spans the shell. Glass samples this same scene at
 /// paint time, so scrolling does not need measurements or per-card image loads.
@@ -43,6 +52,48 @@ class StudyLightBackdrop extends StatefulWidget {
   static Listenable? motionOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<_SceneScope>()?.motion;
 
+  /// Reading fields belong below page content, never in an overlapping title
+  /// layer. Registration follows RenderObject attachment, with no post-layout
+  /// measurements or widget rebuilds while scrolling.
+  static VoidCallback registerReadingField(
+    RenderBox field,
+    SceneReadingPainter painter,
+    void Function(StudyLightScene) onSceneChanged,
+  ) {
+    RenderObject? ancestor = field.parent;
+    while (ancestor != null && ancestor is! _LightBackdrop) {
+      ancestor = ancestor.parent;
+    }
+    final backdrop = ancestor as _LightBackdrop?;
+    if (backdrop == null) return () {};
+    backdrop.fields[field] = (paint: painter, sceneChanged: onSceneChanged);
+    backdrop._motion.addListener(field.markNeedsPaint);
+    onSceneChanged(backdrop.scene);
+    backdrop.markNeedsPaint();
+    return () {
+      backdrop.fields.remove(field);
+      backdrop._motion.removeListener(field.markNeedsPaint);
+      backdrop.markNeedsPaint();
+    };
+  }
+
+  static void invalidateReadingFields(RenderBox field) {
+    RenderObject? ancestor = field.parent;
+    while (ancestor != null && ancestor is! _LightBackdrop) {
+      ancestor = ancestor.parent;
+    }
+    (ancestor as _LightBackdrop?)?.markNeedsPaint();
+  }
+
+  static void animateReadingInk(RenderBox field) {
+    RenderObject? ancestor = field.parent;
+    while (ancestor != null && ancestor is! _LightBackdrop) {
+      ancestor = ancestor.parent;
+    }
+    final motion = (ancestor as _LightBackdrop?)?._motion;
+    if (motion is _SceneMotion) motion.animateInk();
+  }
+
   static ({StudyLightScene scene, Size size, Offset origin}) locate(
     RenderBox surface, {
     required bool dark,
@@ -73,11 +124,12 @@ class StudyLightBackdrop extends StatefulWidget {
   State<StudyLightBackdrop> createState() => _StudyLightBackdropState();
 }
 
-class _StudyLightBackdropState extends State<StudyLightBackdrop> {
+class _StudyLightBackdropState extends State<StudyLightBackdrop>
+    with SingleTickerProviderStateMixin {
   ImageStream? _stream;
   ImageInfo? _image;
   ImageProvider? _provider;
-  final _motion = _SceneMotion();
+  late final _SceneMotion _motion;
   ImageStreamListener? _listener;
   late StudyLightScene _scene;
   Color? _statusSample;
@@ -89,8 +141,15 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop> {
   bool _contrastBusy = false;
 
   @override
+  void initState() {
+    super.initState();
+    _motion = _SceneMotion(this);
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) _motion.stopInk();
     _resolveImage();
   }
 
@@ -360,7 +419,11 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop> {
         ),
         child: AnnotatedRegion<SystemUiOverlayStyle>(
           value: _systemBars(),
-          child: _SceneLayer(scene: _scene, child: widget.child),
+          child: _SceneLayer(
+            scene: _scene,
+            motion: _motion,
+            child: widget.child,
+          ),
         ),
       ),
     ),
@@ -391,30 +454,96 @@ class _SceneScope extends InheritedWidget {
 }
 
 class _SceneMotion extends ChangeNotifier {
+  _SceneMotion(TickerProvider provider) {
+    _ticker = provider.createTicker((_) {
+      notifyListeners();
+      if (SchedulerBinding.instance.currentFrameTimeStamp >= _inkDeadline) {
+        _ticker.stop();
+      }
+    });
+  }
+  late final Ticker _ticker;
+  Duration _inkDeadline = Duration.zero;
+  void animateInk() {
+    _inkDeadline =
+        SchedulerBinding.instance.currentFrameTimeStamp +
+        const Duration(milliseconds: 140);
+    if (!_ticker.isActive) _ticker.start();
+  }
+
   void moved() => notifyListeners();
+  void stopInk() => _ticker.stop();
+  @override
+  void dispose() {
+    _ticker.dispose();
+    super.dispose();
+  }
 }
 
 class _SceneLayer extends SingleChildRenderObjectWidget {
-  const _SceneLayer({required this.scene, required super.child});
+  const _SceneLayer({
+    required this.scene,
+    required this.motion,
+    required super.child,
+  });
   final StudyLightScene scene;
+  final Listenable motion;
 
   @override
   RenderObject createRenderObject(BuildContext context) =>
-      _LightBackdrop(scene);
+      _LightBackdrop(scene, motion);
 
   @override
   void updateRenderObject(BuildContext context, _LightBackdrop renderObject) {
     renderObject.scene = scene;
+    renderObject.motion = motion;
   }
 }
 
 class _LightBackdrop extends RenderProxyBox {
-  _LightBackdrop(this._scene);
+  _LightBackdrop(this._scene, this._motion);
   StudyLightScene _scene;
+  Listenable _motion;
+  final fields =
+      <
+        RenderBox,
+        ({
+          SceneReadingPainter paint,
+          void Function(StudyLightScene) sceneChanged,
+        })
+      >{};
+  set motion(Listenable value) {
+    if (identical(value, _motion)) return;
+    if (attached) _motion.removeListener(markNeedsPaint);
+    for (final field in fields.keys) {
+      _motion.removeListener(field.markNeedsPaint);
+    }
+    _motion = value;
+    for (final field in fields.keys) {
+      _motion.addListener(field.markNeedsPaint);
+    }
+    if (attached) _motion.addListener(markNeedsPaint);
+  }
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    _motion.addListener(markNeedsPaint);
+  }
+
+  @override
+  void detach() {
+    _motion.removeListener(markNeedsPaint);
+    super.detach();
+  }
+
   StudyLightScene get scene => _scene;
   set scene(StudyLightScene value) {
     if (identical(_scene, value)) return;
     _scene = value;
+    for (final field in fields.values) {
+      field.sceneChanged(value);
+    }
     markNeedsPaint();
   }
 
@@ -423,6 +552,36 @@ class _LightBackdrop extends RenderProxyBox {
     context.canvas.save();
     context.canvas.translate(offset.dx, offset.dy);
     scene.paint(context.canvas, size);
+    final viewport = Offset.zero & size;
+    for (final entry in fields.entries) {
+      final field = entry.key;
+      if (!field.attached || !field.hasSize) continue;
+      // Navigator keeps covered routes attached. Their fields must retain the
+      // latest sampler, but must not leave blur behind the visible route.
+      var visible = true;
+      for (
+        RenderObject? ancestor = field.parent;
+        ancestor != null && ancestor != this;
+        ancestor = ancestor.parent
+      ) {
+        if (ancestor is RenderOffstage && ancestor.offstage ||
+            ancestor is RenderSliver && ancestor.geometry?.visible == false) {
+          visible = false;
+          break;
+        }
+      }
+      if (!visible) continue;
+      final bounds = MatrixUtils.transformRect(
+        field.getTransformTo(this),
+        Offset.zero & field.size,
+      );
+      if (!bounds.isFinite ||
+          bounds.isEmpty ||
+          !bounds.inflate(32).overlaps(viewport)) {
+        continue;
+      }
+      entry.value.paint(context.canvas, scene, size, bounds);
+    }
     context.canvas.restore();
     super.paint(context, offset);
   }
@@ -447,9 +606,13 @@ class StudyLightScene {
   final double strength;
   final List<Color> samples;
   final WallpaperContrastGrid? contrastGrid;
-  final _opacityCache = <(int, int, int, int, double, Color), double>{};
+  final _opacityCache = <(Color, Color, double), double>{};
+  final _rangeCache =
+      <(int, int, int, int), ({Color darkest, Color brightest})>{};
   ui.Shader? _shader;
   Size? _shaderSize;
+  Size? _placementSize;
+  ({double scale, Offset origin})? _placement;
 
   StudyLightScene withStrength(double strength) =>
       StudyLightScene(
@@ -499,22 +662,31 @@ class StudyLightScene {
     final textColor =
         foreground ??
         (dark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary);
+    final range = readingRange(area, viewport);
+    final color = dark ? range.brightest : range.darkest;
+    final key = (color, textColor, minimum);
+    if (_opacityCache[key] case final cached?) return cached;
+    final alpha = contrastOpacity(
+      color,
+      textColor,
+      dark: dark,
+      minimum: minimum,
+    );
+    if (_opacityCache.length >= 128) _opacityCache.clear();
+    _opacityCache[key] = alpha;
+    return alpha;
+  }
+
+  /// Conservative source bounds for ink decisions. This is not an average
+  /// brightness guess and does not claim a single ink can cover every texture.
+  ({Color darkest, Color brightest}) readingRange(Rect area, Size viewport) {
     final base = dark ? const Color(0xFF1B1D20) : const Color(0xFFF7F8FB);
-    if (image == null || strength <= 0) {
-      return contrastOpacity(base, textColor, dark: dark, minimum: minimum);
-    }
+    if (image == null || strength <= 0) return (darkest: base, brightest: base);
     final grid = contrastGrid;
     if (grid == null || viewport.isEmpty) {
-      return contrastOpacity(
-        dark ? Colors.white : Colors.black,
-        textColor,
-        dark: dark,
-        minimum: minimum,
-      );
+      return (darkest: Colors.black, brightest: Colors.white);
     }
-    final placement = _texturePlacement(viewport);
-    // Include the largest bilinear/mipmap footprint at DPR >= 1, not just the
-    // center texel. Downscaled high-resolution photos can span several pixels.
+    final placement = texturePlacement(viewport);
     final gutter = 1 + 2 / placement.scale;
     final source = Rect.fromLTRB(
       (area.left - placement.origin.dx) / placement.scale - gutter,
@@ -538,29 +710,25 @@ class StudyLightScene {
       top + 1,
       grid.rows,
     );
-    final key = (left, right, top, bottom, minimum, textColor);
-    if (_opacityCache[key] case final cached?) return cached;
-    final color = Color.alphaBlend(
+    final key = (left, right, top, bottom);
+    if (_rangeCache[key] case final cached?) return cached;
+    Color mixed(bool brightest) => Color.alphaBlend(
       grid
-          .extremeRegion(left, top, right, bottom, brightest: dark)
+          .extremeRegion(left, top, right, bottom, brightest: brightest)
           .withValues(alpha: wallpaperTransmission(strength)),
       base,
     );
-    final alpha = contrastOpacity(
-      color,
-      textColor,
-      dark: dark,
-      minimum: minimum,
-    );
-    if (_opacityCache.length >= 128) _opacityCache.clear();
-    _opacityCache[key] = alpha;
-    return alpha;
+    final result = (darkest: mixed(false), brightest: mixed(true));
+    if (_rangeCache.length >= 128) _rangeCache.clear();
+    _rangeCache[key] = result;
+    return result;
   }
 
   static Offset source(Size size) =>
       Offset(-size.width * .12, -size.height * .3);
 
-  ({double scale, Offset origin}) _texturePlacement(Size size) {
+  ({double scale, Offset origin}) texturePlacement(Size size) {
+    if (_placementSize == size && _placement != null) return _placement!;
     final texture = image!;
     final textureSize = Size(
       texture.width.toDouble(),
@@ -575,13 +743,15 @@ class StudyLightScene {
       artwork.tallAlignment,
       framing,
     )!;
-    return (
+    final result = (
       scale: scale,
       origin: Offset(
         (size.width - texture.width * scale) * (1 + alignment.x) / 2,
         (size.height - texture.height * scale) * (1 + alignment.y) / 2,
       ),
     );
+    _placementSize = size;
+    return _placement = result;
   }
 
   void paint(Canvas canvas, Size size, {Rect? coverage}) {
@@ -604,7 +774,7 @@ class StudyLightScene {
       paint.colorFilter = customWallpaperDarkFilter;
     }
     if (_shader == null || _shaderSize != size) {
-      final placement = _texturePlacement(size);
+      final placement = texturePlacement(size);
       final matrix = Matrix4.identity()
         ..translateByDouble(placement.origin.dx, placement.origin.dy, 0, 1)
         ..scaleByDouble(placement.scale, placement.scale, 1, 1);

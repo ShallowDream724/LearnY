@@ -131,3 +131,18 @@ build 33 最终验证：337 项全套测试通过，`flutter analyze --no-pub li
 - APK SHA-256：`9fca20ff1a0e96115a0fc15a9c91b08beb31962f3da23e87a6251907342f2f64`；Windows ZIP：`58bf385c1729fd1b0bf015ecb1a22690340947fd9d4a900914d1a5ca9a0cad49`。已有公开 0.1.5 资产保留。
 
 本地日志：`output/ui38-tests.log`、`ui38-glass-retest.log`、`ui38-control-retest.log`、`ui38-analyze.log`、`ui38-layouts.log`、`ui38-wallpaper30.log`、`ui38-wallpaper80.log`、`ui38-package.log`；`overhaul-*-build.log` 当前记录最终 build 38。
+
+## build 39：透明阅读层与真实纹理模糊
+
+用户继续明确要求壁纸透亮、文字处在透明层上，拒绝 build 38 的白色操作块。本轮删除 `StudyControlSurface`；标题、统计、作业摘要/筛选/折叠及退出入口使用共享 `StudyReadingInk`。背景根节点先绘制壁纸和实际纹理模糊，再绘制全部内容；模糊不会盖在卡片上。九点核上限 6 dp，外侧 32 dp 内步长与混合量同时平滑归零，保持原图颜色。前景调节有色阶上限，共用一个短暂运行的动画时钟；混合纹理不宣称无条件达到 4.5:1。
+
+- `flutter test --no-pub test/core/design test/course_glass_test.dart test/core/shell test/features/profile/appearance_menu_test.dart test/features/files/file_type_filter_navigation_test.dart`：30 项通过。新增像素回归确认平坦彩色壁纸没有被增白、实际细纹理被平滑、重叠的实色卡片像素完全不变、保留但隐藏的路由没有模糊残留。前景变化在中途和结束呈连续色阶，减少动态效果直接定位，卸载后没有动画回调残留。
+- 最终 `AppBar` 按钮在明暗主题的休止 `Material.color` 均透明。课程玻璃仍检查跳转与滑动的采样坐标误差小于 .001 dp；允许最多两个 8-bit 色阶的栅格舍入，平均字节差小于 .1，避免以宽容像素阈值代替坐标正确性。
+- `flutter analyze --no-pub lib test tool` 无问题。生产 Flutter 页面配隔离演示仓储生成「远山」30% / 80% 首页、作业、课程和设置图，布局覆盖 390/800/1440、大字号、明暗主题及课程整理。手机对比图保存在 `build/ui_preview/build39-30/` 和 `build/ui_preview/build39-80/`。该预览使用 Skia 与示例数据，不是校园账户或 Android 真机折射截图。
+- 复用已有壁纸和保守范围表，没有新增 CPU 像素读回、逐标签位图或整屏图片缓存。各 RenderObject 释放 shader，切图时隐藏字段也更新采样引用；只绘制可见区域。前景增加局部 ColorFilter 合成成本，未以此宣称整体内存或所有设备帧率已达标。
+
+日志：`output/ui39-tests.log`、`ui39-motion-tests.log`、`ui39-analyze.log`、`ui39-wallpaper30.log`、`ui39-wallpaper80.log`。
+
+最终 Windows 与 Android 生产构建均为 `0.1.6+39`。Windows 已覆盖用户原 `build/windows/x64/runner/Release`；Android 依赖离线构建，包名 `com.learny.learn_y`，证书 SHA-256 与前版一致（`a103a8442a1431d781f05e9d2ef2bf5c4ead155934fa7a343dc2e1a115833269`）。打包脚本核对两端内嵌版本，额外确认 Windows 和 APK 内均包含三份玻璃/阅读 shader。
+
+分发目录 `dist/releases/v0.1.6-build39/`，APK SHA-256 `24c1a5f9d67a6c75bcbe7defe9bb77eebc16ba415f82a881e803dec28a5a4c8a`，Windows ZIP `1cb957cbd1c5ccec19a2a69c194fbe43980921dabf929426e7a3643a3e97eff2`；两份产物通过 `sha256sum --check`。源码和文档本地提交，未推送或公开发布，既有 0.1.5 tag 与资产保持不变。构建日志保存在 `output/ui39-windows-build.log`、`ui39-android-build.log`，版本、资源、签名和打包记录见 `ui39-package.log`、`ui39-apk-signature.log`。

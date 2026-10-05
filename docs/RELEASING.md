@@ -4,7 +4,7 @@
 
 1. 同步 `pubspec.yaml` 的版本和递增构建号、`CHANGELOG.md`、README 下载链接及 `docs/releases/<版本>.md`。运行 `flutter analyze --no-pub lib test tool`，检查自有源码、测试和工具；根目录全扫描还会包含本机 build 内的旧预览草稿和第三方示例。完成与改动相称的检查和 Flutter 界面预览；不要为重新打包重复运行无关的完整检查。
 2. Windows 使用 `./tool/windows_dev.ps1 -Action build -Configuration release`，该脚本规范化本机 PATH 并保留 Git／Flutter／系统工具。Android 使用 `flutter build apk --release --no-pub --target lib/main.dart`；两个构建使用相同源码和版本。
-3. 在 PowerShell 调用 `./tool/package_release.ps1 -Version 0.1.4 -BuildNumber 30 -AaptPath <Android SDK 的 aapt.exe>`。脚本核对 EXE／APK 的内嵌版本、Windows 运行资源，复制完整 Windows 目录，并生成 APK、免安装 ZIP 和 SHA256SUMS。输出在 `dist/releases/v<版本>-build<构建号>/`，已存在目录不会覆盖。
+3. 在 PowerShell 调用 `./tool/package_release.ps1 -Version 0.1.6 -BuildNumber 39 -AaptPath <Android SDK 的 aapt.exe>`，参数替换为本次版本。脚本核对 EXE／APK 的内嵌版本、Windows 运行资源，以及两端包内的 `glass_light.frag`、`glass_refraction.frag` 和 `reading_blur.frag`；复制完整 Windows 目录，并生成 APK、免安装 ZIP 和 SHA256SUMS。输出在 `dist/releases/v<版本>-build<构建号>/`，已存在目录不会覆盖。
 4. 只提交本次源码、文档和工具，不提交账户数据、个人环境文件或整个 output/dist。版本 tag 使用相同运行源码和版本；构建后仅发布说明、打包校验文本发生变化时，可使用后续提交，但必须记录构建源码提交，并核对 `lib/`、平台工程、资源和版本文件未变。正式发布使用独立 `v<版本>` tag，不挪动历史 Beta tag。
 5. 在用户授权发布的范围内推送对应源码/tag，使用 `gh release create` 的 `--notes-file docs/releases/<版本>.md` 上传两端产物与校验值，正式版不设置 prerelease。确认 tag 目标、Latest 状态、内嵌版本和 GitHub 资产 SHA-256 与本地一致。
 

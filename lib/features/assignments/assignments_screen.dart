@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/design/app_surfaces.dart';
 import '../../core/design/study_sliver_app_bar.dart';
-import '../../core/design/study_control_surface.dart';
+import '../../core/design/study_reading_ink.dart';
 import '../../core/design/app_materials.dart';
 import '../../core/design/app_theme_colors.dart';
 import '../../core/design/app_toast.dart';
@@ -326,7 +326,7 @@ class _AssignmentGroupHeading extends StatelessWidget {
       label: '$label，$count 项',
       onTap: onPressed,
       excludeSemantics: true,
-      child: StudyControlSurface(
+      child: StudyReadingInk(
         colors: [colors.accent],
         builder: (_, inks) => InkWell(
           borderRadius: BorderRadius.circular(12),
@@ -399,7 +399,7 @@ class _AssignmentFilters extends StatelessWidget {
           ],
         );
       }
-      return StudyControlSurface(
+      return StudyReadingInk(
         colors: [context.colors.text, context.colors.infoAccent],
         builder: (_, inks) => Padding(
           padding: const EdgeInsets.only(left: 16, right: 4),

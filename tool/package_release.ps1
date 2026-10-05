@@ -25,16 +25,25 @@ if ($packageLine -notmatch "versionCode='$BuildNumber'" -or
     throw "Unexpected APK version: $packageLine"
 }
 foreach ($relative in @('flutter_windows.dll', 'data/app.so', 'data/icudtl.dat',
-    'data/flutter_assets/shaders/glass_light.frag', 'data/flutter_assets/shaders/glass_refraction.frag')) {
+    'data/flutter_assets/shaders/glass_light.frag', 'data/flutter_assets/shaders/glass_refraction.frag',
+    'data/flutter_assets/shaders/reading_blur.frag')) {
     if (-not (Test-Path -LiteralPath (Join-Path $windowsBuild $relative))) { throw "Missing runtime asset: $relative" }
 }
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$apkArchive = [System.IO.Compression.ZipFile]::OpenRead($androidBuild)
+try {
+    foreach ($shader in @('glass_light.frag', 'glass_refraction.frag', 'reading_blur.frag')) {
+        if ($null -eq $apkArchive.GetEntry("assets/flutter_assets/shaders/$shader")) {
+            throw "Missing APK shader: $shader"
+        }
+    }
+} finally { $apkArchive.Dispose() }
 if (Test-Path -LiteralPath $releaseDirectory) { throw "Release output already exists: $releaseDirectory" }
 New-Item -ItemType Directory -Path $portableDirectory | Out-Null
 Get-ChildItem -LiteralPath $windowsBuild -Force | Copy-Item -Destination $portableDirectory -Recurse
 $apkPath = Join-Path $releaseDirectory "LearnY-$Version-android.apk"
 Copy-Item -LiteralPath $androidBuild -Destination $apkPath
 $zipPath = Join-Path $releaseDirectory "LearnY-$Version-windows-x64-portable.zip"
-Add-Type -AssemblyName System.IO.Compression.FileSystem
 [System.IO.Compression.ZipFile]::CreateFromDirectory($portableDirectory, $zipPath,
     [System.IO.Compression.CompressionLevel]::Optimal, $false)
 $hashes = Get-FileHash -Algorithm SHA256 -LiteralPath $apkPath, $zipPath

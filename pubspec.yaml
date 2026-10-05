@@ -1,7 +1,7 @@
 name: learn_y
 description: "LearnY - A premium client for Tsinghua University Web Learning"
 publish_to: 'none'
-version: 0.1.6+38
+version: 0.1.6+39
 
 environment:
   sdk: ^3.11.1
@@ -101,6 +101,7 @@ flutter:
   shaders:
     - shaders/glass_refraction.frag
     - shaders/glass_light.frag
+    - shaders/reading_blur.frag
 
   assets:
     - assets/calendar/academic_terms.json

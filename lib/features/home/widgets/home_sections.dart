@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/design/app_theme_colors.dart';
 import '../../../core/design/app_materials.dart';
+import '../../../core/design/study_reading_ink.dart';
 import '../../../core/design/app_toast.dart';
 import '../../../core/design/file_type_icon.dart';
 import '../../../core/design/homework_reminder_menu.dart';
@@ -108,7 +109,19 @@ class HomeStatsSection extends ConsumerWidget {
           onTap: () => context.push(Routes.favoriteFiles),
         ),
     ];
-    return Wrap(spacing: 8, runSpacing: 8, children: entries);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: StudyReadingInk(
+        colors: [
+          StudyPalette.of(context, StudyTone.ink).accent,
+          if (pending > 0) StudyPalette.of(context, StudyTone.ochre).accent,
+          if (unread > 0) StudyPalette.of(context, StudyTone.jade).accent,
+          if (favorites > 0) StudyPalette.of(context, StudyTone.plum).accent,
+          context.colors.subtitle,
+        ],
+        builder: (_, _) => Wrap(spacing: 4, runSpacing: 4, children: entries),
+      ),
+    );
   }
 }
 

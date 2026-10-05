@@ -101,18 +101,28 @@ void main() {
       }
 
       final expected = await tester.runAsync(pixels);
+      final box = tester.renderObject<RenderBox>(
+        find.byType(CourseGlassSurface),
+      );
+      final expectedOrigin = StudyLightBackdrop.locate(box, dark: false).origin;
       controller.jumpToPage(0);
       await tester.pumpAndSettle();
       await tester.drag(find.byType(PageView), const Offset(-340, 0));
       await tester.pumpAndSettle();
       expect(controller.page, 1);
+      final actualOrigin = StudyLightBackdrop.locate(box, dark: false).origin;
+      expect((actualOrigin - expectedOrigin).distance, lessThan(.001));
       final actual = (await tester.runAsync(pixels))!;
       // A settled swipe can retain a fractional transform below one pixel.
-      // Permit only 8-bit rounding, not a different scene or sampling origin.
+      // Check coordinates directly, and allow small 8-bit raster rounding.
       expect(actual.length, expected!.length);
+      var totalDifference = 0;
       for (var index = 0; index < actual.length; index++) {
-        expect((actual[index] - expected[index]).abs(), lessThanOrEqualTo(1));
+        final delta = (actual[index] - expected[index]).abs();
+        expect(delta, lessThanOrEqualTo(2));
+        totalDifference += delta;
       }
+      expect(totalDifference / actual.length, lessThan(.1));
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     },
