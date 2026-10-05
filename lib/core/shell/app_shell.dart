@@ -393,7 +393,13 @@ class _BranchPagerState extends State<_BranchPager> {
         }
       },
       children: [
-        for (final child in widget.children) _KeepBranch(child: child),
+        for (var index = 0; index < widget.children.length; index++)
+          _KeepBranch(
+            child: TickerMode(
+              enabled: index == widget.navigationShell.currentIndex,
+              child: widget.children[index],
+            ),
+          ),
       ],
     );
   }

@@ -59,6 +59,7 @@ final Provider<Learn2018Helper> apiClientProvider = Provider<Learn2018Helper>((
       },
     ),
   );
+  ref.onDispose(() => helper.dio.close(force: true));
   return helper;
 });
 

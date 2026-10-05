@@ -1,6 +1,7 @@
 import 'dart:io';
+import 'dart:isolate';
 
-import 'package:archive/archive.dart';
+import 'package:archive/archive_io.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
@@ -8,6 +9,8 @@ import '../file_preview_registry.dart';
 import 'archive_entry_name_decoder.dart';
 import 'file_preview_models.dart';
 import '../../services/file_storage_workspace_service.dart';
+
+part 'archive_preview_worker.dart';
 
 class ArchiveExtractionResult {
   const ArchiveExtractionResult({
@@ -38,6 +41,17 @@ class ArchivePreviewService {
   final int maxInspectableBytes;
   final Duration maxCacheAge;
 
+  // Shared across service instances so each cache has one writer at a time.
+  static final _containerOperations = <String, Future<void>>{};
+  static final _entryOperations = <String, Future<String>>{};
+  static final _courseClears = <String, Future<void>>{};
+
+  _ArchivePreviewWorker get _worker => _ArchivePreviewWorker(
+    nameDecoder: _nameDecoder,
+    maxEntries: maxInspectableEntries,
+    maxBytes: maxInspectableBytes,
+  );
+
   Future<ArchivePreparedFilePreview> inspect({
     required FilePreviewDescriptor descriptor,
     required String localPath,
@@ -47,14 +61,12 @@ class ArchivePreviewService {
 
     final sourceFile = File(localPath);
     final compressedSizeBytes = await sourceFile.length();
-    final context = await _decodeArchiveContext(
+    final worker = _worker;
+    final context = await _inspectArchiveInWorker(
+      worker,
       localPath,
-      mode: nameDecodingMode,
+      nameDecodingMode,
     );
-
-    if (context.decodedFiles.length > maxInspectableEntries) {
-      throw const FormatException('压缩包条目过多，暂不支持内置浏览');
-    }
 
     final entriesByPath = <String, ArchivePreviewEntry>{};
     var totalUncompressedBytes = 0;
@@ -88,7 +100,7 @@ class ArchivePreviewService {
         putDirectory(parts.take(index).join('/'));
       }
 
-      totalUncompressedBytes += file.archiveFile.size;
+      totalUncompressedBytes += file.size;
       if (totalUncompressedBytes > maxInspectableBytes) {
         throw const FormatException('压缩包展开后体积过大，暂不支持内置浏览');
       }
@@ -102,7 +114,7 @@ class ArchivePreviewService {
         parentPath: _parentArchivePath(normalizedPath),
         depth: _archivePathDepth(normalizedPath),
         isDirectory: false,
-        uncompressedSizeBytes: file.archiveFile.size,
+        uncompressedSizeBytes: file.size,
         compressedSizeBytes: 0,
         previewDescriptor: previewDescriptor,
         childCount: 0,
@@ -173,45 +185,34 @@ class ArchivePreviewService {
 
     await cleanupStaleExtractionCaches();
 
-    final archive = await _decodeArchive(containerLocalPath);
-    final fileEntries = archive.files
-        .where((candidate) => candidate.isFile)
-        .toList(growable: false);
-
-    ArchiveFile archiveFile;
-    final archiveFileIndex = entry.archiveFileIndex;
-    if (archiveFileIndex != null &&
-        archiveFileIndex >= 0 &&
-        archiveFileIndex < fileEntries.length) {
-      archiveFile = fileEntries[archiveFileIndex];
-    } else {
-      archiveFile = fileEntries.firstWhere(
-        (candidate) => _normalizeArchivePath(candidate.name) == entry.path,
-        orElse: () => throw StateError('archive_entry_missing'),
-      );
-    }
-
-    final bytes = archiveFile.readBytes();
-    if (bytes == null || bytes.isEmpty) {
-      throw StateError('archive_entry_empty');
-    }
-
-    final outputPath = await _outputPathForEntry(
+    final directory = await _containerCacheDirectory(
       courseId: courseId,
       containerAssetKey: containerAssetKey,
-      entryPath: entry.path,
     );
-    final file = File(outputPath);
-    if (!await file.parent.exists()) {
-      await file.parent.create(recursive: true);
+    final outputPath = _archiveOutputPath(directory.path, entry.path);
+    final operationKey =
+        '$containerLocalPath\u0000$outputPath\u0000${entry.archiveFileIndex}';
+    final existing = _entryOperations[operationKey];
+    if (existing != null) return existing;
+    final worker = _worker;
+    final operation = _withContainerOperation(
+      directory.path,
+      () => _materializeArchiveInWorker(
+        worker,
+        containerLocalPath,
+        directory.path,
+        entry.path,
+        entry.archiveFileIndex,
+      ),
+    );
+    _entryOperations[operationKey] = operation;
+    try {
+      return await operation;
+    } finally {
+      if (identical(_entryOperations[operationKey], operation)) {
+        _entryOperations.remove(operationKey);
+      }
     }
-    if (await file.exists() && await file.length() == bytes.length) {
-      await file.setLastModified(DateTime.now());
-      return file.path;
-    }
-
-    await file.writeAsBytes(bytes, flush: true);
-    return file.path;
   }
 
   Future<ArchiveExtractionResult> extractAll({
@@ -220,36 +221,19 @@ class ArchivePreviewService {
     required String containerLocalPath,
     ArchiveNameDecodingMode nameDecodingMode = ArchiveNameDecodingMode.standard,
   }) async {
-    final context = await _decodeArchiveContext(
-      containerLocalPath,
-      mode: nameDecodingMode,
+    final directory = await _containerCacheDirectory(
+      courseId: courseId,
+      containerAssetKey: containerAssetKey,
     );
-    var fileCount = 0;
-    var totalBytes = 0;
-
-    for (final file in context.decodedFiles) {
-      final bytes = file.archiveFile.readBytes();
-      if (bytes == null || bytes.isEmpty) {
-        continue;
-      }
-
-      final outputPath = await _outputPathForEntry(
-        courseId: courseId,
-        containerAssetKey: containerAssetKey,
-        entryPath: file.decodedPath,
-      );
-      final fileOnDisk = File(outputPath);
-      if (!await fileOnDisk.parent.exists()) {
-        await fileOnDisk.parent.create(recursive: true);
-      }
-      await fileOnDisk.writeAsBytes(bytes, flush: true);
-      fileCount += 1;
-      totalBytes += bytes.length;
-    }
-
-    return ArchiveExtractionResult(
-      fileCount: fileCount,
-      totalBytes: totalBytes,
+    final worker = _worker;
+    return _withContainerOperation(
+      directory.path,
+      () => _extractArchiveInWorker(
+        worker,
+        containerLocalPath,
+        directory.path,
+        nameDecodingMode,
+      ),
     );
   }
 
@@ -261,9 +245,9 @@ class ArchivePreviewService {
       courseId: courseId,
       containerAssetKey: containerAssetKey,
     );
-    if (await directory.exists()) {
-      await directory.delete(recursive: true);
-    }
+    await _withContainerOperation(directory.path, () async {
+      if (await directory.exists()) await directory.delete(recursive: true);
+    });
   }
 
   Future<void> clearCourseExtractedContent(String courseId) async {
@@ -271,8 +255,29 @@ class ArchivePreviewService {
     final directory = Directory(
       p.join(root.path, _sanitizePathSegment(courseId)),
     );
-    if (await directory.exists()) {
-      await directory.delete(recursive: true);
+    final previous = _courseClears[directory.path];
+    // Capture preceding writers before publishing this barrier. Later writers
+    // wait for it and must not be included in the work it waits for.
+    final precedingWriters = _containerOperations.entries
+        .where((entry) => p.isWithin(directory.path, entry.key))
+        .map((entry) => entry.value)
+        .toList(growable: false);
+    final operation = Future<void>(() async {
+      if (previous != null) await previous;
+      await Future.wait(precedingWriters);
+      if (await directory.exists()) await directory.delete(recursive: true);
+    });
+    final settled = operation.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    _courseClears[directory.path] = settled;
+    try {
+      await operation;
+    } finally {
+      if (identical(_courseClears[directory.path], settled)) {
+        _courseClears.remove(directory.path);
+      }
     }
   }
 
@@ -316,56 +321,103 @@ class ArchivePreviewService {
       if (courseDir is! Directory) {
         continue;
       }
+      if (_courseClears.containsKey(courseDir.path)) continue;
       await for (final cacheDir in courseDir.list()) {
         if (cacheDir is! Directory) {
           continue;
         }
-        final stat = await cacheDir.stat();
-        if (now.difference(stat.modified) > maxCacheAge) {
-          await cacheDir.delete(recursive: true);
+        if (p.basename(cacheDir.path).startsWith(_archiveStagingPrefix)) {
+          continue;
         }
+        await _withContainerOperation(cacheDir.path, () async {
+          if (!await cacheDir.exists()) return;
+          final stat = await cacheDir.stat();
+          if (now.difference(stat.modified) > maxCacheAge) {
+            await cacheDir.delete(recursive: true);
+          }
+        });
       }
     }
   }
 
-  Future<Archive> _decodeArchive(String localPath) async {
-    final bytes = await File(localPath).readAsBytes();
-    return ZipDecoder().decodeBytes(bytes);
+  static Future<T> _withContainerOperation<T>(
+    String path,
+    Future<T> Function() action,
+  ) async {
+    final previous = _containerOperations[path];
+    final courseClear = _courseClears[p.dirname(path)];
+    final operation = Future<void>(() async {
+      if (previous != null) await previous;
+      if (courseClear != null) await courseClear;
+    }).then((_) => action());
+    // A failed writer must not prevent a later retry or cleanup.
+    final settled = operation.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    _containerOperations[path] = settled;
+    try {
+      return await operation;
+    } finally {
+      if (identical(_containerOperations[path], settled)) {
+        _containerOperations.remove(path);
+      }
+    }
   }
 
-  Future<_ArchiveDecodeContext> _decodeArchiveContext(
+  static Future<_ArchiveDecodeContext> _decodeArchiveContext(
     String localPath, {
     required ArchiveNameDecodingMode mode,
+    required ArchiveEntryNameDecoder nameDecoder,
+    required int maxEntries,
   }) async {
-    final bytes = await File(localPath).readAsBytes();
-    final decoder = ZipDecoder();
-    final archive = decoder.decodeBytes(bytes);
-    final fileEntries = archive.files
-        .where((candidate) => candidate.isFile)
-        .toList(growable: false);
-    final standardPlan = _nameDecoder.decode(
-      bytes: bytes,
-      decoder: decoder,
-      mode: ArchiveNameDecodingMode.standard,
-    );
-    final compatibilityPlan = _nameDecoder.decode(
-      bytes: bytes,
-      decoder: decoder,
-      mode: ArchiveNameDecodingMode.compatibility,
-    );
+    final input = InputFileStream(localPath);
+    try {
+      final decoder = ZipDecoder();
+      final archive = decoder.decodeStream(input);
+      if (archive.files.length > maxEntries) {
+        throw const FormatException('压缩包条目过多，暂不支持内置浏览');
+      }
+      final directory = decoder.directory;
+      final bytes = input
+          .subset(
+            position: directory.centralDirectoryOffset,
+            length: directory.centralDirectorySize,
+          )
+          .toUint8List();
+      final fileEntries = archive.files
+          .where((candidate) => candidate.isFile)
+          .toList(growable: false);
+      final standardPlan = nameDecoder.decode(
+        bytes: bytes,
+        decoder: decoder,
+        mode: ArchiveNameDecodingMode.standard,
+        bytesOffset: directory.centralDirectoryOffset,
+      );
+      final compatibilityPlan = nameDecoder.decode(
+        bytes: bytes,
+        decoder: decoder,
+        mode: ArchiveNameDecodingMode.compatibility,
+        bytesOffset: directory.centralDirectoryOffset,
+      );
 
-    final selectedPlan = mode == ArchiveNameDecodingMode.compatibility
-        ? compatibilityPlan
-        : standardPlan;
-    final decodedFiles = _resolveDecodedFiles(fileEntries, selectedPlan);
+      final selectedPlan = mode == ArchiveNameDecodingMode.compatibility
+          ? compatibilityPlan
+          : standardPlan;
+      final decodedFiles = _resolveDecodedFiles(fileEntries, selectedPlan);
 
-    return _ArchiveDecodeContext(
-      decodedFiles: decodedFiles,
-      canCompatibilityOpen: _plansDiffer(standardPlan, compatibilityPlan),
-    );
+      return _ArchiveDecodeContext(
+        input: input,
+        decodedFiles: decodedFiles,
+        canCompatibilityOpen: _plansDiffer(standardPlan, compatibilityPlan),
+      );
+    } catch (_) {
+      await input.close();
+      rethrow;
+    }
   }
 
-  List<_DecodedArchiveFile> _resolveDecodedFiles(
+  static List<_DecodedArchiveFile> _resolveDecodedFiles(
     List<ArchiveFile> fileEntries,
     ArchiveNameDecodingPlan plan,
   ) {
@@ -403,7 +455,7 @@ class ArchivePreviewService {
     return decodedFiles;
   }
 
-  List<_DecodedArchiveFile> _fallbackDecodedFiles(
+  static List<_DecodedArchiveFile> _fallbackDecodedFiles(
     List<ArchiveFile> fileEntries,
   ) {
     final usedPaths = <String>{};
@@ -426,7 +478,7 @@ class ArchivePreviewService {
     return decodedFiles;
   }
 
-  String _fallbackDecodedPath(String rawPath, {required int fileIndex}) {
+  static String _fallbackDecodedPath(String rawPath, {required int fileIndex}) {
     final normalized = _normalizeArchivePath(rawPath);
     if (normalized.isNotEmpty) {
       return normalized;
@@ -434,7 +486,7 @@ class ArchivePreviewService {
     return 'entry_$fileIndex';
   }
 
-  bool _plansDiffer(
+  static bool _plansDiffer(
     ArchiveNameDecodingPlan standardPlan,
     ArchiveNameDecodingPlan compatibilityPlan,
   ) {
@@ -468,24 +520,7 @@ class ArchivePreviewService {
     );
   }
 
-  Future<String> _outputPathForEntry({
-    required String courseId,
-    required String containerAssetKey,
-    required String entryPath,
-  }) async {
-    final containerDir = await _containerCacheDirectory(
-      courseId: courseId,
-      containerAssetKey: containerAssetKey,
-    );
-    final safeSegments = entryPath
-        .split('/')
-        .where((segment) => segment.isNotEmpty)
-        .map(_sanitizePathSegment)
-        .toList();
-    return p.joinAll([containerDir.path, ...safeSegments]);
-  }
-
-  String _normalizeArchivePath(String rawPath) {
+  static String _normalizeArchivePath(String rawPath) {
     var normalized = rawPath.replaceAll('\\', '/').trim();
     while (normalized.startsWith('/')) {
       normalized = normalized.substring(1);
@@ -503,7 +538,7 @@ class ArchivePreviewService {
     return safeSegments.join('/');
   }
 
-  String _ensureUniqueArchivePath(String path, Set<String> usedPaths) {
+  static String _ensureUniqueArchivePath(String path, Set<String> usedPaths) {
     if (!usedPaths.contains(path)) {
       return path;
     }
@@ -525,7 +560,7 @@ class ArchivePreviewService {
     }
   }
 
-  String _sanitizePathSegment(String value) {
+  static String _sanitizePathSegment(String value) {
     final sanitized = value
         .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
         .replaceAll(RegExp(r'[\r\n\t]+'), ' ')
@@ -533,19 +568,22 @@ class ArchivePreviewService {
     return sanitized.isEmpty ? '_' : sanitized;
   }
 
-  String _parentArchivePath(String path) {
+  static String _parentArchivePath(String path) {
     final dirname = p.posix.dirname(path);
     return dirname == '.' ? '' : dirname;
   }
 
-  int _archivePathDepth(String path) {
+  static int _archivePathDepth(String path) {
     if (path.isEmpty) {
       return 0;
     }
     return path.split('/').length - 1;
   }
 
-  int _compareArchiveEntries(ArchivePreviewEntry a, ArchivePreviewEntry b) {
+  static int _compareArchiveEntries(
+    ArchivePreviewEntry a,
+    ArchivePreviewEntry b,
+  ) {
     final parentCompare = a.parentPath.compareTo(b.parentPath);
     if (parentCompare != 0) {
       return parentCompare;
@@ -559,9 +597,12 @@ class ArchivePreviewService {
 
 class _ArchiveDecodeContext {
   const _ArchiveDecodeContext({
+    required this.input,
     required this.decodedFiles,
     required this.canCompatibilityOpen,
   });
+
+  final InputFileStream input;
 
   final List<_DecodedArchiveFile> decodedFiles;
   final bool canCompatibilityOpen;

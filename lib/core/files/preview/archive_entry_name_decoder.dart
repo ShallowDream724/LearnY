@@ -35,8 +35,9 @@ class ArchiveEntryNameDecoder {
     required Uint8List bytes,
     required ZipDecoder decoder,
     required ArchiveNameDecodingMode mode,
+    int bytesOffset = 0,
   }) {
-    final records = _readCentralDirectoryRecords(bytes, decoder);
+    final records = _readCentralDirectoryRecords(bytes, decoder, bytesOffset);
     final entries = <ArchiveDecodedFileEntry>[];
     var hasSuspiciousNames = false;
 
@@ -65,11 +66,12 @@ class ArchiveEntryNameDecoder {
   List<_ZipCentralDirectoryRecord> _readCentralDirectoryRecords(
     Uint8List bytes,
     ZipDecoder decoder,
+    int bytesOffset,
   ) {
     final records = <_ZipCentralDirectoryRecord>[];
     final byteData = ByteData.sublistView(bytes);
     final directory = decoder.directory;
-    final start = directory.centralDirectoryOffset;
+    final start = directory.centralDirectoryOffset - bytesOffset;
     final end = start + directory.centralDirectorySize;
     var offset = start;
     var fileIndex = 0;
@@ -92,7 +94,8 @@ class ArchiveEntryNameDecoder {
       final fileNameBytes = Uint8List.sublistView(bytes, nameStart, nameEnd);
       final isDirectory =
           fileNameBytes.isNotEmpty &&
-          (fileNameBytes.last == _forwardSlash || fileNameBytes.last == _backSlash);
+          (fileNameBytes.last == _forwardSlash ||
+              fileNameBytes.last == _backSlash);
       if (!isDirectory) {
         records.add(
           _ZipCentralDirectoryRecord(
@@ -115,8 +118,11 @@ class ArchiveEntryNameDecoder {
     required bool utf8FlagSet,
     required ArchiveNameDecodingMode mode,
   }) {
+    final utf8Value = _tryUtf8(fileNameBytes);
+    final cp437Value = cp437.decode(fileNameBytes, allowInvalid: true);
+    final gbkValue = gbk.decode(fileNameBytes, allowMalformed: true);
     final candidates = <_DecodedNameCandidate>[
-      if (_tryUtf8(fileNameBytes) case final utf8Value?)
+      if (utf8Value != null)
         _DecodedNameCandidate(
           encoding: _ArchiveEntryEncoding.utf8,
           value: utf8Value,
@@ -128,21 +134,19 @@ class ArchiveEntryNameDecoder {
         ),
       _DecodedNameCandidate(
         encoding: _ArchiveEntryEncoding.cp437,
-        value: cp437.decode(fileNameBytes, allowInvalid: true),
+        value: cp437Value,
         score:
-            _scoreDecodedValue(cp437.decode(fileNameBytes, allowInvalid: true)) +
+            _scoreDecodedValue(cp437Value) +
             (mode == ArchiveNameDecodingMode.standard ? 0.8 : 0),
-        suspicious: _isSuspiciousName(
-          cp437.decode(fileNameBytes, allowInvalid: true),
-        ),
+        suspicious: _isSuspiciousName(cp437Value),
       ),
       _DecodedNameCandidate(
         encoding: _ArchiveEntryEncoding.gbk,
-        value: gbk.decode(fileNameBytes, allowMalformed: true),
+        value: gbkValue,
         score:
-            _scoreDecodedValue(gbk.decode(fileNameBytes, allowMalformed: true)) +
+            _scoreDecodedValue(gbkValue) +
             (mode == ArchiveNameDecodingMode.compatibility ? 6 : 0),
-        suspicious: _isSuspiciousName(gbk.decode(fileNameBytes, allowMalformed: true)),
+        suspicious: _isSuspiciousName(gbkValue),
       ),
     ];
 

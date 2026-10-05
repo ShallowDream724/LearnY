@@ -184,9 +184,9 @@ class _PdfPreviewSurfaceState extends State<PdfPreviewSurface> {
             opacity: _hasSelectedText ? 0 : (_chromeVisible ? 0.96 : 0.68),
             child: DecoratedBox(
               decoration: BoxDecoration(
-                color: const Color(0xFF1F2430).withAlpha(
-                  context.isDark ? 176 : 148,
-                ),
+                color: const Color(
+                  0xFF1F2430,
+                ).withAlpha(context.isDark ? 176 : 148),
                 borderRadius: BorderRadius.circular(999),
                 border: Border.all(
                   color: Colors.white.withAlpha(context.isDark ? 28 : 42),
@@ -396,9 +396,7 @@ class _PdfPreviewSurfaceState extends State<PdfPreviewSurface> {
   ) {
     final handleType = _selectionHandleType(anchor);
     final lineExtent = _selectionHandleLineExtent(anchor);
-    final handleSize = cupertinoTextSelectionControls.getHandleSize(
-      lineExtent,
-    );
+    final handleSize = cupertinoTextSelectionControls.getHandleSize(lineExtent);
     final handleAnchor = cupertinoTextSelectionControls.getHandleAnchor(
       handleType,
       lineExtent,
@@ -483,6 +481,9 @@ class _PdfPreviewSurfaceState extends State<PdfPreviewSurface> {
           widget.filePath,
           controller: _controller,
           params: PdfViewerParams(
+            maxImageBytesCachedOnMemory: 32 * 1024 * 1024,
+            horizontalCacheExtent: 0,
+            verticalCacheExtent: .5,
             backgroundColor: c.bg,
             margin: 12,
             maxScale: 6,

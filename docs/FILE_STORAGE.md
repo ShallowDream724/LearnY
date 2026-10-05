@@ -66,12 +66,19 @@ after the download has been published. Reader controls, page navigation and
 text selection live in `PdfPreviewSurface`. This engine version maps every
 Windows open failure to `PdfPasswordException`, so that error alone does not
 prove encryption; attempting to open an unpublished path was one such failure.
+Each viewer limits rendered image caching to 32 MiB and preloads only half a
+viewport vertically. This bounds raster caching, not PDFium's total native memory.
 
 ZIP is an active preview capability: registry → preparation service → archive
 inspection → archive browser → selected-entry extraction → shared file preview.
 The archive service owns filename decoding, extraction paths and caching; the
-browser owns navigation and actions. It currently reads the whole archive and
-uses `archive`'s ZIP decoder; it is not a streaming archive implementation.
+browser owns navigation and actions. An isolate opens `InputFileStream`, reads
+central-directory metadata and streams selected output through a bounded buffer.
+Only metadata and published paths return to the UI isolate. Requests for the same
+item share a Future; writes within a container are serialized and cleanup waits
+for active writes. Extracted length and CRC are checked in a same-volume temporary
+directory before rename publishes the output. Failed work removes temporary data;
+empty files and decoded Chinese filenames remain valid entries.
 
 The `.archive` directory under `LearnY Files` remains reserved for extracted
 archive previews.
