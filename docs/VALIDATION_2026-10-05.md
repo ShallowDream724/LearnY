@@ -110,3 +110,7 @@ build 33 最终验证：337 项全套测试通过，`flutter analyze --no-pub li
 - 本地分发：`dist/releases/v0.1.5-build37/`。APK SHA-256 `a779822c5f33d8157f5dc62383daf7910b152dc534312fd43a018b19b4eb8d4f`，Windows ZIP `67c89c9114ec81cedf33bbe2866b61c9f4e16bcd0577dbe9baf0f4f103a30012`；完整运行目录和 SHA256SUMS 同时保留，没有推送或公开发布。
 
 日志：`output/reading-groups-tests.log`、`reading-groups-analyze.log`、`reading-groups-layout.log`、`reading-groups-package.log`；`overhaul-*-build.log` 当前记录最终 build 37。
+
+## 0.1.5 正式发布准备
+
+用户明确授权发布正式 Release 0.1.5，沿用已构建、验证的 build 37。构建源码为 `28d985e`；随后提交仅整理公开发布说明、下载链接和打包校验文本格式，`lib/`、Android/Windows 工程、资源以及版本/依赖文件与该构建提交一致，没有重编译或替换安装包。SHA256SUMS 改为 UTF-8 无 BOM、LF 换行，两端文件通过 `sha256sum --check`；APK 和 Windows ZIP 的 SHA-256 沿用上方记录。

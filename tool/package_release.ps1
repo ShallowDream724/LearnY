@@ -39,8 +39,8 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
     [System.IO.Compression.CompressionLevel]::Optimal, $false)
 $hashes = Get-FileHash -Algorithm SHA256 -LiteralPath $apkPath, $zipPath
 $checksumLines = $hashes | ForEach-Object { '{0}  {1}' -f $_.Hash.ToLowerInvariant(), (Split-Path -Leaf $_.Path) }
-[System.IO.File]::WriteAllLines((Join-Path $releaseDirectory 'SHA256SUMS.txt'),
-    $checksumLines, [System.Text.UTF8Encoding]::new($false))
+[System.IO.File]::WriteAllText((Join-Path $releaseDirectory 'SHA256SUMS.txt'),
+    ([string]::Join("`n", $checksumLines) + "`n"), [System.Text.UTF8Encoding]::new($false))
 $hashes | Select-Object Path, Hash | Format-List
 Write-Output "Windows: $windowsVersion"
 Write-Output $packageLine
