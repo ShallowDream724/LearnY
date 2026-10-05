@@ -31,9 +31,22 @@ void main() {
       debugPrint = (message, {wrapWidth}) {};
       addTearDown(() => debugPrint = oldDebugPrint);
       final storage = _SnapshotStorage(cookiePath);
-      final credential = StoredCredential.fromJsonString(
+      final savedCredential = StoredCredential.fromJsonString(
         Platform.environment['LEARNY_PROBE_CREDENTIAL_JSON'],
       );
+      final probeUsername = Platform.environment['LEARNY_PROBE_USERNAME'];
+      final probePassword = Platform.environment['LEARNY_PROBE_PASSWORD'];
+      // Explicit, process-only password probe. An empty fingerprint preserves
+      // the server's normal challenge behavior; never invent trusted state.
+      final credential =
+          savedCredential ??
+          (probeUsername != null && probePassword != null
+              ? StoredCredential(
+                  username: probeUsername,
+                  password: probePassword,
+                  fingerPrint: '',
+                )
+              : null);
       final persisted = PersistCookieJar(storage: storage);
       final gatewayCapture =
           Platform.environment['LEARNY_PROBE_GATEWAY_COOKIES'];

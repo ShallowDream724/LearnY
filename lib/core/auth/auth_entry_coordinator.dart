@@ -27,11 +27,20 @@ class AuthEntryCoordinator {
   final Future<void> Function(String username) _onLoginSuccess;
   final String? Function()? _currentUsername;
 
+  Future<void> completePendingLogin(
+    String username, {
+    Future<void> Function()? completeCampusSession,
+  }) async {
+    await completeCampusSession?.call();
+    await _onLoginSuccess(username);
+  }
+
   Future<AuthEntryResult> consumeTicket({
     required AuthEntryRequest request,
     required String ticket,
     AutoReloginEnrollmentPayload? enrollmentPayload,
     Future<void> Function()? completeCampusSession,
+    bool deferLoginCompletion = false,
   }) async {
     final username = await _sessionBootstrapper.establishSessionFromTicket(
       ticket,
@@ -41,6 +50,7 @@ class AuthEntryCoordinator {
       username: username,
       enrollmentPayload: enrollmentPayload,
       completeCampusSession: completeCampusSession,
+      deferLoginCompletion: deferLoginCompletion,
     );
   }
 
@@ -50,6 +60,7 @@ class AuthEntryCoordinator {
     required String cookieString,
     AutoReloginEnrollmentPayload? enrollmentPayload,
     Future<void> Function()? completeCampusSession,
+    bool deferLoginCompletion = false,
   }) async {
     final username = await _sessionBootstrapper.establishFallbackSession(
       pageSnapshot: pageSnapshot,
@@ -60,14 +71,23 @@ class AuthEntryCoordinator {
       username: username,
       enrollmentPayload: enrollmentPayload,
       completeCampusSession: completeCampusSession,
+      deferLoginCompletion: deferLoginCompletion,
     );
   }
 
   Future<AuthEntryResult> configureAutoReloginForExistingSession({
     required String username,
     AutoReloginEnrollmentPayload? enrollmentPayload,
+    bool completePendingLogin = false,
+    Future<void> Function()? completeCampusSession,
   }) async {
     final outcome = await _configureAutoRelogin(enrollmentPayload);
+    if (completePendingLogin) {
+      await this.completePendingLogin(
+        username,
+        completeCampusSession: completeCampusSession,
+      );
+    }
     return AuthEntryResult(
       username: username,
       autoReloginConfigured: outcome.configured,
@@ -80,6 +100,7 @@ class AuthEntryCoordinator {
     required String username,
     AutoReloginEnrollmentPayload? enrollmentPayload,
     Future<void> Function()? completeCampusSession,
+    bool deferLoginCompletion = false,
   }) async {
     String? noticeMessage;
     var autoReloginConfigured = false;
@@ -94,8 +115,14 @@ class AuthEntryCoordinator {
       noticeMessage = outcome.noticeMessage;
     }
 
-    await completeCampusSession?.call();
-    await _onLoginSuccess(username);
+    // Publishing authentication redirects the login route. Enrollment must
+    // finish first, otherwise its WebView and pending capture are disposed.
+    if (!deferLoginCompletion && request.completesLogin) {
+      await completePendingLogin(
+        username,
+        completeCampusSession: completeCampusSession,
+      );
+    }
 
     return AuthEntryResult(
       username: username,
@@ -109,7 +136,7 @@ class AuthEntryCoordinator {
   ) async {
     await _autoReloginCapabilityStore.markProbeStarted();
 
-    if (payload == null || !payload.hasReusableTrustedBrowserState) {
+    if (payload == null || payload.fingerPrint.trim().isEmpty) {
       const result = AuthReloginResult.failure(
         stage: AuthReloginFailureStage.trustedBrowserState,
       );

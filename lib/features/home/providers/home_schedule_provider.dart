@@ -101,27 +101,46 @@ final homeScheduleProvider = Provider.autoDispose<AsyncValue<ScheduleState>>((
 
 final scheduleWeekProvider = StreamProvider.autoDispose
     .family<ScheduleState, DateTime>((ref, weekStart) {
-      final auth = ref.watch(authProvider);
+      final access = ref.watch(
+        authProvider.select(
+          (auth) => (auth.canAccessCachedData, auth.isLoggedIn),
+        ),
+      );
       ref.watch(dataSessionEpochProvider);
       final days = buildHomeScheduleDays(
         weekStart,
         today: ref.watch(homeScheduleTodayProvider),
       );
       final operation = SyncOperation();
-      ref.onDispose(operation.cancel);
+      Timer? retry;
+      ref.onDispose(() {
+        retry?.cancel();
+        operation.cancel();
+      });
 
-      if (!auth.canAccessCachedData) {
+      if (!access.$1) {
         return Stream.value(
           ScheduleState(snapshot: emptyScheduleSnapshot(days)),
         );
       }
       return ref
           .watch(scheduleRepositoryProvider)
-          .watch(
-            days: days,
-            fetchRemote: auth.isLoggedIn,
-            operation: operation,
-          );
+          .watch(days: days, fetchRemote: access.$2, operation: operation)
+          .map((state) {
+            retry?.cancel();
+            // Mounted views recover transient failures; genuine identity
+            // challenges wait for authentication instead of resubmitting.
+            if (access.$2 &&
+                !state.isRefreshing &&
+                const {
+                  ScheduleFailure.network,
+                  ScheduleFailure.timeout,
+                  ScheduleFailure.registrarUnavailable,
+                }.contains(state.failure)) {
+              retry = Timer(const Duration(minutes: 2), ref.invalidateSelf);
+            }
+            return state;
+          });
     });
 
 final homeScheduleActionsProvider = Provider<HomeScheduleActions>((ref) {

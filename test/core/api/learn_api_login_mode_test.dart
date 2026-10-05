@@ -6,9 +6,24 @@ void main() {
     test('detects trusted-device single-login pages', () {
       expect(
         supportsSingleLoginShortcut(
-          '<html><script>function checkSingle(){}</script></html>',
+          '<form action="/do/off/ui/auth/login/checkSingle"></form>',
         ),
         isTrue,
+      );
+    });
+
+    test('does not treat a verification-page script URL as a shortcut', () {
+      expect(
+        supportsSingleLoginShortcut(
+          '<title>二次认证</title><script>const url="/do/off/ui/auth/login/checkSingle";</script>',
+        ),
+        isFalse,
+      );
+      expect(
+        supportsSingleLoginShortcut(
+          '<form action="https://example.com/do/off/ui/auth/login/checkSingle"></form>',
+        ),
+        isFalse,
       );
     });
 

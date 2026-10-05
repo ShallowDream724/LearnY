@@ -38,8 +38,9 @@ class _IdentityAuthFlowScreenState
   bool _capturedSingleLoginEnabled = false;
   bool _didRequestTrustedBrowserEnrollment = false;
   bool _isTrustedBrowserRefreshPass = false;
-  int _trustedBrowserRefreshAttempt = 0;
   String? _bootstrappedUsername;
+  bool _canRetryEnrollment = false;
+  AuthEntryResult? _pendingEnrollmentResult;
   Completer<void>? _trustedBrowserCaptureCompleter;
   bool _isPageLoading = true;
   bool _isProcessing = false;
@@ -118,11 +119,12 @@ class _IdentityAuthFlowScreenState
     _trustedBrowserCaptureCompleter = null;
     _didAttemptAutoSubmit = false;
     if (!isTrustedBrowserRefreshPass) {
-      _trustedBrowserRefreshAttempt = 0;
       _bootstrappedUsername = null;
     }
+    _canRetryEnrollment = false;
+    _pendingEnrollmentResult = null;
 
-    if (widget.request.resetBrowserContext) {
+    if (widget.request.resetBrowserContext || isTrustedBrowserRefreshPass) {
       await _webSurfaceController.clearBrowsingData();
     }
 
@@ -290,52 +292,18 @@ class _IdentityAuthFlowScreenState
     });
 
     try {
-      await _transferCampusIdentity();
-      final enrollmentPayload = await _resolveEnrollmentPayloadIfNeeded();
-      if (_isTrustedBrowserRefreshPass) {
-        final username = _bootstrappedUsername;
-        if (username == null || username.isEmpty) {
-          throw StateError('trusted browser refresh missing bootstrap user');
-        }
-        final result = await ref
+      await _finishIdentityAuthentication(
+        bootstrap: (request, payload, deferCompletion) => ref
             .read(authEntryCoordinatorProvider)
-            .configureAutoReloginForExistingSession(
-              username: username,
-              enrollmentPayload: enrollmentPayload,
-            );
-        if (!mounted) {
-          return;
-        }
-        Navigator.of(context).pop(result);
-        return;
-      }
-
-      final shouldRefreshTrustedBrowserState =
-          _shouldRefreshTrustedBrowserState(enrollmentPayload);
-      final result = await ref
-          .read(authEntryCoordinatorProvider)
-          .consumeTicket(
-            request: shouldRefreshTrustedBrowserState
-                ? const AuthEntryRequest.loginOnly()
-                : widget.request,
-            ticket: ticket,
-            completeCampusSession: _campusLogin.prepare,
-            enrollmentPayload: shouldRefreshTrustedBrowserState
-                ? null
-                : enrollmentPayload,
-          );
-      if (!mounted) {
-        return;
-      }
-      if (shouldRefreshTrustedBrowserState) {
-        await _startTrustedBrowserRefresh(result.username);
-        return;
-      }
-      Navigator.of(context).pop(result);
+            .consumeTicket(
+              request: request,
+              ticket: ticket,
+              enrollmentPayload: payload,
+              deferLoginCompletion: deferCompletion,
+              completeCampusSession: _campusLogin.prepare,
+            ),
+      );
     } on ApiError catch (error) {
-      if (await _handleRefreshPassApiError(error)) {
-        return;
-      }
       if (!mounted) {
         return;
       }
@@ -345,9 +313,6 @@ class _IdentityAuthFlowScreenState
         _isPageLoading = false;
       });
     } catch (error, stackTrace) {
-      if (await _handleRefreshPassError()) {
-        return;
-      }
       debugPrint('[LearnY] Identity ticket flow failed: $error');
       debugPrint('$stackTrace');
       if (!mounted) {
@@ -392,53 +357,19 @@ class _IdentityAuthFlowScreenState
             ),
           );
 
-      await _transferCampusIdentity();
-      final enrollmentPayload = await _resolveEnrollmentPayloadIfNeeded();
-      if (_isTrustedBrowserRefreshPass) {
-        final username = _bootstrappedUsername;
-        if (username == null || username.isEmpty) {
-          throw StateError('trusted browser refresh missing bootstrap user');
-        }
-        final result = await ref
+      await _finishIdentityAuthentication(
+        bootstrap: (request, payload, deferCompletion) => ref
             .read(authEntryCoordinatorProvider)
-            .configureAutoReloginForExistingSession(
-              username: username,
-              enrollmentPayload: enrollmentPayload,
-            );
-        if (!mounted) {
-          return;
-        }
-        Navigator.of(context).pop(result);
-        return;
-      }
-
-      final shouldRefreshTrustedBrowserState =
-          _shouldRefreshTrustedBrowserState(enrollmentPayload);
-      final result = await ref
-          .read(authEntryCoordinatorProvider)
-          .completeFallback(
-            request: shouldRefreshTrustedBrowserState
-                ? const AuthEntryRequest.loginOnly()
-                : widget.request,
-            pageSnapshot: pageSnapshot,
-            cookieString: cookieString,
-            completeCampusSession: _campusLogin.prepare,
-            enrollmentPayload: shouldRefreshTrustedBrowserState
-                ? null
-                : enrollmentPayload,
-          );
-      if (!mounted) {
-        return;
-      }
-      if (shouldRefreshTrustedBrowserState) {
-        await _startTrustedBrowserRefresh(result.username);
-        return;
-      }
-      Navigator.of(context).pop(result);
+            .completeFallback(
+              request: request,
+              pageSnapshot: pageSnapshot,
+              cookieString: cookieString,
+              enrollmentPayload: payload,
+              deferLoginCompletion: deferCompletion,
+              completeCampusSession: _campusLogin.prepare,
+            ),
+      );
     } on ApiError catch (error) {
-      if (await _handleRefreshPassApiError(error)) {
-        return;
-      }
       if (!mounted) {
         return;
       }
@@ -448,9 +379,6 @@ class _IdentityAuthFlowScreenState
         _isPageLoading = false;
       });
     } catch (error, stackTrace) {
-      if (await _handleRefreshPassError()) {
-        return;
-      }
       debugPrint('[LearnY] Identity fallback flow failed: $error');
       debugPrint('$stackTrace');
       if (!mounted) {
@@ -458,6 +386,92 @@ class _IdentityAuthFlowScreenState
       }
       setState(() {
         _errorMessage = '认证失败，请稍后重试';
+        _isProcessing = false;
+        _isPageLoading = false;
+      });
+    }
+  }
+
+  Future<void> _finishIdentityAuthentication({
+    required Future<AuthEntryResult> Function(
+      AuthEntryRequest request,
+      AutoReloginEnrollmentPayload? payload,
+      bool deferCompletion,
+    )
+    bootstrap,
+  }) async {
+    await _transferCampusIdentity();
+    final payload = await _resolveEnrollmentPayloadIfNeeded();
+    final shouldRefresh = _shouldRefreshTrustedBrowserState(payload);
+    final pendingUsername = _bootstrappedUsername;
+    final coordinator = ref.read(authEntryCoordinatorProvider);
+    final result = pendingUsername != null
+        ? await coordinator.configureAutoReloginForExistingSession(
+            username: pendingUsername,
+            enrollmentPayload: payload,
+          )
+        : await bootstrap(
+            shouldRefresh ? const AuthEntryRequest.loginOnly() : widget.request,
+            shouldRefresh ? null : payload,
+            widget.request.requiresAutoRelogin,
+          );
+    if (!mounted) return;
+    if (widget.request.requiresAutoRelogin) {
+      _bootstrappedUsername = result.username;
+      if (shouldRefresh) {
+        await _startTrustedBrowserRefresh(result.username);
+        return;
+      }
+      await _finishEnrollmentResult(result);
+      return;
+    }
+    Navigator.of(context).pop(result);
+  }
+
+  Future<void> _finishEnrollmentResult(AuthEntryResult result) async {
+    _pendingEnrollmentResult = result;
+    _canRetryEnrollment = true;
+    if (!result.autoReloginConfigured) {
+      setState(() {
+        _errorMessage = result.noticeMessage ?? '自动重新登录校验未完成，请继续验证或重试';
+        _isProcessing = false;
+        _isPageLoading = false;
+      });
+      return;
+    }
+    if (widget.request.completesLogin) {
+      await ref
+          .read(authEntryCoordinatorProvider)
+          .completePendingLogin(
+            result.username,
+            completeCampusSession: _campusLogin.prepare,
+          );
+    }
+    if (mounted) Navigator.of(context).pop(result);
+  }
+
+  Future<void> _retryEnrollment() async {
+    final username = _bootstrappedUsername;
+    if (username == null || _isProcessing || _campusLogin.isActive) return;
+    setState(() {
+      _isProcessing = true;
+      _errorMessage = null;
+    });
+    try {
+      final previousResult = _pendingEnrollmentResult;
+      final result = previousResult?.autoReloginConfigured == true
+          ? previousResult!
+          : await ref
+                .read(authEntryCoordinatorProvider)
+                .configureAutoReloginForExistingSession(
+                  username: username,
+                  enrollmentPayload: await _resolveEnrollmentPayloadIfNeeded(),
+                );
+      if (mounted) await _finishEnrollmentResult(result);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = '校验暂未完成，请继续页面中的验证或重试';
         _isProcessing = false;
         _isPageLoading = false;
       });
@@ -542,16 +556,13 @@ class _IdentityAuthFlowScreenState
     if (_isTrustedBrowserRefreshPass || !widget.request.requiresAutoRelogin) {
       return false;
     }
-    if (!_didRequestTrustedBrowserEnrollment) {
-      return false;
-    }
-    return enrollmentPayload == null ||
-        !enrollmentPayload.hasReusableTrustedBrowserState;
+    // Existing SSO can skip the password form. Complete one fresh browser pass
+    // before publishing authentication and disposing the enrollment route.
+    return enrollmentPayload == null || enrollmentPayload.fingerPrint.isEmpty;
   }
 
   Future<void> _startTrustedBrowserRefresh(String username) async {
     _bootstrappedUsername = username;
-    _trustedBrowserRefreshAttempt++;
     if (!mounted) {
       return;
     }
@@ -569,81 +580,47 @@ class _IdentityAuthFlowScreenState
     await _prepareLoginPage(isTrustedBrowserRefreshPass: true);
   }
 
-  Future<bool> _handleRefreshPassApiError(ApiError error) async {
-    if (!_isTrustedBrowserRefreshPass) {
-      return false;
-    }
-    if (await _retryTrustedBrowserRefreshIfNeeded(error)) {
-      return true;
-    }
-    return _completeRefreshPassWithNoticeIfPossible();
-  }
-
-  Future<bool> _handleRefreshPassError() async {
-    if (!_isTrustedBrowserRefreshPass) {
-      return false;
-    }
-    return _completeRefreshPassWithNoticeIfPossible();
-  }
-
-  Future<bool> _retryTrustedBrowserRefreshIfNeeded(ApiError error) async {
-    if (!_canRetryTrustedBrowserRefresh(error)) {
-      return false;
-    }
-    if (_trustedBrowserRefreshAttempt >= 3) {
-      return false;
-    }
+  Future<void> _completeLoginWithoutEnrollment() async {
     final username = _bootstrappedUsername;
-    if (username == null || username.isEmpty) {
-      return false;
+    if (username == null ||
+        _isProcessing ||
+        _campusLogin.isActive ||
+        !mounted) {
+      return;
     }
-    final delaySeconds = _trustedBrowserRefreshAttempt;
-    if (mounted) {
+    setState(() {
+      _isProcessing = true;
+      _errorMessage = null;
+    });
+    try {
+      await ref
+          .read(authEntryCoordinatorProvider)
+          .completePendingLogin(
+            username,
+            completeCampusSession: _campusLogin.prepare,
+          );
+      if (!mounted) return;
+      Navigator.of(context).pop(
+        AuthEntryResult(
+          username: username,
+          noticeMessage: '已完成登录，可稍后在“我的”页重新启用自动重新登录',
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
       setState(() {
+        _errorMessage = '登录尚未完成，请继续页面中的验证或重试';
         _isProcessing = false;
-        _isPageLoading = true;
-        _errorMessage = null;
+        _isPageLoading = false;
       });
     }
-    await Future<void>.delayed(Duration(seconds: delaySeconds));
-    if (!mounted) {
-      return true;
-    }
-    await _startTrustedBrowserRefresh(username);
-    return true;
-  }
-
-  bool _canRetryTrustedBrowserRefresh(ApiError error) {
-    return switch (error.reason) {
-      FailReason.badCredential ||
-      FailReason.errorFetchFromId ||
-      FailReason.invalidResponse => true,
-      _ => false,
-    };
-  }
-
-  bool _completeRefreshPassWithNoticeIfPossible() {
-    if (widget.request.mode != AuthEntryMode.loginAndEnableAutoRelogin) {
-      return false;
-    }
-    final username = _bootstrappedUsername;
-    if (username == null || username.isEmpty || !mounted) {
-      return false;
-    }
-    Navigator.of(context).pop(
-      AuthEntryResult(
-        username: username,
-        autoReloginConfigured: false,
-        noticeMessage: '已完成登录，但自动重新登录授权尚未生效，请稍后在“我的”页重试',
-      ),
-    );
-    return true;
   }
 
   Future<void> _awaitTrustedBrowserCaptureIfNeeded({
     required bool hasReusableFingerToken,
   }) async {
-    if (hasReusableFingerToken ||
+    if (!_didRequestTrustedBrowserEnrollment ||
+        hasReusableFingerToken ||
         (_capturedTrustedFingerGenPrint ?? '').trim().isNotEmpty) {
       return;
     }
@@ -830,8 +807,7 @@ class _IdentityAuthFlowScreenState
             params.set('deviceName', deviceName);
             state.deviceName = deviceName;
           }
-          params.set('radioVal', '是');
-          params.set('singleLogin', 'yes');
+          // Preserve the choice actually made on the school's page.
           return params.toString();
         };
 
@@ -921,13 +897,12 @@ class _IdentityAuthFlowScreenState
           if (!form) {
             return;
           }
-          ensureSingleLoginSelection(form);
           const payload = {};
           const formData = new FormData(form);
           for (const entry of formData.entries()) {
             payload[entry[0]] = entry[1];
           }
-          payload.singleLogin = payload.singleLogin || 'on';
+          payload.singleLogin = payload.singleLogin || '';
           state.loginForm = payload;
           if (payload.deviceName) {
             state.deviceName = String(payload.deviceName);
@@ -987,25 +962,10 @@ class _IdentityAuthFlowScreenState
 
         const autoConfirmTrustedBrowser = function() {
           const yesRadio = document.querySelector('input[name="type"][value="是"]');
-          if (yesRadio && !yesRadio.checked) {
-            yesRadio.click();
-            yesRadio.dispatchEvent(new Event('change', { bubbles: true }));
-          }
           if (!yesRadio || !yesRadio.checked) {
             return;
           }
           reportTrustedBrowserRequested();
-          const buttons = Array.from(document.querySelectorAll('button, input[type="button"], input[type="submit"]'));
-          const confirmButton = buttons.find(function(button) {
-            const text = String(button.innerText || button.value || '').trim();
-            return text === '确定';
-          });
-          if (confirmButton && !confirmButton.__learnyAutoClicked) {
-            confirmButton.__learnyAutoClicked = true;
-            setTimeout(function() {
-              confirmButton.click();
-            }, 120);
-          }
         };
 
         const hookNativeForm = function() {
@@ -1052,15 +1012,8 @@ class _IdentityAuthFlowScreenState
           }
 
           const form = document.getElementById('theform');
-          if (!ensureSingleLoginSelection(form)) {
+          if (!form || !document.getElementById('i_pass')) {
             return;
-          }
-
-          if (form && document.querySelector('[name="singleLogin"]')) {
-            const hasSingleLoginValue = new FormData(form).has('singleLogin');
-            if (!hasSingleLoginValue) {
-              return;
-            }
           }
 
           window.__learnyAutoSubmitTriggered = true;
@@ -1088,7 +1041,6 @@ class _IdentityAuthFlowScreenState
 
         if (!window.__learnyCaptureObserver) {
           window.__learnyCaptureObserver = new MutationObserver(function() {
-            populate();
             hookNativeForm();
             hookJQuery();
             hookXhr();
@@ -1220,7 +1172,7 @@ class _IdentityAuthFlowScreenState
       ),
       body: Column(
         children: [
-          if (_isTrustedBrowserRefreshPass && !_isProcessing)
+          if (widget.request.requiresAutoRelogin && !_isProcessing)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               child: Text(
@@ -1247,6 +1199,28 @@ class _IdentityAuthFlowScreenState
                     ),
                   ),
                 ),
+              ),
+            ),
+          if (_bootstrappedUsername != null &&
+              !_isProcessing &&
+              !_campusLogin.isActive &&
+              (_canRetryEnrollment || _errorMessage != null))
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Wrap(
+                spacing: 12,
+                children: [
+                  TextButton(
+                    onPressed: _retryEnrollment,
+                    child: const Text('重试校验'),
+                  ),
+                  if (widget.request.completesLogin &&
+                      _pendingEnrollmentResult?.autoReloginConfigured != true)
+                    TextButton(
+                      onPressed: _completeLoginWithoutEnrollment,
+                      child: const Text('先完成登录'),
+                    ),
+                ],
               ),
             ),
           Expanded(child: _buildWebSurfaceBody(context)),

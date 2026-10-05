@@ -26,7 +26,9 @@ class AutoReloginEnrollmentPayload {
   final String deviceName;
   final bool singleLoginEnabled;
 
-  String get resolvedFingerGenPrint => fingerGenPrint.trim();
+  String get resolvedFingerGenPrint => fingerGenPrint.trim().isNotEmpty
+      ? fingerGenPrint.trim()
+      : fingerGenPrint3.trim();
 
   String get resolvedFingerGenPrint3 {
     final normalizedFingerGenPrint3 = fingerGenPrint3.trim();
@@ -63,6 +65,8 @@ class AuthEntryRequest {
       mode == AuthEntryMode.enableAutoRelogin;
 
   bool get shouldInjectCredential => input != null;
+
+  bool get completesLogin => mode != AuthEntryMode.enableAutoRelogin;
 }
 
 class AuthEntryResult {

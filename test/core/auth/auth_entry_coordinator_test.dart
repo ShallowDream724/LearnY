@@ -18,6 +18,207 @@ import 'package:learn_y/core/providers/auth_preferences_provider.dart';
 void main() {
   group('AuthEntryCoordinator', () {
     test(
+      'existing enrollment retries without another login or preference toggle',
+      () async {
+        final db = AppDatabase(NativeDatabase.memory());
+        addTearDown(db.close);
+        final preferences = AutoReloginPreferenceNotifier(
+          db,
+          initialEnabled: false,
+        );
+        final service = _FakeAuthReloginService(
+          result: const AuthReloginResult.failure(
+            stage: AuthReloginFailureStage.identityAuthentication,
+            reason: FailReason.errorFetchFromId,
+          ),
+        );
+        final store = AutoReloginCapabilityStore(
+          preferenceNotifier: preferences,
+          statusNotifier: AutoReloginStatusNotifier(db),
+          authReloginService: service,
+          invalidateStoredCredentialAvailability: () {},
+        );
+        var completions = 0;
+        final coordinator = AuthEntryCoordinator(
+          sessionBootstrapper: _FakeBootstrapper(username: 'student'),
+          authReloginService: service,
+          autoReloginCapabilityStore: store,
+          onLoginSuccess: (_) async {
+            completions++;
+          },
+        );
+        const payload = AutoReloginEnrollmentPayload(
+          username: 'account',
+          password: 'password',
+          fingerPrint: 'fingerprint',
+        );
+        final failed = await coordinator.configureAutoReloginForExistingSession(
+          username: 'student',
+          enrollmentPayload: payload,
+        );
+        expect(failed.autoReloginConfigured, isFalse);
+        expect(preferences.state, isFalse);
+        service.result = const AuthReloginResult.success();
+        final recovered = await coordinator
+            .configureAutoReloginForExistingSession(
+              username: 'student',
+              enrollmentPayload: payload,
+            );
+        expect(recovered.autoReloginConfigured, isTrue);
+        expect(preferences.state, isTrue);
+        expect(completions, 0);
+      },
+    );
+    test(
+      'pending login waits for campus verification and can retry failure',
+      () async {
+        final db = AppDatabase(NativeDatabase.memory());
+        addTearDown(db.close);
+        final service = _FakeAuthReloginService(
+          result: const AuthReloginResult.success(),
+        );
+        final store = AutoReloginCapabilityStore(
+          preferenceNotifier: AutoReloginPreferenceNotifier(
+            db,
+            initialEnabled: false,
+          ),
+          statusNotifier: AutoReloginStatusNotifier(db),
+          authReloginService: service,
+          invalidateStoredCredentialAvailability: () {},
+        );
+        final events = <String>[];
+        final coordinator = AuthEntryCoordinator(
+          sessionBootstrapper: _FakeBootstrapper(username: 'student'),
+          authReloginService: service,
+          autoReloginCapabilityStore: store,
+          onLoginSuccess: (_) async {
+            events.add('published');
+          },
+        );
+        await expectLater(
+          coordinator.completePendingLogin(
+            'student',
+            completeCampusSession: () async {
+              throw StateError('verification unavailable');
+            },
+          ),
+          throwsStateError,
+        );
+        expect(events, isEmpty);
+        await coordinator.completePendingLogin(
+          'student',
+          completeCampusSession: () async {
+            events.add('campus');
+          },
+        );
+        expect(events, ['campus', 'published']);
+      },
+    );
+    test(
+      'settings ticket configures without publishing login or campus continuation',
+      () async {
+        final db = AppDatabase(NativeDatabase.memory());
+        addTearDown(db.close);
+        final service = _FakeAuthReloginService(
+          result: const AuthReloginResult.success(),
+        );
+        final store = AutoReloginCapabilityStore(
+          preferenceNotifier: AutoReloginPreferenceNotifier(
+            db,
+            initialEnabled: false,
+          ),
+          statusNotifier: AutoReloginStatusNotifier(db),
+          authReloginService: service,
+          invalidateStoredCredentialAvailability: () {},
+        );
+        var completions = 0;
+        var campusPreparations = 0;
+        final coordinator = AuthEntryCoordinator(
+          sessionBootstrapper: _FakeBootstrapper(username: 'student'),
+          authReloginService: service,
+          autoReloginCapabilityStore: store,
+          onLoginSuccess: (_) async {
+            completions++;
+          },
+        );
+        final result = await coordinator.consumeTicket(
+          request: const AuthEntryRequest.enableAutoRelogin(
+            input: AutoReloginSetupInput(
+              username: 'account',
+              password: 'password',
+            ),
+          ),
+          ticket: 'ST',
+          enrollmentPayload: const AutoReloginEnrollmentPayload(
+            username: 'account',
+            password: 'password',
+            fingerPrint: 'fingerprint',
+          ),
+          completeCampusSession: () async {
+            campusPreparations++;
+          },
+        );
+        expect(result.autoReloginConfigured, isTrue);
+        expect(completions, 0);
+        expect(campusPreparations, 0);
+      },
+    );
+    test(
+      'SSO shortcut keeps enrollment alive until the pending login is complete',
+      () async {
+        final db = AppDatabase(NativeDatabase.memory());
+        addTearDown(db.close);
+        final preferences = AutoReloginPreferenceNotifier(
+          db,
+          initialEnabled: false,
+        );
+        final status = AutoReloginStatusNotifier(db);
+        final service = _FakeAuthReloginService(
+          result: const AuthReloginResult.success(),
+        );
+        final store = AutoReloginCapabilityStore(
+          preferenceNotifier: preferences,
+          statusNotifier: status,
+          authReloginService: service,
+          invalidateStoredCredentialAvailability: () {},
+        );
+        var completions = 0;
+        final completionEvents = <String>[];
+        final coordinator = AuthEntryCoordinator(
+          sessionBootstrapper: _FakeBootstrapper(username: 'student'),
+          authReloginService: service,
+          autoReloginCapabilityStore: store,
+          onLoginSuccess: (_) async {
+            completions++;
+            completionEvents.add('login');
+          },
+        );
+        await coordinator.consumeTicket(
+          request: const AuthEntryRequest.loginOnly(),
+          ticket: 'ST',
+          deferLoginCompletion: true,
+        );
+        expect(completions, 0);
+        final result = await coordinator.configureAutoReloginForExistingSession(
+          username: 'student',
+          completePendingLogin: true,
+          completeCampusSession: () async {
+            completionEvents.add('campus');
+          },
+          enrollmentPayload: const AutoReloginEnrollmentPayload(
+            username: 'account',
+            password: 'password',
+            fingerPrint: 'fingerprint',
+          ),
+        );
+        // No SMS/trusted token is required when a real credential probe succeeds.
+        expect(result.autoReloginConfigured, isTrue);
+        expect(completions, 1);
+        expect(completionEvents, ['campus', 'login']);
+        expect(preferences.state, isTrue);
+      },
+    );
+    test(
       'successful enrollment marks capability ready and enables preference',
       () async {
         final db = AppDatabase(NativeDatabase.memory());
@@ -208,7 +409,7 @@ class _FakeAuthReloginService extends AuthReloginService {
   _FakeAuthReloginService({required this.result})
     : super(CredentialVault(const _NoopSecureStorage()));
 
-  final AuthReloginResult result;
+  AuthReloginResult result;
   String? capturedFingerGenPrint;
   String? capturedFingerGenPrint3;
   bool? capturedSingleLoginEnabled;

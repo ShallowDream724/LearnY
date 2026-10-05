@@ -51,6 +51,7 @@ The 2026-09-12 protocol findings and coverage boundaries are maintained in
 | `LEARNY_PROBE_SKIP_CREDENTIAL_LOGIN=1` | Skip the initial explicit credential-login stage |
 | `LEARNY_PROBE_IDENTITY_URL` | Optional previously observed identity form to inspect |
 | `LEARNY_PROBE_CREDENTIAL_JSON` | Optional in-process credential, never print or persist this value |
+| `LEARNY_PROBE_USERNAME` / `LEARNY_PROBE_PASSWORD` | Explicit process-only password probe without trusted-device state; used only if credential JSON is absent, may require the school's second factor |
 | `LEARNY_PROBE_SNAPSHOT_OUTPUT` | Export resulting cookies to a separate ignored snapshot, never the original source |
 
 The read probe uses production parsers, logs shapes/counts rather than bodies,

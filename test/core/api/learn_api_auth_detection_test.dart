@@ -145,7 +145,10 @@ void main() {
         helper.setCSRFToken(initialToken);
         helper.dio.httpClientAdapter = _Adapter((request) async {
           if (request.uri.toString() == urls.idLogin()) {
-            return ResponseBody.fromString('<html>checkSingle</html>', 200);
+            return ResponseBody.fromString(
+              '<form action="/do/off/ui/auth/login/checkSingle"></form>',
+              200,
+            );
           }
           if (request.uri.toString() == urls.idLoginCheckSingle()) {
             return ResponseBody.fromString(

@@ -12,6 +12,7 @@ import 'package:learn_y/core/database/app_state_keys.dart';
 import 'package:learn_y/core/database/database.dart';
 import 'package:learn_y/core/providers/api_client_provider.dart';
 import 'package:learn_y/core/providers/app_providers.dart';
+import 'package:learn_y/core/providers/time_tick_provider.dart';
 import 'package:learn_y/core/schedule/schedule_models.dart';
 import 'package:learn_y/core/schedule/schedule_projection.dart';
 import 'package:learn_y/core/semester/semester_repository.dart';
@@ -29,7 +30,11 @@ final today = DateTime(2026, 9, 12);
 final _clock = StateProvider<DateTime>((ref) => today);
 
 void main() {
-  Future<_Fixture> setup(WidgetTester tester, {double width = 390}) async {
+  Future<_Fixture> setup(
+    WidgetTester tester, {
+    double width = 390,
+    TargetPlatform platform = TargetPlatform.android,
+  }) async {
     final fixture = (await tester.runAsync(_Fixture.create))!;
     addTearDown(fixture.dispose);
     tester.view.devicePixelRatio = 1;
@@ -39,8 +44,9 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: fixture.container,
-        child: const MaterialApp(
-          home: Scaffold(
+        child: MaterialApp(
+          theme: ThemeData(platform: platform),
+          home: const Scaffold(
             body: SingleChildScrollView(
               child: Padding(
                 padding: EdgeInsets.all(16),
@@ -97,7 +103,11 @@ void main() {
   testWidgets(
     'home boundary switches persisted learning semester after consent, without waiting for content sync',
     (tester) async {
-      final fixture = await setup(tester, width: 1280);
+      final fixture = await setup(
+        tester,
+        width: 1280,
+        platform: TargetPlatform.windows,
+      );
       fixture.container.read(homeScheduleSelectedDateProvider.notifier).state =
           DateTime(2026, 9, 13);
       await tester.pumpAndSettle();
@@ -247,6 +257,9 @@ class _Fixture {
         initialCurrentSemesterIdProvider.overrideWithValue(summer),
         academicCalendarProvider.overrideWithValue(academicCalendar),
         homeScheduleTodayProvider.overrideWith((ref) => ref.watch(_clock)),
+        minuteTickProvider.overrideWith(
+          (ref) => Stream.value(ref.watch(_clock)),
+        ),
         scheduleWeekProvider.overrideWith(
           (ref, week) => Stream.value(
             ScheduleState(

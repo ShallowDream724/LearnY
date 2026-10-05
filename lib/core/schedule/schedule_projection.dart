@@ -274,7 +274,9 @@ HomeScheduleSnapshot emptyScheduleSnapshot(List<HomeScheduleDayOption> days) {
 }
 
 const Duration _homeScheduleRemoteRefreshInterval = Duration(hours: 12);
-const Duration _homeScheduleRemoteRetryBackoff = Duration(hours: 2);
+// A brief transport outage must not suppress an otherwise healthy calendar
+// for the next two hours just because routine-derived courses are available.
+const Duration _homeScheduleRemoteRetryBackoff = Duration(minutes: 2);
 bool shouldFetchHomeScheduleRemoteSnapshot({
   required String semesterId,
   required HomeScheduleSnapshot? cachedSnapshot,

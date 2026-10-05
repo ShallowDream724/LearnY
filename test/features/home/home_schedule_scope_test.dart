@@ -16,9 +16,45 @@ import 'package:learn_y/core/schedule/schedule_models.dart';
 import 'package:learn_y/core/schedule/schedule_projection.dart';
 import 'package:learn_y/core/schedule/schedule_repository.dart';
 import 'package:learn_y/core/semester/semester_repository.dart';
+import 'package:learn_y/core/sync/sync_operation.dart';
 import 'package:learn_y/features/home/providers/home_schedule_provider.dart';
 
 void main() {
+  testWidgets(
+    'mounted schedules retry transient failures but not identity challenges',
+    (tester) async {
+      final repository = _RetryingScheduleRepository();
+      final container = ProviderContainer(
+        overrides: [
+          authProvider.overrideWith((ref) => _OnlineAuth()),
+          homeScheduleTodayProvider.overrideWith((ref) => DateTime(2026, 9, 7)),
+          scheduleRepositoryProvider.overrideWithValue(repository),
+        ],
+      );
+      final subscription = container.listen(
+        scheduleWeekProvider(DateTime(2026, 9, 7)),
+        (_, _) {},
+      );
+      await tester.pump();
+      expect(repository.calls, 1);
+      await tester.pump(const Duration(minutes: 1, seconds: 59));
+      expect(repository.calls, 1);
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+      expect(repository.calls, 2);
+      await tester.pump(const Duration(minutes: 3));
+      expect(
+        repository.calls,
+        2,
+        reason: 'identity verification must not loop',
+      );
+      subscription.close();
+      await tester.pump(const Duration(milliseconds: 1));
+      container.dispose();
+      await tester.pump(const Duration(milliseconds: 1));
+    },
+  );
+
   test(
     'calendar can fetch next week before the new semester becomes official',
     () async {
@@ -248,6 +284,30 @@ class _CachedAuth extends StateNotifier<AuthState> implements AuthController {
   @override
   dynamic noSuchMethod(Invocation invocation) =>
       throw StateError('Unexpected auth operation');
+}
+
+class _RetryingScheduleRepository implements ScheduleRepository {
+  int calls = 0;
+  @override
+  Stream<ScheduleState> watch({
+    required List<HomeScheduleDayOption> days,
+    required bool fetchRemote,
+    required SyncOperation operation,
+  }) {
+    calls++;
+    return Stream.value(
+      ScheduleState(
+        snapshot: emptyScheduleSnapshot(days),
+        failure: calls == 1
+            ? ScheduleFailure.network
+            : ScheduleFailure.identityVerification,
+      ),
+    );
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw StateError('Unexpected repository operation');
 }
 
 class _NoCalendarCalls implements LearningReadApi {

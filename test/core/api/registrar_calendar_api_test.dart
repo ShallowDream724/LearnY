@@ -11,6 +11,73 @@ import 'package:learn_y/core/api/registrar_calendar_api.dart';
 import 'package:learn_y/core/api/utils.dart';
 
 void main() {
+  test(
+    'single-login second factor preserves identity cookies without another password',
+    () async {
+      var formLoads = 0;
+      var shortcutPosts = 0;
+      var passwordPosts = 0;
+      final jar = CookieJar();
+      final identityUri = Uri.parse('https://id.tsinghua.edu.cn/');
+      await jar.saveFromResponse(identityUri, [
+        Cookie('identity-session', 'existing'),
+      ]);
+      final helper = Learn2018Helper(
+        config: HelperConfig(
+          cookieJar: jar,
+          campusCredentialProvider: () async => const Credential(
+            username: 'student',
+            password: 'password',
+            fingerPrint: 'browser',
+            fingerGenPrint: 'trusted',
+          ),
+        ),
+      )..setCSRFToken('learn-token');
+      addTearDown(() => helper.dio.close());
+      helper.dio.httpClientAdapter = _Adapter((options, _) {
+        final uri = options.uri;
+        if (uri.host == 'learn.tsinghua.edu.cn') return _response('ticket');
+        if (uri.path == '/j_acegi_login.do') {
+          return _redirect(
+            'https://id.tsinghua.edu.cn/do/off/ui/auth/login/form/campus/0',
+          );
+        }
+        if (uri.path.contains('/login/form/')) {
+          formLoads++;
+          return _response(
+            formLoads > 2
+                ? _passwordForm
+                : '<form action="/do/off/ui/auth/login/checkSingle"></form>',
+          );
+        }
+        if (uri.path.endsWith('/checkSingle')) {
+          shortcutPosts++;
+          return _response(
+            '<title>二次认证</title><script>const retry="/do/off/ui/auth/login/checkSingle";</script>',
+          );
+        }
+        if (uri.path.endsWith('/check')) {
+          passwordPosts++;
+          return _response('<title>二次认证</title>');
+        }
+        return _response('unexpected');
+      });
+      await expectLater(
+        helper.getCalendar('2026-09-14', '2026-09-20'),
+        throwsA(
+          isA<RegistrarException>().having(
+            (error) => error.failure,
+            'failure',
+            RegistrarFailure.identityVerification,
+          ),
+        ),
+      );
+      expect(shortcutPosts, 1);
+      expect(passwordPosts, 0);
+      expect(formLoads, 2);
+      expect((await jar.loadForRequest(identityUri)).single.value, 'existing');
+    },
+  );
   for (final failurePage in ['sso_fail.jsp', 'timeout.jsp']) {
     test('HTTP 200 $failurePage renews the registrar ticket once', () async {
       final dio = Dio();

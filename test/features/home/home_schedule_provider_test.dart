@@ -404,7 +404,7 @@ void main() {
           cachedSnapshot: null,
           localSnapshot: localSnapshot,
           refreshState: failedState,
-          now: DateTime(2026, 3, 21, 9, 0),
+          now: DateTime(2026, 3, 21, 8, 1),
         ),
         isFalse,
       );
@@ -415,7 +415,7 @@ void main() {
           cachedSnapshot: null,
           localSnapshot: localSnapshot,
           refreshState: failedState,
-          now: DateTime(2026, 3, 21, 10, 30),
+          now: DateTime(2026, 3, 21, 8, 2),
         ),
         isTrue,
       );

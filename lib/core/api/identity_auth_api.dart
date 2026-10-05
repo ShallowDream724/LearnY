@@ -147,8 +147,19 @@ class IdentityAuthApi {
   );
 }
 
-bool supportsSingleLoginShortcut(String source) =>
-    source.contains('checkSingle');
+bool supportsSingleLoginShortcut(String source) {
+  final endpoint = Uri.parse(urls.idLoginCheckSingle());
+  return html.parse(source).querySelectorAll('form[action]').any((form) {
+    final action = form.attributes['action']?.trim() ?? '';
+    if (action.isEmpty || action.startsWith('#')) return false;
+    final target = Uri.tryParse(action);
+    if (target == null) return false;
+    final resolved = endpoint.resolveUri(target);
+    return resolved.scheme == endpoint.scheme &&
+        resolved.host == endpoint.host &&
+        resolved.path == endpoint.path;
+  });
+}
 
 Map<String, String> buildIdentityCheckFormData({
   required String username,
