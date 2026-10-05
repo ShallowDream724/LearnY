@@ -31,12 +31,17 @@ class GlassSurface extends StatelessWidget {
     required this.child,
     this.radius = 24,
     this.tint,
+    this.backdropTone,
     this.optics = const GlassOptics(),
   }) : assert(radius >= 0);
 
   final Widget child;
   final double radius;
   final Color? tint;
+
+  /// Maps the live backdrop's tones before the surface tint and foreground.
+  /// Uses the same GPU filter layer on both Impeller and the blur fallback.
+  final ui.ColorFilter? backdropTone;
   final GlassOptics optics;
 
   @override
@@ -44,7 +49,7 @@ class GlassSurface extends StatelessWidget {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final highContrast = MediaQuery.highContrastOf(context);
     final fill = highContrast
-        ? Theme.of(context).colorScheme.surface
+        ? (tint?.withValues(alpha: 1) ?? Theme.of(context).colorScheme.surface)
         : tint ?? (dark ? const Color(0xAD20232A) : const Color(0x58FFF8F0));
     return CustomPaint(
       painter: GlassShadow(radius: radius, dark: dark, strength: optics.shadow),
@@ -54,6 +59,7 @@ class GlassSurface extends StatelessWidget {
           radius: radius,
           optics: optics,
           enabled: !highContrast,
+          tone: backdropTone,
           child: ColoredBox(
             color: fill,
             child: GlassLighting(
@@ -91,11 +97,13 @@ class GlassBackdrop extends StatefulWidget {
     required this.radius,
     this.optics = const GlassOptics(),
     this.enabled = true,
+    this.tone,
   });
   final Widget child;
   final double radius;
   final GlassOptics optics;
   final bool enabled;
+  final ui.ColorFilter? tone;
 
   @override
   State<GlassBackdrop> createState() => _GlassBackdropState();
@@ -130,6 +138,7 @@ class _GlassBackdropState extends State<GlassBackdrop> {
       optics: widget.optics,
       pixelRatio: MediaQuery.devicePixelRatioOf(context),
       enabled: widget.enabled,
+      tone: widget.tone,
       child: widget.child,
     );
   }
@@ -142,6 +151,7 @@ class _GlassBackdropLayer extends SingleChildRenderObjectWidget {
     required this.optics,
     required this.pixelRatio,
     required this.enabled,
+    required this.tone,
     required super.child,
   });
   final ui.FragmentShader? shader;
@@ -149,6 +159,7 @@ class _GlassBackdropLayer extends SingleChildRenderObjectWidget {
   final GlassOptics optics;
   final double pixelRatio;
   final bool enabled;
+  final ui.ColorFilter? tone;
 
   @override
   RenderObject createRenderObject(BuildContext context) =>
@@ -193,12 +204,15 @@ class _RenderGlassBackdrop extends RenderProxyBox {
       sigmaY: config.optics.blurSigma,
     );
     final backdrop = (layer ??= BackdropFilterLayer()) as BackdropFilterLayer;
-    backdrop.filter = shader == null || config.optics.refraction == 0
+    final opticalFilter = shader == null || config.optics.refraction == 0
         ? blur
         : ui.ImageFilter.compose(
             outer: ui.ImageFilter.shader(shader),
             inner: blur,
           );
+    backdrop.filter = config.tone == null
+        ? opticalFilter
+        : ui.ImageFilter.compose(outer: config.tone!, inner: opticalFilter);
     context.pushLayer(backdrop, super.paint, offset);
   }
 }

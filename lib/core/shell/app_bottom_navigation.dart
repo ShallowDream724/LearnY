@@ -6,6 +6,7 @@ import '../design/glass_surface.dart';
 import '../design/interactive_spring.dart';
 import 'shell_layout_metrics.dart';
 import 'shell_navigation_progress.dart';
+import 'navigation_glass_appearance.dart';
 
 class ShellNavDestinationData {
   const ShellNavDestinationData({
@@ -279,7 +280,12 @@ class _AppBottomNavigationState extends State<AppBottomNavigation>
   @override
   Widget build(BuildContext context) {
     final dark = context.isDark;
-    final foreground = dark ? const Color(0xFFF4F5F9) : const Color(0xFF252D40);
+    final appearance = dark
+        ? NavigationGlassAppearance.dark
+        : NavigationGlassAppearance.light;
+    final highContrast = MediaQuery.highContrastOf(context);
+    final scheme = Theme.of(context).colorScheme;
+    final foreground = highContrast ? scheme.onSurface : appearance.foreground;
     return SafeArea(
       top: false,
       child: Padding(
@@ -298,11 +304,20 @@ class _AppBottomNavigationState extends State<AppBottomNavigation>
                 _width = constraints.maxWidth;
                 final normalIcons = _icons(color: foreground);
                 final lensIcons = _icons(
-                  color: dark
-                      ? const Color(0xFFDBE1FF)
-                      : const Color(0xFF384681),
+                  color: highContrast
+                      ? scheme.onPrimary
+                      : appearance.selectedForeground,
                 );
                 final controls = _controls(foreground);
+                final background = Positioned.fill(
+                  child: GlassSurface(
+                    radius: 999,
+                    tint: highContrast ? scheme.surface : appearance.tint,
+                    backdropTone: appearance.backdropTone,
+                    optics: const GlassOptics(blurSigma: 4, refraction: 9),
+                    child: const SizedBox.expand(),
+                  ),
+                );
                 return Listener(
                   behavior: HitTestBehavior.opaque,
                   onPointerDown: _begin,
@@ -339,16 +354,7 @@ class _AppBottomNavigationState extends State<AppBottomNavigation>
                           child: Stack(
                             clipBehavior: Clip.none,
                             children: [
-                              const Positioned.fill(
-                                child: GlassSurface(
-                                  radius: 999,
-                                  optics: GlassOptics(
-                                    blurSigma: 4,
-                                    refraction: 9,
-                                  ),
-                                  child: SizedBox.expand(),
-                                ),
-                              ),
+                              background,
                               Positioned.fill(
                                 child: IgnorePointer(
                                   child: ExcludeSemantics(
@@ -364,22 +370,19 @@ class _AppBottomNavigationState extends State<AppBottomNavigation>
                                 child: IgnorePointer(
                                   child: GlassSurface(
                                     radius: 999,
-                                    tint: dark
-                                        ? Color.lerp(
-                                            const Color(0x283C4560),
-                                            const Color(0x64485470),
-                                            lift,
-                                          )
+                                    tint: highContrast
+                                        ? scheme.primary
                                         : Color.lerp(
-                                            const Color(0x78FFFFFF),
-                                            const Color(0xB8FFFFFF),
+                                            Colors.transparent,
+                                            appearance.pressedTint,
                                             lift,
                                           ),
+                                    backdropTone: appearance.selectionTone,
                                     optics: GlassOptics(
                                       blurSigma: 0,
                                       refraction: lift * 8,
-                                      light: .45,
-                                      shadow: .3 * lift,
+                                      light: .5,
+                                      shadow: .16 + .3 * lift,
                                     ),
                                     child: const SizedBox.expand(),
                                   ),
