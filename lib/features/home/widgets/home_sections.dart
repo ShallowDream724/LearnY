@@ -108,7 +108,7 @@ class HomeStatsSection extends ConsumerWidget {
           onTap: () => context.push(Routes.favoriteFiles),
         ),
     ];
-    return Wrap(spacing: 4, runSpacing: 4, children: entries);
+    return Wrap(spacing: 8, runSpacing: 8, children: entries);
   }
 }
 

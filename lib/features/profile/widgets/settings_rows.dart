@@ -3,21 +3,23 @@ import 'package:flutter/material.dart';
 import '../../../core/design/app_materials.dart';
 import '../../../core/design/app_theme_colors.dart';
 import '../../../core/design/typography.dart';
-import '../../../core/design/study_readable_content.dart';
 
-class SettingsSectionLabel extends StatelessWidget {
-  const SettingsSectionLabel({super.key, required this.label});
+class _SettingsGroupHeading extends StatelessWidget {
+  const _SettingsGroupHeading({required this.label});
   final String label;
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(2, 0, 2, 10),
+    padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
     child: Align(
       alignment: Alignment.centerLeft,
-      child: StudyReadableText(
-        label,
-        style: AppTypography.titleSmall.copyWith(
-          color: context.colors.subtitle,
+      child: Semantics(
+        header: true,
+        child: Text(
+          label,
+          style: AppTypography.titleSmall.copyWith(
+            color: context.colors.subtitle,
+          ),
         ),
       ),
     ),
@@ -28,9 +30,11 @@ class SettingsGroup extends StatelessWidget {
   const SettingsGroup({
     super.key,
     required this.children,
+    required this.label,
     this.tone = StudyTone.slate,
   });
   final List<Widget> children;
+  final String label;
   final StudyTone tone;
 
   @override
@@ -38,6 +42,10 @@ class SettingsGroup extends StatelessWidget {
     tone: tone,
     child: Column(
       children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: _SettingsGroupHeading(label: label),
+        ),
         for (var index = 0; index < children.length; index++) ...[
           if (index > 0)
             Divider(

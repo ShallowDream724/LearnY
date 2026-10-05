@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'study_readable_content.dart';
+import 'study_header_content.dart';
 
-/// Shared wallpaper continuity and local contrast for the four shell pages.
-/// Scroll behavior stays explicit at the call site.
+/// Shared scrolling headings and bounded actions for the four shell pages.
+/// An explicit background is reserved for a persistent editing toolbar.
 class StudySliverAppBar extends SliverAppBar {
   StudySliverAppBar({
     super.key,
@@ -16,6 +16,7 @@ class StudySliverAppBar extends SliverAppBar {
     super.pinned,
     super.floating,
     super.snap,
+    Color backgroundColor = Colors.transparent,
   }) : super(
          title: StudyHeaderContent(child: title),
          leading: leading == null
@@ -31,14 +32,9 @@ class StudySliverAppBar extends SliverAppBar {
                    ),
                  ),
                ],
-         backgroundColor: Colors.transparent,
+         backgroundColor: backgroundColor,
          surfaceTintColor: Colors.transparent,
          shadowColor: Colors.transparent,
-         clipBehavior: Clip.none,
-         // Ordinary scrolling headers reveal the shared wallpaper directly.
-         // Only overlapping headers need to mask passing content.
-         flexibleSpace: pinned == true || floating == true
-             ? const StudyLightSurface()
-             : null,
+         clipBehavior: Clip.hardEdge,
        );
 }

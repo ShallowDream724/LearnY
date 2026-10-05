@@ -24,6 +24,7 @@ import 'package:learn_y/features/home/widgets/pending_assignments.dart';
 import 'package:learn_y/features/home/widgets/weekly_timetable.dart';
 import 'package:learn_y/core/shell/app_bottom_navigation.dart';
 import 'package:learn_y/features/assignments/assignment_submission_screen.dart';
+import 'package:learn_y/features/assignments/widgets/homework_detail_sections.dart';
 import 'package:learn_y/features/assignments/submission/homework_submission_models.dart';
 import 'package:learn_y/features/assignments/submission/homework_submission_controller.dart';
 
@@ -617,6 +618,18 @@ void main() {
           if (!mainRoute) router.push(entry.value);
           await settleData();
           await capture(tester, key, '${entry.key}_${size.width.toInt()}');
+          if (entry.key == 'homework_detail') {
+            final texts = find.descendant(
+              of: find.byType(HomeworkStatusHeader),
+              matching: find.byType(Text),
+            );
+            expect(
+              tester.getTopLeft(texts.first).dx,
+              closeTo(tester.getTopLeft(texts.last).dx, .01),
+              reason:
+                  'Status tag ink and homework title share the reading edge',
+            );
+          }
           if (entry.key == 'profile' && size.width == 1440) {
             await tester.tap(find.byTooltip('选择外观'));
             await tester.pumpAndSettle();

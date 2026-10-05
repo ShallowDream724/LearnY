@@ -47,9 +47,9 @@
 
 本次来源为 [Apple Materials](https://developer.apple.com/design/human-interface-guidelines/materials)、[Microsoft Acrylic](https://learn.microsoft.com/en-us/windows/apps/design/style/acrylic) 与 [WCAG 文字对比基准](https://www.w3.org/WAI/WCAG21/Understanding/contrast-minimum.html)。公开指南描述的是材质分层、明度控制与语义前景等行为，不是 Apple 私有光学算法的实现规格。
 
-项目负责人确认同时改进 Windows 与 Android：悬浮控制保持轻盈，内容面板与正文按阅读任务提供稳定性；壁纸在组件间保留色彩，小字通过共享前景／材质规则获得对比。直接落在壁纸上的文字可使用区域深浅选择和柔和局部明度保护；卡片内优先稳定前景，不以描边、厚阴影、整屏灰罩补救。缓存共享背景分析，避免逐组件取样和滚动闪变。普通小字以至少 4.5:1 为对比基准，判断最终合成背景，不能只看颜色名称。
+项目负责人确认同时改进 Windows 与 Android：悬浮控制保持轻盈，内容面板与正文按阅读任务提供稳定性；壁纸在组件间保留色彩，小字通过共享前景／材质规则获得对比。build 38 根据真实使用反馈撤销直接落在壁纸文字后的扩散阅读底：分组说明回到所属内容面，实际按钮采用有界材质，普通页面标题随内容自然滚动。卡片内优先稳定前景，不以普遍描边、厚阴影、整屏灰罩补救。缓存共享背景分析，避免逐组件取样和滚动闪变。普通小字以至少 4.5:1 为对比基准，判断最终合成背景，不能只看颜色名称。
 
-此次仅更新设计规范，完整区域自适应尚未实现。Course X 待选课程和个人日程仍处于讨论阶段，不作为现有功能描述。
+2026-10-05 追加研读 [Apple：Meet Liquid Glass](https://developer.apple.com/videos/play/wwdc2025/219/)、[HarmonyOS 高效模糊](https://developer.huawei.com/consumer/en/doc/harmonyos-guides/ui-use-blur-efficiently) 与 [HONOR MagicOS](https://www.honor.com/cn/magic-os/)。采用导航功能层与阅读内容分离、材质不过度套叠的原则；不把颜色渐变冒充背景模糊。普通标题的小范围字形光影不作为任意复杂壁纸的严格对比证明。Course X 待选课程和个人日程仍处于讨论阶段，不作为现有功能描述。
 
 ## 日程参考项目（仅研读）
 

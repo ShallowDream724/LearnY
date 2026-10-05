@@ -16,7 +16,7 @@ Color readingForeground(Color color, {required bool dark}) {
     return (math.max(value, surface) + .05) / (math.min(value, surface) + .05);
   }
 
-  const target = 6.0; // headroom for translucent material and feathered edges
+  const target = 6.0; // headroom for bounded translucent control material
   if (ratio(color) >= target) return color;
   final hsl = HSLColor.fromColor(color);
   var low = dark ? hsl.lightness : 0.0;

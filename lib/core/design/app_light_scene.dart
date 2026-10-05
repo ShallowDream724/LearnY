@@ -43,12 +43,6 @@ class StudyLightBackdrop extends StatefulWidget {
   static Listenable? motionOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<_SceneScope>()?.motion;
 
-  // SafeArea removes descendants' padding. Retain the scene's original system
-  // inset so an exterior reading feather cannot wash out status-bar icons.
-  static double statusInsetOf(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<_SceneScope>()?.statusInset ??
-      0;
-
   static ({StudyLightScene scene, Size size, Offset origin}) locate(
     RenderBox surface, {
     required bool dark,
@@ -351,11 +345,10 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop> {
   Widget build(BuildContext context) => _SceneScope(
     scene: _scene,
     motion: _motion,
-    statusInset: MediaQuery.viewPaddingOf(context).top,
     child: NotificationListener<ScrollNotification>(
       onNotification: (_) {
         // Moving a cached PageView layer changes its sampling coordinates but
-        // does not otherwise repaint its header/glass display lists.
+        // does not otherwise repaint its glass display lists.
         _motion.moved();
         return false;
       },
@@ -387,17 +380,14 @@ class _SceneScope extends InheritedWidget {
   const _SceneScope({
     required this.scene,
     required this.motion,
-    required this.statusInset,
     required super.child,
   });
   final StudyLightScene scene;
   final Listenable motion;
-  final double statusInset;
 
   @override
   bool updateShouldNotify(_SceneScope oldWidget) =>
-      !identical(scene, oldWidget.scene) ||
-      statusInset != oldWidget.statusInset;
+      !identical(scene, oldWidget.scene);
 }
 
 class _SceneMotion extends ChangeNotifier {

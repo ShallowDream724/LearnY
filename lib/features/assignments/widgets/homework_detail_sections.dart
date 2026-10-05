@@ -33,24 +33,30 @@ class HomeworkStatusHeader extends ConsumerWidget {
       children: [
         Row(
           children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: status.fill,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned.fill(
+                  left: -10,
+                  right: -10,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: status.fill,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Text(
                     statusText,
                     style: AppTypography.labelMedium.copyWith(
                       color: status.accent,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
             if (homework.isFavorite) ...[
               const SizedBox(width: 8),

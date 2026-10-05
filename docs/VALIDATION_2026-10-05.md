@@ -114,3 +114,20 @@ build 33 最终验证：337 项全套测试通过，`flutter analyze --no-pub li
 ## 0.1.5 正式发布准备
 
 用户明确授权发布正式 Release 0.1.5，沿用已构建、验证的 build 37。构建源码为 `28d985e`；随后提交仅整理公开发布说明、下载链接和打包校验文本格式，`lib/`、Android/Windows 工程、资源以及版本/依赖文件与该构建提交一致，没有重编译或替换安装包。SHA256SUMS 改为 UTF-8 无 BOM、LF 换行，两端文件通过 `sha256sum --check`；APK 和 Windows ZIP 的 SHA-256 沿用上方记录。
+
+正式 Release 已发布并设为 Latest：`v0.1.5`，GitHub Release ID `403753619`。本地后续候选不替换该 tag 或发布资产。
+
+## build 38：撤销扩散阅读底与标题遮挡
+
+用户实际使用反馈表明，build 37 的白色阅读底在滚动时形成明显黏连，设置固定标题的外侧渐变还会覆盖下方卡片。此前像素测试只证明了渐变的数学连续性，不能证明交互和审美成立。本轮删除 `ReadingFeather`、`StudyReadableContent` 及标题壁纸切片，不继续叠加柔边补救。
+
+普通四个主页标题随内容自然滚动，课程整理模式的取消/完成使用范围内的实底固定栏。设置分组名移入所属 `SettingsGroup` 面板；统计、作业筛选/折叠与退出使用共用 `StudyControlSurface`。固定材质只在控件圆角内合成，不随壁纸和滚动猜测颜色、生成外扩渐变或重复背景过滤。标题只保留小范围字形光影。作业标签的首字与标题及正文对齐，底色两侧独立延伸。
+
+- 28 项相关回归检查均通过，失败后定点复测。涵盖有界控件之外像素不变、滚动内容不被标题遮挡、明暗主题所有课程语义色与退出红色在白/黑极端背景上至少 4.5:1，以及原菜单返回、外壳与导航行为。课程玻璃的滑动/跳转图像比较容许至多一个 8-bit 色阶的浮点变换舍入，场景内容不能变化。
+- 实际 `AppBar` 会插入自己的 `IconButtonTheme`；仅改变 `ThemeData` 不足以覆盖它。本轮明确覆盖按钮继承作用域，并检查最终按钮 `Material.color`，避免主题参数看似正确、实际按钮仍透明的错误。
+- `flutter analyze --no-pub lib test tool` 无问题。生产页面配隔离演示仓储的 Flutter 布局检查通过，包含 390/800/1440 宽度、大字号、明暗主题、课程整理，以及手机/桌面作业状态文字左边线。
+- 按用户要求直接生成「远山」30% / 80% 的手机首页和设置图，使用当前 Flutter 页面及示例数据；图片保存在 `build/ui_preview/build38-30/`、`build/ui_preview/build38-80/`。没有启动真实账户应用代替用户验收。该预览使用 Skia，不是 Android 真机折射截图。
+- 最终 Windows 与 Android 生产构建均为 `0.1.6+38`。Windows 已覆盖原 `build/windows/x64/runner/Release`；APK 包名与签名保持一致，Android 依赖离线构建。分发目录 `dist/releases/v0.1.6-build38/`，未推送或公开发布。
+- APK SHA-256：`9fca20ff1a0e96115a0fc15a9c91b08beb31962f3da23e87a6251907342f2f64`；Windows ZIP：`58bf385c1729fd1b0bf015ecb1a22690340947fd9d4a900914d1a5ca9a0cad49`。已有公开 0.1.5 资产保留。
+
+本地日志：`output/ui38-tests.log`、`ui38-glass-retest.log`、`ui38-control-retest.log`、`ui38-analyze.log`、`ui38-layouts.log`、`ui38-wallpaper30.log`、`ui38-wallpaper80.log`、`ui38-package.log`；`overhaul-*-build.log` 当前记录最终 build 38。

@@ -14,7 +14,7 @@ import '../../core/design/colors.dart';
 import '../../core/design/typography.dart';
 import '../../core/design/wallpaper_picker.dart';
 import '../../core/design/study_sliver_app_bar.dart';
-import '../../core/design/study_readable_content.dart';
+import '../../core/design/study_control_surface.dart';
 import '../../core/providers/wallpaper_provider.dart';
 import '../../core/providers/providers.dart';
 import '../../core/router/router.dart';
@@ -60,7 +60,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       body: CustomScrollView(
         slivers: [
           StudySliverAppBar(
-            pinned: true,
             titleSpacing: pageGutter(context, maxWidth: 880),
             title: Text(
               '设置',
@@ -134,123 +133,108 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 const SizedBox(height: 28),
                 LayoutBuilder(
                   builder: (context, constraints) {
-                    final preferences = Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                    final preferences = SettingsGroup(
+                      label: '使用偏好',
+                      tone: StudyTone.ink,
                       children: [
-                        const SettingsSectionLabel(label: '使用偏好'),
-                        SettingsGroup(
-                          tone: StudyTone.ink,
-                          children: [
-                            SettingsRow(
-                              title: '外观',
-                              subtitle: '选择适合你的阅读环境',
-                              trailing: AppearanceMenu(
-                                value: themeMode,
-                                onChanged: _changeTheme,
-                              ),
+                        SettingsRow(
+                          title: '外观',
+                          subtitle: '选择适合你的阅读环境',
+                          trailing: AppearanceMenu(
+                            value: themeMode,
+                            onChanged: _changeTheme,
+                          ),
+                        ),
+                        SettingsRow(
+                          title: '背景',
+                          subtitle:
+                              '${wallpaper.label} · ${ref.watch(wallpaperIntensityProvider)}%',
+                          onTap: () => showWallpaperPicker(context),
+                          trailing: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image(
+                              image: ref.watch(wallpaperThumbnailProvider),
+                              width: mobileWallpaper ? 28 : 64,
+                              height: mobileWallpaper ? 56 : 40,
+                              fit: BoxFit.cover,
+                              excludeFromSemantics: true,
                             ),
-                            SettingsRow(
-                              title: '背景',
-                              subtitle:
-                                  '${wallpaper.label} · ${ref.watch(wallpaperIntensityProvider)}%',
-                              onTap: () => showWallpaperPicker(context),
-                              trailing: ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: Image(
-                                  image: ref.watch(wallpaperThumbnailProvider),
-                                  width: mobileWallpaper ? 28 : 64,
-                                  height: mobileWallpaper ? 56 : 40,
-                                  fit: BoxFit.cover,
-                                  excludeFromSemantics: true,
-                                ),
-                              ),
-                            ),
-                            SettingsSwitchRow(
-                              title: '自动重新登录',
-                              subtitle: _buildAutoReloginSummary(
-                                enabled: autoReloginEnabled,
-                                hasStoredCredential:
-                                    hasStoredCredential.valueOrNull,
-                                status: autoReloginStatus,
-                              ),
-                              onDetails: () => _showAutoReloginStatus(
-                                enabled: autoReloginEnabled,
-                                hasStoredCredential:
-                                    hasStoredCredential.valueOrNull,
-                                status: autoReloginStatus,
-                              ),
-                              value: autoReloginEnabled,
-                              onChanged: _updatingAutoRelogin
-                                  ? null
-                                  : _changeAutoRelogin,
-                            ),
-                          ],
+                          ),
+                        ),
+                        SettingsSwitchRow(
+                          title: '自动重新登录',
+                          subtitle: _buildAutoReloginSummary(
+                            enabled: autoReloginEnabled,
+                            hasStoredCredential:
+                                hasStoredCredential.valueOrNull,
+                            status: autoReloginStatus,
+                          ),
+                          onDetails: () => _showAutoReloginStatus(
+                            enabled: autoReloginEnabled,
+                            hasStoredCredential:
+                                hasStoredCredential.valueOrNull,
+                            status: autoReloginStatus,
+                          ),
+                          value: autoReloginEnabled,
+                          onChanged: _updatingAutoRelogin
+                              ? null
+                              : _changeAutoRelogin,
                         ),
                       ],
                     );
-                    final about = Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                    final about = SettingsGroup(
+                      label: '关于 LearnY',
                       children: [
-                        const SettingsSectionLabel(label: '关于 LearnY'),
-                        SettingsGroup(
-                          children: [
-                            SettingsRow(
-                              title: '版本',
-                              subtitle: buildInfo?.shortLabel ?? '读取中...',
-                            ),
-                            SettingsRow(
-                              title: _checkingUpdates ? '正在检查更新' : '检查更新',
-                              subtitle: _buildUpdateSubtitle(updateInfo),
-                              trailingColor: updateInfo?.hasUpdate == true
-                                  ? AppColors.warning
-                                  : null,
-                              onTap: _checkingUpdates ? null : _checkForUpdate,
-                            ),
-                            SettingsRow(
-                              title: '源代码',
-                              subtitle: '在 GitHub 查看 LearnY',
-                              onTap: () => launchUrl(
-                                Uri.parse(appRepositoryUrl),
-                                mode: LaunchMode.externalApplication,
-                              ),
-                            ),
-                            SettingsRow(
-                              title: '开源许可',
-                              onTap: () => showLicensePage(
-                                context: context,
-                                applicationName: 'LearnY',
-                                applicationVersion: buildInfo?.shortLabel,
-                              ),
-                            ),
-                          ],
+                        SettingsRow(
+                          title: '版本',
+                          subtitle: buildInfo?.shortLabel ?? '读取中...',
+                        ),
+                        SettingsRow(
+                          title: _checkingUpdates ? '正在检查更新' : '检查更新',
+                          subtitle: _buildUpdateSubtitle(updateInfo),
+                          trailingColor: updateInfo?.hasUpdate == true
+                              ? AppColors.warning
+                              : null,
+                          onTap: _checkingUpdates ? null : _checkForUpdate,
+                        ),
+                        SettingsRow(
+                          title: '源代码',
+                          subtitle: '在 GitHub 查看 LearnY',
+                          onTap: () => launchUrl(
+                            Uri.parse(appRepositoryUrl),
+                            mode: LaunchMode.externalApplication,
+                          ),
+                        ),
+                        SettingsRow(
+                          title: '开源许可',
+                          onTap: () => showLicensePage(
+                            context: context,
+                            applicationName: 'LearnY',
+                            applicationVersion: buildInfo?.shortLabel,
+                          ),
                         ),
                       ],
                     );
-                    final files = Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                    final files = SettingsGroup(
+                      label: '学习资料',
+                      tone: StudyTone.ochre,
                       children: [
-                        const SettingsSectionLabel(label: '学习资料'),
-                        SettingsGroup(
-                          tone: StudyTone.ochre,
-                          children: [
-                            SettingsRow(
-                              title: '课程文件',
-                              subtitle: '当前学期的文件与附件',
-                              onTap: () => context.push(Routes.files),
-                            ),
-                            SettingsRow(
-                              title: '收藏文件',
-                              subtitle: favoriteCount == 0
-                                  ? '随时回到收藏的资料'
-                                  : '$favoriteCount 个收藏文件',
-                              onTap: () => context.push(Routes.favoriteFiles),
-                            ),
-                            SettingsRow(
-                              title: '文件管理',
-                              subtitle: '管理已下载的文件',
-                              onTap: () => context.push(Routes.fileManager),
-                            ),
-                          ],
+                        SettingsRow(
+                          title: '课程文件',
+                          subtitle: '当前学期的文件与附件',
+                          onTap: () => context.push(Routes.files),
+                        ),
+                        SettingsRow(
+                          title: '收藏文件',
+                          subtitle: favoriteCount == 0
+                              ? '随时回到收藏的资料'
+                              : '$favoriteCount 个收藏文件',
+                          onTap: () => context.push(Routes.favoriteFiles),
+                        ),
+                        SettingsRow(
+                          title: '文件管理',
+                          subtitle: '管理已下载的文件',
+                          onTap: () => context.push(Routes.fileManager),
                         ),
                       ],
                     );
@@ -289,7 +273,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 const SizedBox(height: 28),
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: StudyReadingGroup(
+                  child: StudyControlSurface(
                     colors: [AppColors.error],
                     builder: (_, inks) => TextButton(
                       onPressed: _loggingOut ? null : _logout,

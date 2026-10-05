@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/design/app_theme_colors.dart';
 import '../../../core/design/typography.dart';
 import '../../../core/design/app_materials.dart';
-import '../../../core/design/study_readable_content.dart';
+import '../../../core/design/study_control_surface.dart';
 
 class StatCard extends StatelessWidget {
   const StatCard({
@@ -20,7 +20,8 @@ class StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StudyReadingGroup(
+    return StudyControlSurface(
+      radius: 14,
       colors: [StudyPalette.of(context, tone).accent, context.colors.subtitle],
       builder: (_, inks) => Material(
         color: Colors.transparent,

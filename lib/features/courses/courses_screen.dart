@@ -372,8 +372,10 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
               StudySliverAppBar(
                 toolbarHeight: semesterToolbarHeight(context),
                 titleSpacing: pageGutter(context),
-                floating: true,
-                snap: true,
+                pinned: workbenchState.isEditing,
+                backgroundColor: workbenchState.isEditing
+                    ? c.surface
+                    : Colors.transparent,
                 leading: workbenchState.isEditing
                     ? TextButton(
                         onPressed: _isSaving

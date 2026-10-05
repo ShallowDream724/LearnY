@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/design/app_surfaces.dart';
 import '../../core/design/study_sliver_app_bar.dart';
-import '../../core/design/study_readable_content.dart';
+import '../../core/design/study_control_surface.dart';
 import '../../core/design/app_materials.dart';
 import '../../core/design/app_theme_colors.dart';
 import '../../core/design/app_toast.dart';
@@ -326,57 +326,30 @@ class _AssignmentGroupHeading extends StatelessWidget {
       label: '$label，$count 项',
       onTap: onPressed,
       excludeSemantics: true,
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(8),
+      child: StudyControlSurface(
+        colors: [colors.accent],
+        builder: (_, inks) => InkWell(
+          borderRadius: BorderRadius.circular(12),
           onTap: onPressed,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Row(
               children: [
-                StudyReadingGroup(
-                  colors: [colors.accent],
-                  builder: (_, inks) => Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        label,
-                        style: AppTypography.titleMedium.copyWith(
-                          color: inks.single,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: colors.fill,
-                          borderRadius: BorderRadius.circular(5),
-                        ),
-                        child: Text(
-                          '$count',
-                          style: AppTypography.labelSmall.copyWith(
-                            color: inks.single,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                Text(
+                  label,
+                  style: AppTypography.titleMedium.copyWith(color: inks.single),
                 ),
-                const SizedBox(width: 14),
-                Expanded(child: Divider(color: context.colors.border)),
+                const SizedBox(width: 10),
+                Text(
+                  '$count',
+                  style: AppTypography.labelSmall.copyWith(color: inks.single),
+                ),
+                const Spacer(),
                 const SizedBox(width: 8),
-                StudyReadingGroup(
-                  colors: [colors.accent],
-                  builder: (_, inks) => Icon(
-                    collapsed ? Icons.expand_more : Icons.expand_less,
-                    size: 20,
-                    color: inks.single,
-                  ),
+                Icon(
+                  collapsed ? Icons.expand_more : Icons.expand_less,
+                  size: 20,
+                  color: inks.single,
                 ),
               ],
             ),
@@ -426,50 +399,55 @@ class _AssignmentFilters extends StatelessWidget {
           ],
         );
       }
-      return Row(
-        children: [
-          Expanded(
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: StudyReadableText(
-                stats.pending == 0 ? '待交作业已处理完' : '${stats.pending} 项待提交',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          PopupMenuButton<HomeworkFilter>(
-            tooltip: '筛选作业',
-            useRootNavigator: true,
-            initialValue: current,
-            onSelected: onChanged,
-            itemBuilder: (_) => [
-              for (final value in HomeworkFilter.values)
-                CheckedPopupMenuItem(
-                  value: value,
-                  checked: current == value,
-                  child: Text('${_filterLabel(value)}  ${counts[value]}'),
+      return StudyControlSurface(
+        colors: [context.colors.text, context.colors.infoAccent],
+        builder: (_, inks) => Padding(
+          padding: const EdgeInsets.only(left: 16, right: 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  stats.pending == 0 ? '待交作业已处理完' : '${stats.pending} 项待提交',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: inks[0]),
                 ),
-            ],
-            child: StudyReadingGroup(
-              colors: [context.colors.infoAccent],
-              builder: (_, inks) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _filterLabel(current),
-                      style: TextStyle(color: inks.single),
+              ),
+              const SizedBox(width: 12),
+              PopupMenuButton<HomeworkFilter>(
+                tooltip: '筛选作业',
+                useRootNavigator: true,
+                initialValue: current,
+                onSelected: onChanged,
+                itemBuilder: (_) => [
+                  for (final value in HomeworkFilter.values)
+                    CheckedPopupMenuItem(
+                      value: value,
+                      checked: current == value,
+                      child: Text('${_filterLabel(value)}  ${counts[value]}'),
                     ),
-                    const SizedBox(width: 4),
-                    Icon(Icons.expand_more, size: 18, color: inks.single),
-                  ],
+                ],
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _filterLabel(current),
+                        style: TextStyle(color: inks[1]),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(Icons.expand_more, size: 18, color: inks[1]),
+                    ],
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       );
     },
   );

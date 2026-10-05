@@ -3,14 +3,13 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:learn_y/core/design/app_light_scene.dart';
-import 'package:learn_y/core/design/study_readable_content.dart';
 import 'package:learn_y/core/design/app_materials.dart';
 import 'package:learn_y/core/design/course_glass.dart';
 import 'package:learn_y/core/design/wallpaper.dart';
 
 void main() {
   testWidgets(
-    'swiped cached header samples the same pixels as explicit navigation',
+    'swiped cached glass samples the same pixels as explicit navigation',
     (tester) async {
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1;
@@ -54,7 +53,10 @@ void main() {
                     child: const SizedBox(
                       height: 90,
                       width: double.infinity,
-                      child: StudyLightSurface(),
+                      child: CourseGlassSurface(
+                        tone: StudyTone.ink,
+                        child: SizedBox.expand(),
+                      ),
                     ),
                   ),
                 ),
@@ -73,7 +75,7 @@ void main() {
       // scene to finish loading before comparing two navigation methods.
       for (var attempt = 0; attempt < 50; attempt++) {
         if (StudyLightBackdrop.sceneOf(
-          tester.element(find.byType(StudyLightSurface)),
+          tester.element(find.byType(CourseGlassSurface)),
         )!.samples.isNotEmpty) {
           break;
         }
@@ -84,7 +86,7 @@ void main() {
       }
       expect(
         StudyLightBackdrop.sceneOf(
-          tester.element(find.byType(StudyLightSurface)),
+          tester.element(find.byType(CourseGlassSurface)),
         )!.samples,
         isNotEmpty,
       );
@@ -104,7 +106,13 @@ void main() {
       await tester.drag(find.byType(PageView), const Offset(-340, 0));
       await tester.pumpAndSettle();
       expect(controller.page, 1);
-      expect(await tester.runAsync(pixels), expected);
+      final actual = (await tester.runAsync(pixels))!;
+      // A settled swipe can retain a fractional transform below one pixel.
+      // Permit only 8-bit rounding, not a different scene or sampling origin.
+      expect(actual.length, expected!.length);
+      for (var index = 0; index < actual.length; index++) {
+        expect((actual[index] - expected[index]).abs(), lessThanOrEqualTo(1));
+      }
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     },

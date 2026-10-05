@@ -9,7 +9,8 @@ import '../providers/sync_provider.dart';
 import '../router/router.dart';
 import '../design/responsive.dart';
 import '../design/app_materials.dart';
-import '../design/study_readable_content.dart';
+import '../design/app_theme_colors.dart';
+import '../design/material_contrast.dart';
 import '../utils/china_time.dart';
 import '../sync/sync_operation.dart';
 import 'semester_models.dart';
@@ -300,17 +301,15 @@ class _SemesterSyncControlState extends ConsumerState<SemesterSyncControl> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : hasIssue
-              ? StudyReadingGroup(
-                  colors: [
+              ? Icon(
+                  failed ? Icons.error_outline : Icons.sync_problem_outlined,
+                  color: readingForeground(
                     failed
                         ? Theme.of(context).colorScheme.error
                         : StudyPalette.of(context, StudyTone.ochre).accent,
-                  ],
-                  builder: (_, inks) => Icon(
-                    failed ? Icons.error_outline : Icons.sync_problem_outlined,
-                    color: inks.single,
-                    size: 19,
+                    dark: context.isDark,
                   ),
+                  size: 19,
                 )
               : const Icon(Icons.refresh, size: 19),
         ),
