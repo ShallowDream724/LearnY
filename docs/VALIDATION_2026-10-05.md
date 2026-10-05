@@ -56,3 +56,18 @@
 build 33 最终验证：337 项全套测试通过，`flutter analyze --no-pub lib test tool` 无问题；真实只读目录探测取得 6 门课程，6 门排课元数据全部成功，目录及元数据阶段总计 408 ms。此时间只描述本次网络条件，没有旧版同条件计时，不能推导固定加速比例；本次禁用密码提交，未请求作业写接口。
 
 两端生产构建、内嵌版本和 APK 签名检查完成。Windows 已覆盖原 Release 目录，最新本地分发位于 `dist/releases/v0.1.5-build33/`，build 32 分发仍保留。构建和诊断日志使用 `output/build33-*` 前缀；新版本未推送或公开发布。
+
+## build 34：作业操作链、顶栏与外壳协作
+
+用户指出上一轮视觉验收不足，提供了只有一份要求附件的 Ch16 提交页和首页顶栏截图。本轮按完整操作链重组作业：身份/截止与要求在桌面左侧，编辑、附件、核对、提交在右侧同一表面，窄屏按同序纵向排列。移除全宽截止面板与独立底部提交白条。四个主页共用局部前景保护，保留壁纸连续性。
+
+只读检查用户本机作业缓存，确认旧正则把 Ch16 的 HTML 注释截断为 `-->`；未修改数据库内容。本轮统一正文解析，排除注释，保留段落与实体字面文本。壁纸复核使用用户当时正在使用的 `alpine`、56% 强度；没有修改用户壁纸配置。
+
+- 全套 `flutter test --no-pub`：339 项通过，`flutter analyze --no-pub lib test tool` 无问题。
+- 新外壳行为测试使用生产路由和外壳、隔离演示仓储，覆盖纵向滚动不误切页、按压预览/松手提交、竖向取消、半途横滑后点击当前页归位、详情返回保留位置、键盘出现/关闭。没有向学校提交作业。
+- Flutter 预览覆盖 1267×684 的附件作业、长要求、390 手机、950 大字号、键盘与选中文件；取消退出后保留输入。相关产物位于 `build/ui_preview/workflow/`，普通首页和深色预览仍在 `build/ui_preview/`。
+- 用户随后明确要求自行复核界面，因此停止计划中的原生窗口复核；未启动新版应用代替用户验收。离线渲染和行为测试不等同于安卓真机光学效果验收。
+- Windows 与 Android 生产构建完成，内嵌版本均为 `0.1.5+34`；Windows 已覆盖 `build/windows/x64/runner/Release`。Android 使用现有依赖离线构建，APK 签名与 build 33 一致。
+- 本地分发：`dist/releases/v0.1.5-build34/`，包含 APK、完整 Windows 运行目录、便携 ZIP 与 SHA256SUMS。APK SHA-256 为 `078ada5fabca1261d775ea503a44de34d30ddeac8893934f4331e4464e600019`。没有推送或公开发布。
+
+源码提交 `de3b378`。验证日志：`output/review-full-tests.log`、`review-ui-analyze.log`、`review-ui-preview.log`、`review-package.log`；两端构建日志为 `overhaul-windows-build.log` / `overhaul-android-build.log`（当前内容属于 build 34）。
