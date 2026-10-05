@@ -18,6 +18,7 @@ import 'submission/homework_submission_controller.dart';
 import 'submission/homework_submission_models.dart';
 import 'widgets/homework_detail_sections.dart';
 import 'widgets/homework_workspace.dart';
+import 'widgets/homework_submission_editor.dart';
 
 class AssignmentSubmissionScreen extends ConsumerStatefulWidget {
   const AssignmentSubmissionScreen({
@@ -164,61 +165,16 @@ class _AssignmentSubmissionScreenState
                 : '提交作业',
           ),
         ),
-        bottomNavigationBar: Material(
-          color: c.surface,
-          child: SafeArea(
-            top: false,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ReadingWidth(
-                  maxWidth: 1240,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      heightFactor: 1,
-                      child: FilledButton.icon(
-                        onPressed: complete
-                            ? () => _leave(true)
-                            : state.isSubmitting || _confirmationOpen
-                            ? null
-                            : _submit,
-                        icon: state.isSubmitting
-                            ? const SizedBox.square(
-                                dimension: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : Icon(
-                                complete
-                                    ? Icons.arrow_back_rounded
-                                    : Icons.upload_rounded,
-                              ),
-                        label: Text(
-                          complete
-                              ? '返回作业'
-                              : state.isSubmitting
-                              ? '正在提交'
-                              : '提交',
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
         body: complete
             ? AppEmptyState(
                 icon: Icons.check_circle_outline_rounded,
                 title: '提交成功',
                 message: widget.homework.title,
+                action: FilledButton.icon(
+                  onPressed: () => _leave(true),
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  label: const Text('返回作业'),
+                ),
               )
             : HomeworkWorkspace(
                 identity: 'submit-${widget.homework.id}',
@@ -226,27 +182,35 @@ class _AssignmentSubmissionScreenState
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      widget.homework.title,
-                      style: AppTypography.headlineSmall.copyWith(
-                        color: c.text,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
                       widget.courseName,
                       style: AppTypography.bodyMedium.copyWith(
                         color: c.subtitle,
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    HomeworkDeadlineCard(homework: widget.homework),
+                    const SizedBox(height: 8),
+                    Text(
+                      widget.homework.title,
+                      style: AppTypography.headlineMedium.copyWith(
+                        color: c.text,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    HomeworkDeadlineSummary(homework: widget.homework),
                   ],
                 ),
                 requirements: HomeworkSectionCard(
                   title: '作业要求',
                   child: _buildRequirements(),
                 ),
-                work: _buildEditor(state),
+                work: HomeworkSubmissionEditor(
+                  state: state,
+                  controller: _contentController,
+                  focusNode: _contentFocus,
+                  onPickFile: _pickFile,
+                  onRemoveAttachment: () =>
+                      ref.read(_submissionProvider.notifier).removeAttachment(),
+                  onSubmit: _confirmationOpen ? null : _submit,
+                ),
               ),
       ),
     );
@@ -271,7 +235,8 @@ class _AssignmentSubmissionScreenState
           const Text('暂无文字要求'),
         ],
         if (hw.attachmentJson?.isNotEmpty == true) ...[
-          const SizedBox(height: 16),
+          if (hasMeaningfulHomeworkHtml(hw.description))
+            const SizedBox(height: 16),
           FileAttachmentCard(
             entry: entry,
             onTap: () {
@@ -284,102 +249,5 @@ class _AssignmentSubmissionScreenState
         ],
       ],
     );
-  }
-
-  Widget _buildEditor(HomeworkSubmissionState state) {
-    final c = context.colors;
-    final attachment = state.attachment;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text('提交内容', style: AppTypography.titleMedium.copyWith(color: c.text)),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _contentController,
-          focusNode: _contentFocus,
-          readOnly: state.isSubmitting,
-          minLines: 8,
-          maxLines: 16,
-          style: AppTypography.bodyLarge.copyWith(color: c.text, height: 1.6),
-          decoration: InputDecoration(
-            hintText: '输入作业内容',
-            counterText: '${state.characterCount} 字',
-            filled: true,
-            fillColor: c.surface,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-          ),
-        ),
-        const SizedBox(height: 24),
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                '提交附件',
-                style: AppTypography.titleMedium.copyWith(color: c.text),
-              ),
-            ),
-            if (attachment != null || state.hasExistingAttachment)
-              TextButton.icon(
-                onPressed: state.isSubmitting ? null : _pickFile,
-                icon: const Icon(Icons.swap_horiz_rounded),
-                label: const Text('更换'),
-              ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        if (attachment != null || state.hasExistingAttachment)
-          ListTile(
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 4,
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-              side: BorderSide(color: c.border),
-            ),
-            leading: const Icon(Icons.attach_file_rounded),
-            title: Text(attachment?.name ?? '已提交的附件'),
-            subtitle: Text(
-              attachment != null
-                  ? _formatSize(attachment.sizeBytes)
-                  : '保留上次提交的附件',
-            ),
-            trailing: IconButton(
-              tooltip: '移除附件',
-              onPressed: state.isSubmitting
-                  ? null
-                  : () => ref
-                        .read(_submissionProvider.notifier)
-                        .removeAttachment(),
-              icon: const Icon(Icons.close_rounded),
-            ),
-          )
-        else
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              onPressed: state.isSubmitting ? null : _pickFile,
-              icon: const Icon(Icons.attach_file_rounded),
-              label: const Text('选择文件'),
-            ),
-          ),
-        if (state.errorMessage != null) ...[
-          const SizedBox(height: 20),
-          Semantics(
-            liveRegion: true,
-            child: Text(
-              state.errorMessage!,
-              style: AppTypography.bodyMedium.copyWith(color: AppColors.error),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  String _formatSize(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 }

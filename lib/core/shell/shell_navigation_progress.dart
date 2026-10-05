@@ -1,9 +1,36 @@
 import 'package:flutter/widgets.dart';
 
-/// The pager owns navigation; this signal only describes its visible position.
-/// Drag samples are immediate. Explicit branch jumps may animate the indicator.
+/// Coordinates the pager and dock without owning routes or branch contents.
+/// The pager owns/disposes its controller; the dock may stop an in-flight page
+/// gesture and settle even to the already-selected route on release/cancel.
 class ShellNavigationProgress extends ValueNotifier<double> {
   ShellNavigationProgress(super.value);
+  PageController? _pager;
+  bool _selecting = false;
+  bool get selecting => _selecting;
+
+  void attach(PageController pager) => _pager = pager;
+  void detach(PageController pager) {
+    if (identical(_pager, pager)) _pager = null;
+  }
+
+  void holdPage() {
+    final pager = _pager;
+    if (pager != null && pager.hasClients) {
+      pager.jumpTo(pager.position.pixels);
+    }
+  }
+
+  void settlePage(int page) {
+    final pager = _pager;
+    _selecting = true;
+    try {
+      if (pager != null && pager.hasClients) pager.jumpToPage(page);
+    } finally {
+      _selecting = false;
+    }
+    select(page);
+  }
 
   bool _animate = false;
   bool get animate => _animate;

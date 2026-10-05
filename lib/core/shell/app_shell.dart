@@ -62,6 +62,7 @@ class _AppShellState extends ConsumerState<AppShell> {
   }
 
   void _select(int index) {
+    _navigationProgress.settlePage(index);
     if (index != widget.navigationShell.currentIndex) {
       widget.navigationShell.goBranch(index);
     }
@@ -323,11 +324,16 @@ class _BranchPagerState extends State<_BranchPager> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _progress = ShellNavigationProgressScope.of(context);
+    final next = ShellNavigationProgressScope.of(context);
+    if (!identical(_progress, next)) {
+      _progress?.detach(_controller);
+      _progress = next..attach(_controller);
+    }
   }
 
   void _publishPage() {
     if (_jumping ||
+        _progress?.selecting == true ||
         !_controller.hasClients ||
         !_controller.position.hasContentDimensions) {
       return;
@@ -368,6 +374,7 @@ class _BranchPagerState extends State<_BranchPager> {
 
   @override
   void dispose() {
+    _progress?.detach(_controller);
     _controller.dispose();
     super.dispose();
   }
@@ -397,7 +404,10 @@ class _BranchPagerState extends State<_BranchPager> {
           _KeepBranch(
             child: TickerMode(
               enabled: index == widget.navigationShell.currentIndex,
-              child: widget.children[index],
+              child: ExcludeFocus(
+                excluding: index != widget.navigationShell.currentIndex,
+                child: widget.children[index],
+              ),
             ),
           ),
       ],

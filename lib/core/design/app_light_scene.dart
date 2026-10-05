@@ -368,13 +368,16 @@ class _LightBackdrop extends RenderProxyBox {
 /// An opaque slice of the same scene for scrolling page headers: the wallpaper
 /// remains continuous while scrolled text cannot show through the toolbar.
 class StudyLightSurface extends LeafRenderObjectWidget {
-  const StudyLightSurface({super.key});
+  const StudyLightSurface({super.key}) : _localScrim = false;
+  const StudyLightSurface._scrim() : _localScrim = true;
+  final bool _localScrim;
 
   @override
   RenderObject createRenderObject(BuildContext context) => _SceneSurfaceBox(
     StudyLightBackdrop.sceneOf(context),
     context.isDark,
     StudyLightBackdrop.motionOf(context),
+    _localScrim,
   );
 
   @override
@@ -387,8 +390,25 @@ class StudyLightSurface extends LeafRenderObjectWidget {
   }
 }
 
+/// Contrast belongs to the foreground group, not a wall-to-wall toolbar slab.
+/// The feather stays outside the glyphs; no image readback or backdrop blur.
+class StudyHeaderContent extends StatelessWidget {
+  const StudyHeaderContent({super.key, required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    clipBehavior: Clip.none,
+    children: [
+      const Positioned.fill(child: StudyLightSurface._scrim()),
+      child,
+    ],
+  );
+}
+
 class _SceneSurfaceBox extends RenderBox {
-  _SceneSurfaceBox(this.scene, this.dark, this.motion);
+  _SceneSurfaceBox(this.scene, this.dark, this.motion, this.localScrim);
+  final bool localScrim;
   StudyLightScene? scene;
   bool dark;
   Listenable? motion;
@@ -436,23 +456,31 @@ class _SceneSurfaceBox extends RenderBox {
       offset.dx - backdrop.origin.dx,
       offset.dy - backdrop.origin.dy,
     );
-    backdrop.scene.paint(
-      context.canvas,
-      backdrop.size,
-      coverage: backdrop.origin & size,
-    );
     final coverage = backdrop.origin & size;
-    context.canvas.drawRect(
-      coverage,
-      Paint()
-        ..color = (dark ? const Color(0xFF20242D) : Colors.white).withValues(
-          alpha: backdrop.scene.readingOpacity(
-            coverage,
-            backdrop.size,
-            minimum: .12,
+    if (!localScrim) {
+      backdrop.scene.paint(context.canvas, backdrop.size, coverage: coverage);
+    } else {
+      final alpha = backdrop.scene.readingOpacity(
+        coverage,
+        backdrop.size,
+        minimum: 0,
+        foreground: dark
+            ? AppColors.darkTextPrimary
+            : AppColors.lightTextPrimary,
+      );
+      if (alpha > 0) {
+        context.canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            coverage.inflate(18),
+            const Radius.circular(22),
           ),
-        ),
-    );
+          Paint()
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12)
+            ..color = (dark ? const Color(0xFF20242D) : Colors.white)
+                .withValues(alpha: alpha),
+        );
+      }
+    }
     context.canvas.restore();
   }
 }
@@ -474,7 +502,7 @@ class StudyLightScene {
   final bool mobileArtwork;
   final double strength;
   final List<Color> samples;
-  final _opacityCache = <(int, int, int, int, double), double>{};
+  final _opacityCache = <(int, int, int, int, double, Color), double>{};
   ui.Shader? _shader;
   Size? _shaderSize;
 
@@ -502,7 +530,12 @@ class StudyLightScene {
         .._shader = _shader
         .._shaderSize = _shaderSize;
 
-  double readingOpacity(Rect area, Size viewport, {double minimum = .25}) {
+  double readingOpacity(
+    Rect area,
+    Size viewport, {
+    double minimum = .25,
+    Color? foreground,
+  }) {
     if (samples.isEmpty || viewport.isEmpty) return dark ? .75 : .85;
     final left = (area.left / viewport.width * 16).floor().clamp(0, 15);
     final right = (area.right / viewport.width * 16).ceil().clamp(left + 1, 16);
@@ -511,7 +544,10 @@ class StudyLightScene {
       top + 1,
       32,
     );
-    final key = (left, right, top, bottom, minimum);
+    final textColor =
+        foreground ??
+        (dark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary);
+    final key = (left, right, top, bottom, minimum, textColor);
     if (_opacityCache[key] case final cached?) return cached;
     var alpha = minimum;
     final base = dark ? const Color(0xFF1B1D20) : const Color(0xFFF7F8FB);
@@ -525,7 +561,7 @@ class StudyLightScene {
         );
         final needed = contrastOpacity(
           color,
-          dark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+          textColor,
           dark: dark,
           minimum: minimum,
         );

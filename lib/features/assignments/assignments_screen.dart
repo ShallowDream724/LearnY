@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/design/app_surfaces.dart';
-import '../../core/design/app_light_scene.dart';
+import '../../core/design/study_sliver_app_bar.dart';
 import '../../core/design/app_materials.dart';
 import '../../core/design/app_theme_colors.dart';
 import '../../core/design/app_toast.dart';
@@ -89,10 +89,7 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
               controller: _scroll,
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
-                SliverAppBar(
-                  backgroundColor: Colors.transparent,
-                  surfaceTintColor: Colors.transparent,
-                  flexibleSpace: const StudyLightSurface(),
+                StudySliverAppBar(
                   toolbarHeight: semesterToolbarHeight(context),
                   title: const SemesterPageTitle(title: '作业'),
                   titleSpacing: gutter,

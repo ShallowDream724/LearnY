@@ -17,6 +17,8 @@ import '../design/typography.dart';
 import '../design/saveable_image.dart';
 import '../files/image_gallery_service.dart';
 import '../providers/api_client_provider.dart';
+import 'html_plain_text.dart';
+export 'html_plain_text.dart';
 
 class AuthenticatedHtmlContent extends StatelessWidget {
   const AuthenticatedHtmlContent({
@@ -76,68 +78,6 @@ bool hasVisibleHtmlContent(String? html, {RegExp? placeholderOnly}) {
     return false;
   }
   return true;
-}
-
-String stripHtmlToPlainText(String html) {
-  final fragment = html_parser.parseFragment(html);
-  final buffer = StringBuffer();
-
-  void writeNode(dom.Node node) {
-    if (node is dom.Text) {
-      buffer.write(decodeHTML(node.text).replaceAll('\u00A0', ' '));
-      return;
-    }
-    if (node is! dom.Element) {
-      return;
-    }
-
-    final tag = (node.localName ?? '').toLowerCase();
-    switch (tag) {
-      case 'br':
-        buffer.write('\n');
-        return;
-      case 'p':
-      case 'div':
-      case 'section':
-      case 'article':
-      case 'blockquote':
-        for (final child in node.nodes) {
-          writeNode(child);
-        }
-        buffer.write('\n\n');
-        return;
-      case 'ul':
-      case 'ol':
-        for (final child in node.children.where((e) => e.localName == 'li')) {
-          writeNode(child);
-        }
-        buffer.write('\n');
-        return;
-      case 'li':
-        buffer.write('• ');
-        for (final child in node.nodes) {
-          writeNode(child);
-        }
-        buffer.write('\n');
-        return;
-      case 'img':
-        return;
-      default:
-        for (final child in node.nodes) {
-          writeNode(child);
-        }
-    }
-  }
-
-  for (final node in fragment.nodes) {
-    writeNode(node);
-  }
-
-  var text = buffer.toString();
-  text = text.replaceAll(RegExp(r'[ \t]+\n'), '\n');
-  text = text.replaceAll(RegExp(r'\n{3,}'), '\n\n');
-  text = text.replaceAll(RegExp(r'[ \t]{2,}'), ' ');
-  return text.trim();
 }
 
 List<Widget> _buildBlockWidgets(

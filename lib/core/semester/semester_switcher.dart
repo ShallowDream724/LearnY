@@ -92,7 +92,9 @@ class SemesterPageTitle extends ConsumerWidget {
                       semesterLabel(selected),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
                     ),
                   ),
                   const Icon(Icons.expand_more, size: 14),

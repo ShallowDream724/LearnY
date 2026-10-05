@@ -13,7 +13,7 @@ import '../../core/design/colors.dart';
 import '../../core/design/cooldown_toast.dart';
 import '../../core/design/shimmer.dart';
 import '../../core/design/typography.dart';
-import '../../core/design/app_light_scene.dart';
+import '../../core/design/study_sliver_app_bar.dart';
 import '../../core/providers/sync_models.dart';
 import '../../core/router/router.dart';
 import '../../core/semester/semester_switcher.dart';
@@ -369,10 +369,7 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
             controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
-              SliverAppBar(
-                backgroundColor: Colors.transparent,
-                surfaceTintColor: Colors.transparent,
-                flexibleSpace: const StudyLightSurface(),
+              StudySliverAppBar(
                 toolbarHeight: semesterToolbarHeight(context),
                 titleSpacing: pageGutter(context),
                 floating: true,

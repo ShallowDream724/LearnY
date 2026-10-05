@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart'
     show debugDefaultTargetPlatformOverride;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:learn_y/app/app.dart';
@@ -22,6 +23,9 @@ import 'package:learn_y/features/home/home_screen.dart';
 import 'package:learn_y/features/home/widgets/pending_assignments.dart';
 import 'package:learn_y/features/home/widgets/weekly_timetable.dart';
 import 'package:learn_y/core/shell/app_bottom_navigation.dart';
+import 'package:learn_y/features/assignments/assignment_submission_screen.dart';
+import 'package:learn_y/features/assignments/submission/homework_submission_models.dart';
+import 'package:learn_y/features/assignments/submission/homework_submission_controller.dart';
 
 import '../../test/support/schedule_fixture.dart';
 
@@ -127,6 +131,121 @@ void main() {
       ],
       child: const LearnYApp(),
     ),
+  );
+
+  testWidgets(
+    'review submission workflow proportions',
+    (tester) => withShadows(() async {
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final key = GlobalKey();
+      await tester.pumpWidget(previewApp(key));
+      Future<void> settle() async {
+        for (var i = 0; i < 8; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 20)),
+          );
+        }
+        expect(tester.takeException(), isNull);
+      }
+
+      await settle();
+      final context = tester.element(find.byType(HomeScreen));
+      final navigator = Navigator.of(context, rootNavigator: true);
+      final container = ProviderScope.containerOf(context);
+      final homeworks = (await tester.runAsync(
+        () => demo.database.getHomeworksBySemester(demo.selectedSemesterId),
+      ))!;
+      final sample = homeworks.first.copyWith(
+        title: 'Ch16',
+        submitted: false,
+        graded: false,
+        deadline: DateTime.now()
+            .add(const Duration(days: 7))
+            .millisecondsSinceEpoch
+            .toString(),
+        description: const Value(''),
+        submittedContent: const Value(
+          '<!-- <div>school editor</div> --><p><br></p>',
+        ),
+        submittedAttachmentJson: const Value(null),
+        attachmentJson: const Value(
+          '{"id":"preview-brief","name":"Ch16.docx","size":11950,"downloadUrl":"https://example.invalid/brief"}',
+        ),
+      );
+      for (final sampleCase in [
+        ('sparse_desktop', const Size(1267, 684), 1.0, false),
+        ('sparse_phone', const Size(390, 844), 1.0, false),
+        ('dense_desktop', const Size(1267, 684), 1.0, true),
+        ('large_text', const Size(950, 650), 1.5, true),
+      ]) {
+        tester.view.physicalSize = sampleCase.$2;
+        tester.platformDispatcher.textScaleFactorTestValue = sampleCase.$3;
+        final homework = sampleCase.$4
+            ? sample.copyWith(
+                description: Value(
+                  List.filled(
+                    14,
+                    '<p>请阅读教材第十六章，逐题说明推导过程，并将最终结果整理为文档。引用资料时标注来源。</p>',
+                  ).join(),
+                ),
+              )
+            : sample;
+        navigator.push(
+          MaterialPageRoute<void>(
+            builder: (_) => AssignmentSubmissionScreen(
+              homework: homework,
+              courseName: '生物化学(2)(英文)',
+            ),
+          ),
+        );
+        await settle();
+        expect(find.text('-->'), findsNothing);
+        await capture(tester, key, 'workflow/${sampleCase.$1}');
+        if (sampleCase.$1 == 'sparse_phone') {
+          await tester.enterText(find.byType(TextField), '已完成习题，详细推导见附件。');
+          container
+              .read(
+                homeworkSubmissionControllerProvider(
+                  HomeworkSubmissionSeed.fromHomework(homework),
+                ).notifier,
+              )
+              .selectAttachment(
+                const HomeworkSubmissionAttachment(
+                  path: 'preview-only.docx',
+                  name: 'Ch16-习题解答.docx',
+                  sizeBytes: 26112,
+                ),
+              );
+          tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+          await settle();
+          await tester.ensureVisible(find.text('提交前请核对内容与附件'));
+          await settle();
+          await capture(tester, key, 'workflow/phone_keyboard_review');
+          tester.view.resetViewInsets();
+          await tester.tap(find.byTooltip('关闭'));
+          await settle();
+          expect(find.text('放弃本次修改？'), findsOneWidget);
+          await tester.tap(find.text('继续编辑'));
+          await settle();
+          expect(
+            tester.widget<TextField>(find.byType(TextField)).controller!.text,
+            '已完成习题，详细推导见附件。',
+          );
+          await tester.tap(find.byTooltip('关闭'));
+          await settle();
+          await tester.tap(find.text('放弃修改'));
+        } else {
+          await tester.tap(find.byTooltip('关闭'));
+        }
+        await settle();
+      }
+      tester.platformDispatcher.clearTextScaleFactorTestValue();
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+    }),
   );
 
   testWidgets(

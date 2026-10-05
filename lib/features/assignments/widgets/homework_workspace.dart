@@ -30,30 +30,34 @@ class HomeworkWorkspace extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: 28),
         child: child,
       );
-      return Center(
+      return Align(
+        alignment: Alignment.topCenter,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1240),
+          constraints: const BoxConstraints(maxWidth: 1120),
           child: Padding(
-            padding: EdgeInsets.fromLTRB(wide ? 28 : 16, 12, wide ? 28 : 16, 0),
+            padding: EdgeInsets.fromLTRB(
+              wide ? 32 : 16,
+              wide ? 28 : 12,
+              wide ? 32 : 16,
+              0,
+            ),
             child: wide
-                ? Column(
+                ? Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      header,
-                      const SizedBox(height: 20),
                       Expanded(
-                        child: Row(
+                        flex: 4,
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Expanded(
-                              flex: 5,
-                              child: scroll('brief', requirements),
-                            ),
-                            const SizedBox(width: 24),
-                            Expanded(flex: 6, child: scroll('work', work)),
+                            header,
+                            const SizedBox(height: 28),
+                            Expanded(child: scroll('brief', requirements)),
                           ],
                         ),
                       ),
+                      const SizedBox(width: 36),
+                      Expanded(flex: 7, child: scroll('work', work)),
                     ],
                   )
                 : scroll(

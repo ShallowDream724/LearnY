@@ -6,6 +6,18 @@ import 'package:learn_y/features/assignments/submission/homework_submission_repo
 
 void main() {
   group('HomeworkSubmissionSeed', () {
+    test('keeps paragraphs and literal arrows but removes editor comments', () {
+      expect(
+        normalizeHomeworkSubmissionContent(
+          '<!-- <xml>Word</xml> --><p>第一段<br>第二行</p><p>&lt;tag&gt; &amp;lt; --&gt;</p>',
+        ),
+        '第一段\n第二行\n\n<tag> &lt; -->',
+      );
+      expect(
+        normalizeHomeworkSubmissionContent('<!-- <div></div> -->'),
+        isEmpty,
+      );
+    });
     test('hydrates stripped initial content and existing attachment state', () {
       final seed = HomeworkSubmissionSeed.fromHomework(
         _homework(

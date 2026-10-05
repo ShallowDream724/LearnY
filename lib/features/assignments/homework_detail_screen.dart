@@ -72,48 +72,12 @@ class HomeworkDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.colors;
     final homeworkAsync = ref.watch(homeworkDetailProvider(homeworkId));
-    final homework = homeworkAsync.valueOrNull;
 
     return Scaffold(
       backgroundColor: c.bg,
       appBar: AppBar(
         title: Text(courseName, maxLines: 1, overflow: TextOverflow.ellipsis),
       ),
-      bottomNavigationBar: homework != null && !homework.graded
-          ? Material(
-              color: c.surface,
-              child: SafeArea(
-                top: false,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ReadingWidth(
-                      maxWidth: 1240,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                        child: Align(
-                          alignment: Alignment.centerRight,
-                          heightFactor: 1,
-                          child: FilledButton.icon(
-                            onPressed: () => _openSubmission(context, homework),
-                            icon: Icon(
-                              homework.submitted
-                                  ? Icons.edit_outlined
-                                  : Icons.upload_rounded,
-                            ),
-                            label: Text(homework.submitted ? '重新提交' : '提交作业'),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          : null,
       body: homeworkAsync.when(
         loading: () => const ListSkeleton(),
         error: (_, _) => AppEmptyState(
@@ -225,6 +189,21 @@ class HomeworkDetailScreen extends ConsumerWidget {
                         color: c.subtitle,
                       ),
                     ),
+                  if (!hw.graded) ...[
+                    const SizedBox(height: 20),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: FilledButton.icon(
+                        onPressed: () => _openSubmission(context, hw),
+                        icon: Icon(
+                          hw.submitted
+                              ? Icons.edit_outlined
+                              : Icons.arrow_upward_rounded,
+                        ),
+                        label: Text(hw.submitted ? '重新提交' : '提交作业'),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -274,7 +253,7 @@ class HomeworkDetailScreen extends ConsumerWidget {
               children: [
                 HomeworkStatusHeader(homework: hw),
                 const SizedBox(height: 12),
-                HomeworkDeadlineCard(homework: hw),
+                HomeworkDeadlineSummary(homework: hw),
               ],
             ),
             requirements: _SectionList(children: requirements),

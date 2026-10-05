@@ -43,6 +43,7 @@ class _AppBottomNavigationState extends State<AppBottomNavigation>
   VelocityTracker? _velocity;
   Offset? _down;
   bool _dragged = false;
+  bool _cancelled = false;
   int? _hovered;
   int? _focused;
   int? _mouseHovered;
@@ -107,8 +108,10 @@ class _AppBottomNavigationState extends State<AppBottomNavigation>
   void _begin(PointerDownEvent event) {
     if (_pointer != null || event.buttons & kPrimaryButton == 0) return;
     _pointer = event.pointer;
+    widget.progress.holdPage();
     _down = event.localPosition;
     _dragged = false;
+    _cancelled = false;
     _velocity = VelocityTracker.withKind(event.kind)
       ..addPosition(event.timeStamp, event.localPosition);
     _hovered = _index(_at(event.localPosition));
@@ -117,8 +120,20 @@ class _AppBottomNavigationState extends State<AppBottomNavigation>
   }
 
   void _move(PointerMoveEvent event) {
-    if (event.pointer != _pointer) return;
+    if (event.pointer != _pointer || _cancelled) return;
     _velocity?.addPosition(event.timeStamp, event.localPosition);
+    final delta = event.localPosition - _down!;
+    if (!_dragged &&
+        delta.dy.abs() > kTouchSlop &&
+        delta.dy.abs() > delta.dx.abs()) {
+      _cancelled = true;
+      _press.moveTo(0, immediate: _reduceMotion);
+      _position.moveTo(
+        widget.selectedIndex.toDouble(),
+        immediate: _reduceMotion,
+      );
+      return;
+    }
     _dragged |= (event.localPosition.dx - _down!.dx).abs() > kTouchSlop;
     if (!_dragged) return;
     final position = _at(event.localPosition);
@@ -135,6 +150,7 @@ class _AppBottomNavigationState extends State<AppBottomNavigation>
   void _end(PointerEvent event) {
     if (event.pointer != _pointer) return;
     final commit =
+        !_cancelled &&
         event is PointerUpEvent &&
         event.localPosition.dx >= -28 &&
         event.localPosition.dx <= _width + 28 &&
@@ -165,7 +181,11 @@ class _AppBottomNavigationState extends State<AppBottomNavigation>
     _down = null;
     _press.moveTo(0, immediate: _reduceMotion);
     _position.moveTo(next.toDouble(), immediate: _reduceMotion);
-    if (commit && next != widget.selectedIndex) widget.onTap(next);
+    if (commit) {
+      widget.onTap(next);
+    } else {
+      widget.progress.settlePage(widget.selectedIndex);
+    }
   }
 
   @override

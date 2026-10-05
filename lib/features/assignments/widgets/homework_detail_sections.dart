@@ -27,53 +27,42 @@ class HomeworkStatusHeader extends ConsumerWidget {
     final (statusText, statusTone) = _statusInfo(now);
     final status = StudyPalette.of(context, statusTone);
 
-    return StudySurface(
-      tone: StudyPalette.course(context, homework.courseId),
-      padding: const EdgeInsets.all(22),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: status.fill,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      statusText,
-                      style: AppTypography.labelMedium.copyWith(
-                        color: status.accent,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: status.fill,
+                borderRadius: BorderRadius.circular(6),
               ),
-              if (homework.isFavorite) ...[
-                const SizedBox(width: 8),
-                Icon(
-                  Icons.bookmark_rounded,
-                  size: 18,
-                  color: AppColors.warning,
-                ),
-              ],
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    statusText,
+                    style: AppTypography.labelMedium.copyWith(
+                      color: status.accent,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (homework.isFavorite) ...[
+              const SizedBox(width: 8),
+              Icon(Icons.bookmark_rounded, size: 18, color: AppColors.warning),
             ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            homework.title,
-            style: AppTypography.headlineSmall.copyWith(color: c.text),
-          ),
-        ],
-      ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Text(
+          homework.title,
+          style: AppTypography.headlineMedium.copyWith(color: c.text),
+        ),
+      ],
     );
   }
 
@@ -92,8 +81,8 @@ class HomeworkStatusHeader extends ConsumerWidget {
   }
 }
 
-class HomeworkDeadlineCard extends ConsumerWidget {
-  const HomeworkDeadlineCard({super.key, required this.homework});
+class HomeworkDeadlineSummary extends ConsumerWidget {
+  const HomeworkDeadlineSummary({super.key, required this.homework});
 
   final db.Homework homework;
 
@@ -130,61 +119,54 @@ class HomeworkDeadlineCard extends ConsumerWidget {
       countdownColor = StudyPalette.of(context, StudyTone.rose).accent;
     }
 
-    return StudySurface(
-      tone: isPending
-          ? (isOverdue ? StudyTone.rose : StudyTone.ochre)
-          : StudyTone.slate,
-      radius: 14,
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 12,
+          runSpacing: 6,
+          children: [
+            Text(
+              '截止时间',
+              style: AppTypography.labelMedium.copyWith(color: c.subtitle),
+            ),
+            Text(
+              deadline != null
+                  ? '${deadline.year}/${deadline.month}/${deadline.day} '
+                        '${formatHourMinuteLabel(deadline)}'
+                  : '未知',
+              style: AppTypography.titleSmall.copyWith(color: c.text),
+            ),
+          ],
+        ),
+        if (homework.lateSubmissionDeadline != null) ...[
+          const SizedBox(height: 8),
           Wrap(
             spacing: 12,
             runSpacing: 6,
             children: [
               Text(
-                '截止时间',
+                '补交截止',
                 style: AppTypography.labelMedium.copyWith(color: c.subtitle),
               ),
               Text(
-                deadline != null
-                    ? '${deadline.year}/${deadline.month}/${deadline.day} '
-                          '${formatHourMinuteLabel(deadline)}'
-                    : '未知',
-                style: AppTypography.titleSmall.copyWith(color: c.text),
+                formatHomeworkFullTime(homework.lateSubmissionDeadline!),
+                style: AppTypography.bodySmall.copyWith(color: c.subtitle),
               ),
             ],
           ),
-          if (homework.lateSubmissionDeadline != null) ...[
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 12,
-              runSpacing: 6,
-              children: [
-                Text(
-                  '补交截止',
-                  style: AppTypography.labelMedium.copyWith(color: c.subtitle),
-                ),
-                Text(
-                  formatHomeworkFullTime(homework.lateSubmissionDeadline!),
-                  style: AppTypography.bodySmall.copyWith(color: c.subtitle),
-                ),
-              ],
-            ),
-          ],
-          if (countdown != null) ...[
-            const SizedBox(height: 12),
-            Text(
-              countdown,
-              style: AppTypography.titleSmall.copyWith(
-                color: countdownColor,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
         ],
-      ),
+        if (countdown != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            countdown,
+            style: AppTypography.titleSmall.copyWith(
+              color: countdownColor,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

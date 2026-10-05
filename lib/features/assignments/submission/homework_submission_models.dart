@@ -1,4 +1,5 @@
 import '../../../core/database/database.dart' as db;
+import '../../../core/html/html_plain_text.dart';
 
 enum HomeworkSubmissionStatus { idle, submitting, success, failure }
 
@@ -142,12 +143,5 @@ String normalizeHomeworkSubmissionContent(String? html) {
   if (html == null || html.isEmpty) {
     return '';
   }
-  return html
-      .replaceAll(RegExp(r'<[^>]*>'), '')
-      .replaceAll('&nbsp;', ' ')
-      .replaceAll('&amp;', '&')
-      .replaceAll('&lt;', '<')
-      .replaceAll('&gt;', '>')
-      .replaceAll('&quot;', '"')
-      .trim();
+  return stripHtmlToPlainText(html);
 }
