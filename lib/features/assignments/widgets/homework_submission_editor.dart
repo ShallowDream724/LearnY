@@ -4,6 +4,7 @@ import '../../../core/design/app_theme_colors.dart';
 import '../../../core/design/colors.dart';
 import '../../../core/design/typography.dart';
 import '../submission/homework_submission_models.dart';
+import 'homework_layout_tokens.dart';
 
 /// One writing surface owns the sequence: compose, attach, review, submit.
 /// Picking, confirmation and network state remain owned by the screen/controller.
@@ -44,7 +45,7 @@ class HomeworkSubmissionEditor extends StatelessWidget {
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(22),
+        padding: const EdgeInsets.all(homeworkContentInset),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

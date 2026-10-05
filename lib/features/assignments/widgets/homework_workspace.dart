@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'homework_layout_tokens.dart';
 
 /// Requirements and work remain visible together on a wide screen. Each pane
 /// owns its scroll position; a long brief never pushes the editor offscreen.
@@ -30,6 +31,10 @@ class HomeworkWorkspace extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: 28),
         child: child,
       );
+      final alignedHeader = Padding(
+        padding: const EdgeInsets.symmetric(horizontal: homeworkContentInset),
+        child: header,
+      );
       return Align(
         alignment: Alignment.topCenter,
         child: ConstrainedBox(
@@ -50,7 +55,7 @@ class HomeworkWorkspace extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            header,
+                            alignedHeader,
                             const SizedBox(height: 28),
                             Expanded(child: scroll('brief', requirements)),
                           ],
@@ -65,7 +70,7 @@ class HomeworkWorkspace extends StatelessWidget {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        header,
+                        alignedHeader,
                         const SizedBox(height: 20),
                         requirements,
                         const SizedBox(height: 20),

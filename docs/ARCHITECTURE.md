@@ -99,6 +99,7 @@ Android 和 Windows 共用 Dart 业务逻辑、数据库协议与主要界面。
 - 作业总览从纯展示分组函数生成逾期、本周、下周、稍后和完成分组；筛选状态随学期重置，详情返回保留滚动位置。详情和提交共用 `HomeworkWorkspace`：局部宽度与字号允许时并列要求和工作区、各自滚动，窄屏使用单一阅读流，要求默认展开。提交状态由 `HomeworkSubmissionController` 和协调器负责，界面负责编辑、确认和草稿退出提示；成功回执等待用户主动返回，不用定时关闭模拟完成。
 - `HomeworkWorkspace` 只拥有响应式几何与阅读位置：桌面身份/截止时间固定在左侧要求上方，右侧为当前工作。`HomeworkSubmissionEditor` 组合文本、附件状态与提交操作，业务动作通过回调注入，不直接访问仓储或路由。`html_plain_text.dart` 是不依赖 Flutter 的共享 HTML 到正文转换，展示与重新提交使用同一解析规则，过滤注释并保留段落；不以正则剥标签破坏内容，也不对实体二次解码。
 - `StudySliverAppBar` 统一四个主页的壁纸与前景保护。`StudyLightSurface` 负责同位置背景连续性，`StudyHeaderContent` 仅给实际文字/操作组绘制必要的柔边保护，继续复用场景取色缓存。页面显式选择固定或浮动的滚动行为，视觉组件不决定路由或刷新。
+- `StudyReadableContent` 处理一组实际前景与柔边阅读底，首页统计和顶栏共用。`WallpaperContrastGrid` 在工作 isolate 中生成已解码壁纸的保守 RGB 范围，至多保留 12 KiB；图片分析串行并合并最新请求，场景负责定位/强度与最多 128 项查询缓存。视口和滚动只查询范围，不重复扫描图片。`homeworkContentInset` 统一作业身份与各面板的正文对齐。
 - `ShellNavigationProgress` 在可见页位置之外协调底栏和分页器的停止/归位；分页器仍拥有 `PageController` 生命周期，路由仍由 GoRouter 拥有。选中当前页也能归位，竖向手势取消不误切页；隐藏分支同时关闭动画和焦点。真实外壳测试覆盖保留滚动、按压预览/释放切换、详情返回、键盘和半途页面滑动的打断。
 - 作业总览与课程详情均组合 `AssignmentListItem`，共用结果、截止时间、输入方式及窄屏布局；`resolveHomeworkGradeDisplay` 只解释学校成绩值，提醒动作单独封装。课程详情原有的小字号成绩布局、状态判断和百分制颜色阈值已删除。分组折叠由作业页持有，不改变数据库或分组函数。
 - `SwipeToRead` 管理阅读状态操作、防重复和撤销，通知长按菜单复用同一次操作；文件的完整菜单由文件模块负责，底层阅读状态继续走 `LearningDataActions`。弹出菜单位于应用顶层，避免 Flutter 对选中项的 `ensureVisible` 穿过嵌套导航而影响主页面位置。

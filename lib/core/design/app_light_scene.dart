@@ -1,6 +1,9 @@
+import 'dart:async';
+import 'dart:isolate';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show compute, listEquals;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
@@ -8,6 +11,7 @@ import 'app_theme_colors.dart';
 import 'wallpaper.dart';
 import 'material_contrast.dart';
 import 'colors.dart';
+import 'wallpaper_contrast_grid.dart';
 
 /// One authored landscape spans the shell. Glass samples this same scene at
 /// paint time, so scrolling does not need measurements or per-card image loads.
@@ -80,6 +84,9 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop> {
   Color? _navigationSample;
   Size? _sampleSize;
   int _sampleRevision = 0;
+  int _contrastRevision = 0;
+  bool _contrastQueued = false;
+  bool _contrastBusy = false;
 
   @override
   void didChangeDependencies() {
@@ -180,6 +187,53 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop> {
       setState(update);
     }
     _sampleSystemBars();
+    _queueContrastAnalysis();
+  }
+
+  void _queueContrastAnalysis() {
+    ++_contrastRevision;
+    _contrastQueued = true;
+    if (!_contrastBusy) unawaited(_analyseContrast());
+  }
+
+  Future<void> _analyseContrast() async {
+    _contrastBusy = true;
+    try {
+      while (mounted && _contrastQueued) {
+        _contrastQueued = false;
+        final revision = _contrastRevision;
+        final scene = _scene;
+        final image = scene.image;
+        if (image == null) continue;
+        final texture = image.clone();
+        TransferableTypedData? pixels;
+        try {
+          pixels = await _transferWallpaperPixels(texture);
+        } finally {
+          texture.dispose();
+        }
+        if (!mounted || revision != _contrastRevision || pixels == null) {
+          continue;
+        }
+        final grid = await compute(
+          analyseWallpaperContrast,
+          WallpaperContrastRequest(
+            width: image.width,
+            height: image.height,
+            pixels: pixels,
+            dark: scene.dark,
+            customDark: scene.dark && scene.wallpaper == StudyWallpaper.custom,
+          ),
+        );
+        if (!mounted || revision != _contrastRevision) continue;
+        setState(() => _scene = _scene.withContrastGrid(grid));
+      }
+    } catch (_) {
+      // Unavailable analysis uses conservative contrast, never an average guess.
+    } finally {
+      _contrastBusy = false;
+      if (mounted && _contrastQueued) unawaited(_analyseContrast());
+    }
   }
 
   Future<void> _sampleSystemBars() async {
@@ -313,6 +367,15 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop> {
   );
 }
 
+Future<TransferableTypedData?> _transferWallpaperPixels(ui.Image image) async {
+  final bytes = await image.toByteData(
+    format: ui.ImageByteFormat.rawStraightRgba,
+  );
+  return bytes == null
+      ? null
+      : TransferableTypedData.fromList([bytes.buffer.asUint8List()]);
+}
+
 class _SceneScope extends InheritedWidget {
   const _SceneScope({
     required this.scene,
@@ -368,16 +431,16 @@ class _LightBackdrop extends RenderProxyBox {
 /// An opaque slice of the same scene for scrolling page headers: the wallpaper
 /// remains continuous while scrolled text cannot show through the toolbar.
 class StudyLightSurface extends LeafRenderObjectWidget {
-  const StudyLightSurface({super.key}) : _localScrim = false;
-  const StudyLightSurface._scrim() : _localScrim = true;
-  final bool _localScrim;
+  const StudyLightSurface({super.key}) : _foregrounds = null;
+  const StudyLightSurface._scrim(this._foregrounds);
+  final List<Color>? _foregrounds;
 
   @override
   RenderObject createRenderObject(BuildContext context) => _SceneSurfaceBox(
     StudyLightBackdrop.sceneOf(context),
     context.isDark,
     StudyLightBackdrop.motionOf(context),
-    _localScrim,
+    _foregrounds,
   );
 
   @override
@@ -386,6 +449,7 @@ class StudyLightSurface extends LeafRenderObjectWidget {
       StudyLightBackdrop.sceneOf(context),
       context.isDark,
       StudyLightBackdrop.motionOf(context),
+      _foregrounds,
     );
   }
 }
@@ -397,32 +461,62 @@ class StudyHeaderContent extends StatelessWidget {
   final Widget child;
 
   @override
+  Widget build(BuildContext context) => StudyReadableContent(
+    foregrounds: [
+      context.isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
+    ],
+    child: child,
+  );
+}
+
+/// A softly bounded reading ground for mixed semantic foregrounds. The scope
+/// is the actual content group, with no border, shadow or backdrop blur.
+class StudyReadableContent extends StatelessWidget {
+  const StudyReadableContent({
+    super.key,
+    required this.foregrounds,
+    required this.child,
+  }) : assert(foregrounds.length > 0);
+  final List<Color> foregrounds;
+  final Widget child;
+
+  @override
   Widget build(BuildContext context) => Stack(
     clipBehavior: Clip.none,
     children: [
-      const Positioned.fill(child: StudyLightSurface._scrim()),
+      Positioned.fill(child: StudyLightSurface._scrim(foregrounds)),
       child,
     ],
   );
 }
 
 class _SceneSurfaceBox extends RenderBox {
-  _SceneSurfaceBox(this.scene, this.dark, this.motion, this.localScrim);
-  final bool localScrim;
+  _SceneSurfaceBox(this.scene, this.dark, this.motion, this.foregrounds);
+  List<Color>? foregrounds;
   StudyLightScene? scene;
   bool dark;
   Listenable? motion;
   Offset _lastSceneOrigin = Offset.zero;
 
-  void update(StudyLightScene? next, bool nextDark, Listenable? nextMotion) {
+  void update(
+    StudyLightScene? next,
+    bool nextDark,
+    Listenable? nextMotion,
+    List<Color>? nextForegrounds,
+  ) {
     if (motion != nextMotion) {
       if (attached) motion?.removeListener(markNeedsPaint);
       motion = nextMotion;
       if (attached) motion?.addListener(markNeedsPaint);
     }
-    if (identical(scene, next) && dark == nextDark) return;
+    if (identical(scene, next) &&
+        dark == nextDark &&
+        listEquals(foregrounds, nextForegrounds)) {
+      return;
+    }
     scene = next;
     dark = nextDark;
+    foregrounds = nextForegrounds;
     markNeedsPaint();
   }
 
@@ -457,17 +551,22 @@ class _SceneSurfaceBox extends RenderBox {
       offset.dy - backdrop.origin.dy,
     );
     final coverage = backdrop.origin & size;
-    if (!localScrim) {
+    final inks = foregrounds;
+    if (inks == null) {
       backdrop.scene.paint(context.canvas, backdrop.size, coverage: coverage);
     } else {
-      final alpha = backdrop.scene.readingOpacity(
-        coverage,
-        backdrop.size,
-        minimum: 0,
-        foreground: dark
-            ? AppColors.darkTextPrimary
-            : AppColors.lightTextPrimary,
-      );
+      var alpha = 0.0;
+      for (final ink in inks) {
+        final needed = backdrop.scene.readingOpacity(
+          coverage,
+          backdrop.size,
+          minimum: 0,
+          foreground: ink,
+        );
+        if (needed > alpha) alpha = needed;
+      }
+      // Account for the feather's slight falloff inside the content bounds.
+      alpha = (alpha / .94).clamp(0.0, 1.0);
       if (alpha > 0) {
         context.canvas.drawRRect(
           RRect.fromRectAndRadius(
@@ -495,6 +594,7 @@ class StudyLightScene {
     this.mobileArtwork = false,
     this.strength = .3,
     this.samples = const [],
+    this.contrastGrid,
   });
   final bool dark;
   final ui.Image? image;
@@ -502,6 +602,7 @@ class StudyLightScene {
   final bool mobileArtwork;
   final double strength;
   final List<Color> samples;
+  final WallpaperContrastGrid? contrastGrid;
   final _opacityCache = <(int, int, int, int, double, Color), double>{};
   ui.Shader? _shader;
   Size? _shaderSize;
@@ -514,6 +615,7 @@ class StudyLightScene {
           mobileArtwork: mobileArtwork,
           strength: strength,
           samples: samples,
+          contrastGrid: contrastGrid,
         )
         .._shader = _shader
         .._shaderSize = _shaderSize;
@@ -526,6 +628,20 @@ class StudyLightScene {
           mobileArtwork: mobileArtwork,
           strength: strength,
           samples: next,
+          contrastGrid: contrastGrid,
+        )
+        .._shader = _shader
+        .._shaderSize = _shaderSize;
+
+  StudyLightScene withContrastGrid(WallpaperContrastGrid grid) =>
+      StudyLightScene(
+          dark: dark,
+          image: image,
+          wallpaper: wallpaper,
+          mobileArtwork: mobileArtwork,
+          strength: strength,
+          samples: samples,
+          contrastGrid: grid,
         )
         .._shader = _shader
         .._shaderSize = _shaderSize;
@@ -536,38 +652,62 @@ class StudyLightScene {
     double minimum = .25,
     Color? foreground,
   }) {
-    if (samples.isEmpty || viewport.isEmpty) return dark ? .75 : .85;
-    final left = (area.left / viewport.width * 16).floor().clamp(0, 15);
-    final right = (area.right / viewport.width * 16).ceil().clamp(left + 1, 16);
-    final top = (area.top / viewport.height * 32).floor().clamp(0, 31);
-    final bottom = (area.bottom / viewport.height * 32).ceil().clamp(
-      top + 1,
-      32,
-    );
     final textColor =
         foreground ??
         (dark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary);
+    final base = dark ? const Color(0xFF1B1D20) : const Color(0xFFF7F8FB);
+    if (image == null || strength <= 0) {
+      return contrastOpacity(base, textColor, dark: dark, minimum: minimum);
+    }
+    final grid = contrastGrid;
+    if (grid == null || viewport.isEmpty) {
+      return contrastOpacity(
+        dark ? Colors.white : Colors.black,
+        textColor,
+        dark: dark,
+        minimum: minimum,
+      );
+    }
+    final placement = _texturePlacement(viewport);
+    // Include the largest bilinear/mipmap footprint at DPR >= 1, not just the
+    // center texel. Downscaled high-resolution photos can span several pixels.
+    final gutter = 1 + 2 / placement.scale;
+    final source = Rect.fromLTRB(
+      (area.left - placement.origin.dx) / placement.scale - gutter,
+      (area.top - placement.origin.dy) / placement.scale - gutter,
+      (area.right - placement.origin.dx) / placement.scale + gutter,
+      (area.bottom - placement.origin.dy) / placement.scale + gutter,
+    );
+    final left = (source.left / grid.width * grid.columns).floor().clamp(
+      0,
+      grid.columns - 1,
+    );
+    final right = (source.right / grid.width * grid.columns).ceil().clamp(
+      left + 1,
+      grid.columns,
+    );
+    final top = (source.top / grid.height * grid.rows).floor().clamp(
+      0,
+      grid.rows - 1,
+    );
+    final bottom = (source.bottom / grid.height * grid.rows).ceil().clamp(
+      top + 1,
+      grid.rows,
+    );
     final key = (left, right, top, bottom, minimum, textColor);
     if (_opacityCache[key] case final cached?) return cached;
-    var alpha = minimum;
-    final base = dark ? const Color(0xFF1B1D20) : const Color(0xFFF7F8FB);
-    for (var y = top; y < bottom; y++) {
-      for (var x = left; x < right; x++) {
-        final color = Color.alphaBlend(
-          samples[y * 16 + x].withValues(
-            alpha: wallpaperTransmission(strength),
-          ),
-          base,
-        );
-        final needed = contrastOpacity(
-          color,
-          textColor,
-          dark: dark,
-          minimum: minimum,
-        );
-        if (needed > alpha) alpha = needed;
-      }
-    }
+    final color = Color.alphaBlend(
+      grid
+          .extremeRegion(left, top, right, bottom, brightest: dark)
+          .withValues(alpha: wallpaperTransmission(strength)),
+      base,
+    );
+    final alpha = contrastOpacity(
+      color,
+      textColor,
+      dark: dark,
+      minimum: minimum,
+    );
     if (_opacityCache.length >= 128) _opacityCache.clear();
     _opacityCache[key] = alpha;
     return alpha;
@@ -575,6 +715,30 @@ class StudyLightScene {
 
   static Offset source(Size size) =>
       Offset(-size.width * .12, -size.height * .3);
+
+  ({double scale, Offset origin}) _texturePlacement(Size size) {
+    final texture = image!;
+    final textureSize = Size(
+      texture.width.toDouble(),
+      texture.height.toDouble(),
+    );
+    final fitted = applyBoxFit(BoxFit.cover, textureSize, size);
+    final artwork = wallpaper.artwork(forMobile: mobileArtwork);
+    final scale = fitted.destination.width / fitted.source.width * artwork.zoom;
+    final framing = ((1 - size.aspectRatio) / .45).clamp(0.0, 1.0);
+    final alignment = Alignment.lerp(
+      artwork.wideAlignment,
+      artwork.tallAlignment,
+      framing,
+    )!;
+    return (
+      scale: scale,
+      origin: Offset(
+        (size.width - texture.width * scale) * (1 + alignment.x) / 2,
+        (size.height - texture.height * scale) * (1 + alignment.y) / 2,
+      ),
+    );
+  }
 
   void paint(Canvas canvas, Size size, {Rect? coverage}) {
     final bounds = Offset.zero & size;
@@ -596,28 +760,10 @@ class StudyLightScene {
       paint.colorFilter = customWallpaperDarkFilter;
     }
     if (_shader == null || _shaderSize != size) {
-      final textureSize = Size(
-        texture.width.toDouble(),
-        texture.height.toDouble(),
-      );
-      final fitted = applyBoxFit(BoxFit.cover, textureSize, size);
-      final artwork = wallpaper.artwork(forMobile: mobileArtwork);
-      final scale =
-          fitted.destination.width / fitted.source.width * artwork.zoom;
-      final framing = ((1 - size.aspectRatio) / .45).clamp(0.0, 1.0);
-      final alignment = Alignment.lerp(
-        artwork.wideAlignment,
-        artwork.tallAlignment,
-        framing,
-      )!;
+      final placement = _texturePlacement(size);
       final matrix = Matrix4.identity()
-        ..translateByDouble(
-          (size.width - texture.width * scale) * (1 + alignment.x) / 2,
-          (size.height - texture.height * scale) * (1 + alignment.y) / 2,
-          0,
-          1,
-        )
-        ..scaleByDouble(scale, scale, 1, 1);
+        ..translateByDouble(placement.origin.dx, placement.origin.dy, 0, 1)
+        ..scaleByDouble(placement.scale, placement.scale, 1, 1);
       _shader = ui.ImageShader(
         texture,
         TileMode.clamp,

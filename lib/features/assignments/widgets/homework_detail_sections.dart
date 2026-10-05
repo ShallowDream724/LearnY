@@ -14,6 +14,7 @@ import '../../../core/router/router.dart';
 import '../../../core/providers/providers.dart';
 import '../../../core/utils/deadline_time.dart';
 import '../../../core/utils/homework_grade_display.dart';
+import 'homework_layout_tokens.dart';
 
 class HomeworkStatusHeader extends ConsumerWidget {
   const HomeworkStatusHeader({super.key, required this.homework});
@@ -367,7 +368,7 @@ class HomeworkSectionCard extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(homeworkContentInset),
       decoration: BoxDecoration(
         color: c.surface,
         borderRadius: BorderRadius.circular(16),

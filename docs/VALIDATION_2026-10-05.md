@@ -82,3 +82,16 @@ build 33 最终验证：337 项全套测试通过，`flutter analyze --no-pub li
 - 分发目录 `dist/releases/v0.1.5-build35/`；APK SHA-256 `95ca34e127871bfea3ff9d4a27dec7f502a6f2cb4a3523a5c47b7d6c4e9595be`。源码提交 `c322264`。
 
 日志：`output/nav-contrast-tests.log`、`nav-contrast-analyze.log`、`nav-contrast-package.log`。两端 `overhaul-*-build.log` 已更新为 build 35 记录。
+
+## build 36：正文对齐与彩色统计的可读性
+
+用户确认先前提出的方案后实施：作业身份与面板正文共用 20 dp 内边距，涵盖详情、提交编辑及两端布局；首页统计保留彩色色相、轻字重和原有入口，主题色阶与局部柔边阅读底协同。
+
+针对用户提出的取色精度和性能要求，正文保护不再依据缩小图片的平均色。每张已解码壁纸通过一个串行工作 isolate 生成保守 RGB 范围，至多保留 12 KiB 表及 128 项查询缓存；窗口/滚动按同一裁剪变换查询，包含滤波边界。自定义图因解码分档重新加载时会重新分析，重复请求合并到最新图片；原始分析像素不长期保存。内存边界见 [材质文档](GLASS_MATERIAL.md)，本轮没有以缓存上限推导整个应用的内存下降。
+
+- `flutter test --no-pub test/core/design test/course_glass_test.dart test/core/shell`：20 项通过。新增检查包括大面积白色中仅一个暗像素、透明像素、用户壁纸深色处理、裁剪区域和强度，以及明暗主题的彩色数字/标签在混合纹理下的对比。原有导航与外壳协作继续通过。
+- `flutter analyze --no-pub lib test tool` 无问题。原 Flutter 布局预览的两项工作流检查通过，覆盖稀疏/长要求、手机、较矮桌面、大字号、键盘以及明暗主题。没有操作用户的应用窗口或提交实际作业，观感由用户复核。
+- Windows / Android 生产构建、内嵌版本与签名检查完成，版本 `0.1.5+36`；Windows 已覆盖用户原 Release 目录。APK 包名和签名延续旧版本，依赖使用已有缓存离线构建。
+- 分发 `dist/releases/v0.1.5-build36/`；APK SHA-256 `80d21eb99d9417dd4938038618dc3b8903056b086122d9c1717242de6d93183d`。没有推送或公开发布。
+
+日志：`output/stats-reading-tests.log`、`stats-reading-analyze.log`、`stats-reading-layout.log`、`stats-reading-package.log`。`overhaul-*-build.log` 当前记录 build 36。
