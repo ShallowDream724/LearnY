@@ -295,6 +295,27 @@ void main() {
       } catch (error) {
         result['learn'] = _error(error);
       }
+      if (Platform.environment['LEARNY_PROBE_ROSTER_ONLY'] == '1') {
+        final watch = Stopwatch()..start();
+        try {
+          final courses = await helper.getCourseList(
+            (result['learn'] as Map)['semester'] as String,
+          );
+          result['roster'] = {
+            'status': 'success',
+            'count': courses.length,
+            'metadataLoaded': courses
+                .where((course) => course.timeAndLocationLoaded)
+                .length,
+            'elapsedMs': watch.elapsedMilliseconds,
+          };
+        } catch (error) {
+          result['roster'] = _error(error);
+        }
+        result['requests'] = requests;
+        stdout.writeln(const JsonEncoder.withIndent('  ').convert(result));
+        return;
+      }
       if (Platform.environment['LEARNY_PROBE_READ_CONTRACTS'] == '1') {
         try {
           result['readContracts'] = await probeSchoolReadContracts(

@@ -44,6 +44,7 @@ The 2026-09-12 protocol findings and coverage boundaries are maintained in
 | Environment variable | Meaning |
 | --- | --- |
 | `LEARNY_PROBE_FULL_TERM=1` | Query the verified 2026 autumn range once |
+| `LEARNY_PROBE_ROSTER_ONLY=1` | Read only the current semester roster and per-course metadata; report counts and elapsed time without calendar or content reads |
 | `LEARNY_PROBE_READ_CONTRACTS=1` | Sample semester/roster, notification, homework/feedback and file read contracts |
 | `LEARNY_PROBE_DENSE_SAMPLE=1` | Sample a prior spring course ranked by content counts |
 | `LEARNY_PROBE_PAGINATION=1` | Add size-one file and notification requests to verify pagination semantics |

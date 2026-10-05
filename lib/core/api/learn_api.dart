@@ -33,6 +33,7 @@ import 'session_page_detection.dart';
 import 'school_list_loader.dart';
 import 'urls.dart' as urls;
 import 'utils.dart';
+import '../utils/concurrent_map.dart';
 
 export 'identity_auth_api.dart'
     show
@@ -1011,9 +1012,7 @@ class Learn2018Helper implements LearningReadApi {
     }
 
     final result = json['resultList'] as List;
-    final courses = <CourseInfo>[];
-
-    for (final c in result) {
+    return mapWithConcurrency<dynamic, CourseInfo>(result, (c) async {
       List<dynamic> timeAndLocation = [];
       var timeAndLocationLoaded = false;
       try {
@@ -1028,24 +1027,21 @@ class Learn2018Helper implements LearningReadApi {
         // Keep the roster usable; consumers preserve previously cached metadata.
       }
 
-      courses.add(
-        CourseInfo(
-          id: c['wlkcid'].toString(),
-          name: decodeHTML(c['zywkcm']?.toString()),
-          chineseName: decodeHTML(c['kcm']?.toString()),
-          englishName: decodeHTML(c['ywkcm']?.toString()),
-          timeAndLocation: timeAndLocation,
-          timeAndLocationLoaded: timeAndLocationLoaded,
-          url: urls.learnCoursePage(c['wlkcid'].toString(), courseType),
-          teacherName: c['jsm']?.toString() ?? '',
-          teacherNumber: c['jsh']?.toString() ?? '',
-          courseNumber: c['kch']?.toString() ?? '',
-          courseIndex: _toInt(c['kxh']),
-          courseType: courseType,
-        ),
+      return CourseInfo(
+        id: c['wlkcid'].toString(),
+        name: decodeHTML(c['zywkcm']?.toString()),
+        chineseName: decodeHTML(c['kcm']?.toString()),
+        englishName: decodeHTML(c['ywkcm']?.toString()),
+        timeAndLocation: timeAndLocation,
+        timeAndLocationLoaded: timeAndLocationLoaded,
+        url: urls.learnCoursePage(c['wlkcid'].toString(), courseType),
+        teacherName: c['jsm']?.toString() ?? '',
+        teacherNumber: c['jsh']?.toString() ?? '',
+        courseNumber: c['kch']?.toString() ?? '',
+        courseIndex: _toInt(c['kxh']),
+        courseType: courseType,
       );
-    }
-    return courses;
+    });
   }
 
   // -------------------------------------------------------------------

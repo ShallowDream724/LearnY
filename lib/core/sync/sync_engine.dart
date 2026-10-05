@@ -9,6 +9,7 @@ import '../files/file_models.dart';
 import '../files/file_repository.dart';
 import '../courses/course_catalog_repository.dart';
 import '../semester/semester_repository.dart';
+import '../utils/concurrent_map.dart';
 import 'sync_operation.dart';
 
 class SyncExecutionResult {
@@ -178,27 +179,24 @@ class SyncEngine {
     List<String> warnings,
     SyncOperation operation,
   ) async {
-    // Bound fan-out so a large semester does not saturate the school service.
-    for (var offset = 0; offset < courses.length; offset += 3) {
+    // Keep each content type bounded while slow courses do not hold an entire
+    // batch. Cancellation prevents new work and waits for in-flight operations.
+    await mapWithConcurrency<_SyncCourseRef, void>(courses, (course) {
       operation.ensureActive();
-      await Future.wait(
-        courses.skip(offset).take(3).map((course) {
-          return switch (type) {
-            _SyncContentType.homework => _syncHomeworks(
-              course,
-              warnings,
-              operation,
-            ),
-            _SyncContentType.notification => _syncNotifications(
-              course,
-              warnings,
-              operation,
-            ),
-            _SyncContentType.file => _syncFiles(course, warnings, operation),
-          };
-        }),
-      );
-    }
+      return switch (type) {
+        _SyncContentType.homework => _syncHomeworks(
+          course,
+          warnings,
+          operation,
+        ),
+        _SyncContentType.notification => _syncNotifications(
+          course,
+          warnings,
+          operation,
+        ),
+        _SyncContentType.file => _syncFiles(course, warnings, operation),
+      };
+    });
   }
 
   Future<void> _syncHomeworks(
