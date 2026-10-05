@@ -13,6 +13,7 @@ import 'wallpaper.dart';
 import 'material_contrast.dart';
 import 'colors.dart';
 import 'wallpaper_contrast_grid.dart';
+import 'wallpaper_blur.dart';
 
 typedef SceneReadingPainter =
     void Function(
@@ -20,6 +21,7 @@ typedef SceneReadingPainter =
       StudyLightScene scene,
       Size viewport,
       Rect bounds,
+      double visibility,
     );
 
 /// One authored landscape spans the shell. Glass samples this same scene at
@@ -58,15 +60,20 @@ class StudyLightBackdrop extends StatefulWidget {
   static VoidCallback registerReadingField(
     RenderBox field,
     SceneReadingPainter painter,
-    void Function(StudyLightScene) onSceneChanged,
-  ) {
+    void Function(StudyLightScene) onSceneChanged, {
+    required Rect Function(RenderObject backdrop) bounds,
+  }) {
     RenderObject? ancestor = field.parent;
     while (ancestor != null && ancestor is! _LightBackdrop) {
       ancestor = ancestor.parent;
     }
     final backdrop = ancestor as _LightBackdrop?;
     if (backdrop == null) return () {};
-    backdrop.fields[field] = (paint: painter, sceneChanged: onSceneChanged);
+    backdrop.fields[field] = (
+      paint: painter,
+      sceneChanged: onSceneChanged,
+      bounds: bounds,
+    );
     backdrop._motion.addListener(field.markNeedsPaint);
     onSceneChanged(backdrop.scene);
     backdrop.markNeedsPaint();
@@ -130,6 +137,7 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop>
   ImageInfo? _image;
   ImageProvider? _provider;
   late final _SceneMotion _motion;
+  final _blur = WallpaperBlur();
   ImageStreamListener? _listener;
   late StudyLightScene _scene;
   Color? _statusSample;
@@ -144,6 +152,7 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop>
   void initState() {
     super.initState();
     _motion = _SceneMotion(this);
+    _blur.addListener(_onBlurReady);
   }
 
   @override
@@ -189,6 +198,7 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop>
             allowUpscaling: false,
           );
     if (_provider == provider && _scene.dark == dark) {
+      _requestBlur(size);
       if (_sampleSize != MediaQuery.sizeOf(context)) _sampleSystemBars();
       return;
     }
@@ -246,7 +256,21 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop>
       setState(update);
     }
     _sampleSystemBars();
+    _requestBlur(MediaQuery.sizeOf(context));
     _queueContrastAnalysis();
+  }
+
+  void _requestBlur(Size viewport) {
+    final image = _scene.image;
+    if (image == null || viewport.isEmpty) return;
+    _blur.request(
+      image,
+      readingBlurSigma / _scene.texturePlacement(viewport).scale,
+    );
+  }
+
+  void _onBlurReady() {
+    if (mounted) setState(() => _scene = _scene.withReadingBlur(_blur.image));
   }
 
   void _queueContrastAnalysis() {
@@ -397,6 +421,8 @@ class _StudyLightBackdropState extends State<StudyLightBackdrop>
     if (_listener != null) _stream?.removeListener(_listener!);
     _replaceImage(null);
     _motion.dispose();
+    _blur.removeListener(_onBlurReady);
+    _blur.dispose();
     super.dispose();
   }
 
@@ -510,6 +536,7 @@ class _LightBackdrop extends RenderProxyBox {
         ({
           SceneReadingPainter paint,
           void Function(StudyLightScene) sceneChanged,
+          Rect Function(RenderObject backdrop) bounds,
         })
       >{};
   set motion(Listenable value) {
@@ -559,6 +586,8 @@ class _LightBackdrop extends RenderProxyBox {
       // Navigator keeps covered routes attached. Their fields must retain the
       // latest sampler, but must not leave blur behind the visible route.
       var visible = true;
+      var clip = viewport;
+      RenderObject descendant = field;
       for (
         RenderObject? ancestor = field.parent;
         ancestor != null && ancestor != this;
@@ -569,18 +598,32 @@ class _LightBackdrop extends RenderProxyBox {
           visible = false;
           break;
         }
+        final localClip = ancestor.describeApproximatePaintClip(descendant);
+        if (localClip != null) {
+          final projected = MatrixUtils.transformRect(
+            ancestor.getTransformTo(this),
+            localClip,
+          );
+          if (!projected.isFinite) {
+            visible = false;
+            break;
+          }
+          clip = clip.intersect(projected);
+        }
+        descendant = ancestor;
       }
       if (!visible) continue;
-      final bounds = MatrixUtils.transformRect(
-        field.getTransformTo(this),
-        Offset.zero & field.size,
-      );
-      if (!bounds.isFinite ||
-          bounds.isEmpty ||
-          !bounds.inflate(32).overlaps(viewport)) {
+      final bounds = entry.value.bounds(this);
+      if (!bounds.isFinite || bounds.isEmpty || !bounds.overlaps(clip)) {
         continue;
       }
-      entry.value.paint(context.canvas, scene, size, bounds);
+      final visibleInk = bounds.intersect(clip);
+      final visibility =
+          (visibleInk.width *
+                  visibleInk.height /
+                  (bounds.width * bounds.height))
+              .clamp(0.0, 1.0);
+      entry.value.paint(context.canvas, scene, size, bounds, visibility);
     }
     context.canvas.restore();
     super.paint(context, offset);
@@ -598,6 +641,7 @@ class StudyLightScene {
     this.strength = .3,
     this.samples = const [],
     this.contrastGrid,
+    this.readingBlur,
   });
   final bool dark;
   final ui.Image? image;
@@ -606,6 +650,7 @@ class StudyLightScene {
   final double strength;
   final List<Color> samples;
   final WallpaperContrastGrid? contrastGrid;
+  final ui.Image? readingBlur;
   final _opacityCache = <(Color, Color, double), double>{};
   final _rangeCache =
       <(int, int, int, int), ({Color darkest, Color brightest})>{};
@@ -623,6 +668,7 @@ class StudyLightScene {
           strength: strength,
           samples: samples,
           contrastGrid: contrastGrid,
+          readingBlur: readingBlur,
         )
         .._shader = _shader
         .._shaderSize = _shaderSize;
@@ -636,6 +682,7 @@ class StudyLightScene {
           strength: strength,
           samples: next,
           contrastGrid: contrastGrid,
+          readingBlur: readingBlur,
         )
         .._shader = _shader
         .._shaderSize = _shaderSize;
@@ -649,6 +696,21 @@ class StudyLightScene {
           strength: strength,
           samples: samples,
           contrastGrid: grid,
+          readingBlur: readingBlur,
+        )
+        .._shader = _shader
+        .._shaderSize = _shaderSize;
+
+  StudyLightScene withReadingBlur(ui.Image? image) =>
+      StudyLightScene(
+          dark: dark,
+          image: this.image,
+          wallpaper: wallpaper,
+          mobileArtwork: mobileArtwork,
+          strength: strength,
+          samples: samples,
+          contrastGrid: contrastGrid,
+          readingBlur: image,
         )
         .._shader = _shader
         .._shaderSize = _shaderSize;

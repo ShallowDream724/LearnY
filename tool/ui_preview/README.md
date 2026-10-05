@@ -59,6 +59,14 @@ the logical viewport. `LEARNY_PREVIEW_WALLPAPER=warm_hills` and
 `LEARNY_PREVIEW_INTENSITY=65` select a saved wallpaper/intensity in the isolated
 preview database; they do not change application defaults or the user's settings.
 
+`--plain-name 'render reading material while scrolling at phone pixel density'`
+uses a real 3× test view (1170×2532 physical, 390×844 logical), drags the actual
+home and settings scroll views, and captures 31 frames each at 40 ms intervals
+under `build/ui_preview/reading_scroll/`. Use `LEARNY_PREVIEW_PIXEL_RATIO=3` to
+retain physical pixel detail in the PNGs. The test also checks that scrolling
+reuses the Gaussian wallpaper texture. These are Skia test frames, not an Android
+Impeller recording or a frame-rate benchmark.
+
 Use `--plain-name 'render floating navigation motion'` for the mobile glass and
 navigation study. It captures actual light/dark course pages, the selected home
 state, the profile header, and frame sequences

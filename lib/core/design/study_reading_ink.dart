@@ -8,6 +8,7 @@ import 'app_light_scene.dart';
 import 'scene_ink_appearance.dart';
 import 'material_contrast.dart';
 import 'wallpaper.dart';
+import 'wallpaper_blur.dart';
 
 Future<ui.FragmentProgram?>? _readingProgram;
 ui.FragmentProgram? _resolvedReadingProgram;
@@ -95,6 +96,7 @@ class _ReadingInkBox extends RenderProxyBox {
   SceneInkAppearance? _appearance;
   Offset _lastOrigin = Offset.zero;
   final _blurPaint = Paint();
+  Rect _inkBounds = Rect.zero;
   bool _reduceMotion;
   Duration? _transitionStart;
   double _fromScale = 1, _fromBias = 0, _targetScale = 1, _targetBias = 0;
@@ -127,16 +129,20 @@ class _ReadingInkBox extends RenderProxyBox {
   void _sceneChanged(StudyLightScene scene) {
     if (!identical(scene, _scene)) _lastRange = null;
     _scene = scene;
-    if (scene.image == null) {
+    if (scene.readingBlur == null) {
       _blurPaint.shader = null;
       _shader?.dispose();
       _shader = null;
       _image = null;
     } else if (_program != null &&
-        (!identical(_image, scene.image) || _shader == null)) {
+        (!identical(_image, scene.readingBlur) || _shader == null)) {
       _shader ??= _program!.fragmentShader();
-      _shader!.setImageSampler(0, scene.image!);
-      _image = scene.image;
+      _shader!.setImageSampler(
+        0,
+        scene.readingBlur!,
+        filterQuality: FilterQuality.low,
+      );
+      _image = scene.readingBlur;
     }
     markNeedsPaint();
   }
@@ -148,7 +154,43 @@ class _ReadingInkBox extends RenderProxyBox {
       this,
       _paintBackground,
       _sceneChanged,
+      bounds: (backdrop) =>
+          MatrixUtils.transformRect(getTransformTo(backdrop), _inkBounds),
     );
+  }
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    Rect? ink;
+    void collect(RenderObject node) {
+      if (node is RenderOffstage && node.offstage) return;
+      if (node is RenderParagraph) {
+        final text = node.text.toPlainText(includeSemanticsLabels: false);
+        for (final box in node.getBoxesForSelection(
+          TextSelection(baseOffset: 0, extentOffset: text.length),
+        )) {
+          final rect = MatrixUtils.transformRect(
+            node.getTransformTo(this),
+            box.toRect(),
+          );
+          if (rect.isFinite && !rect.isEmpty) {
+            ink = ink?.expandToInclude(rect) ?? rect;
+          }
+        }
+      } else {
+        node.visitChildren(collect);
+      }
+    }
+
+    if (child != null) collect(child!);
+    // Optical bounds follow ink, while buttons keep their larger touch targets.
+    // Measure once during layout, never while scrolling or on the paint thread.
+    final next = ink?.inflate(4) ?? (Offset.zero & size);
+    if (next != _inkBounds) {
+      _inkBounds = next;
+      StudyLightBackdrop.invalidateReadingFields(this);
+    }
   }
 
   @override
@@ -172,6 +214,7 @@ class _ReadingInkBox extends RenderProxyBox {
     StudyLightScene scene,
     Size viewport,
     Rect bounds,
+    double visibility,
   ) {
     final shader = _shader;
     final image = _image;
@@ -189,8 +232,8 @@ class _ReadingInkBox extends RenderProxyBox {
       ..setFloat(1, bounds.top)
       ..setFloat(2, bounds.width)
       ..setFloat(3, bounds.height)
-      ..setFloat(4, image.width.toDouble())
-      ..setFloat(5, image.height.toDouble())
+      ..setFloat(4, scene.image!.width.toDouble())
+      ..setFloat(5, scene.image!.height.toDouble())
       ..setFloat(6, texture.origin.dx)
       ..setFloat(7, texture.origin.dy)
       ..setFloat(8, texture.scale)
@@ -200,7 +243,8 @@ class _ReadingInkBox extends RenderProxyBox {
       ..setFloat(12, base.b)
       ..setFloat(13, customDark ? .46 : 1)
       ..setFloat(14, customDark ? .49 : 1)
-      ..setFloat(15, customDark ? .54 : 1);
+      ..setFloat(15, customDark ? .54 : 1)
+      ..setFloat(16, visibility);
     _blurPaint.shader = shader;
     canvas.save();
     canvas.translate(bounds.left - 32, bounds.top - 32);
@@ -239,7 +283,7 @@ class _ReadingInkBox extends RenderProxyBox {
     );
     _lastOrigin = backdrop.origin;
     final range = backdrop.scene.readingRange(
-      (backdrop.origin & size).inflate(6),
+      _inkBounds.shift(backdrop.origin).inflate(readingBlurSigma * 3 + 1),
       backdrop.size,
     );
     final now = SchedulerBinding.instance.currentFrameTimeStamp;

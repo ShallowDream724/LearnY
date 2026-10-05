@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:learn_y/app/app.dart';
 import 'package:learn_y/core/design/theme.dart';
+import 'package:learn_y/core/design/app_light_scene.dart';
 import 'package:learn_y/core/design/app_font.dart';
 import 'package:learn_y/core/database/app_state_keys.dart';
 import 'package:learn_y/core/providers/providers.dart';
@@ -544,6 +545,72 @@ void main() {
           }
         }
       }
+    }),
+  );
+
+  testWidgets(
+    'render reading material while scrolling at phone pixel density',
+    (tester) => withShadows(() async {
+      addTearDown(tester.view.reset);
+      tester.view.devicePixelRatio = 3;
+      tester.view.physicalSize = const Size(1170, 2532);
+      final key = GlobalKey();
+      await tester.pumpWidget(previewApp(key));
+      Future<void> settle() async {
+        for (var i = 0; i < 10; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 30)),
+          );
+        }
+      }
+
+      await settle();
+      final router = GoRouter.of(tester.element(find.byType(HomeScreen)));
+      for (final route in {
+        'home': Routes.home,
+        'profile': Routes.profile,
+      }.entries) {
+        router.go(route.value);
+        await settle();
+        final scroll = find.byType(CustomScrollView).hitTestable().first;
+        final texture = StudyLightBackdrop.sceneOf(
+          tester.element(scroll),
+        )!.readingBlur;
+        expect(texture, isNotNull);
+        await capture(tester, key, 'reading_scroll/${route.key}/000');
+        final gesture = await tester.startGesture(tester.getCenter(scroll));
+        for (var frame = 1; frame <= 24; frame++) {
+          await gesture.moveBy(const Offset(0, -20));
+          await tester.pump(const Duration(milliseconds: 40));
+          await capture(
+            tester,
+            key,
+            'reading_scroll/${route.key}/${frame.toString().padLeft(3, '0')}',
+          );
+          expect(
+            identical(
+              StudyLightBackdrop.sceneOf(tester.element(scroll))!.readingBlur,
+              texture,
+            ),
+            isTrue,
+            reason:
+                'Scrolling reuses the Gaussian texture rather than re-rendering it',
+          );
+        }
+        await gesture.up();
+        for (var frame = 25; frame <= 30; frame++) {
+          await tester.pump(const Duration(milliseconds: 40));
+          await capture(
+            tester,
+            key,
+            'reading_scroll/${route.key}/${frame.toString().padLeft(3, '0')}',
+          );
+        }
+        expect(tester.takeException(), isNull);
+      }
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
     }),
   );
 

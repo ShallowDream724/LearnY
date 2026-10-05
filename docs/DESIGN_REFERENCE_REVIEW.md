@@ -53,6 +53,8 @@
 
 同日查看 OpenWebUI 官方仓库的 [Banner](https://github.com/open-webui/open-webui/blob/main/src/lib/components/common/Banner.svelte) 和 [Navbar](https://github.com/open-webui/open-webui/blob/main/src/lib/components/chat/Navbar.svelte)：Banner 组合真实 backdrop blur 与语义色，导航动作休止透明、悬停才显状态底。Navbar 在默认页面还使用白色渐变延伸；其默认底色关系不适合直接搬到 LearnY 的彩色壁纸。借鉴透明动作与实际模糊的关系，未复制源码或声称整个 OpenWebUI 都不使用底色。
 
+2026-10-06 真机反馈再次拒绝 build 40 的粗糙阅读纹理。九点稀疏核是本项目自行选择的近似，没有来自 Apple、OpenWebUI 或其他参考项目的依据；静态预览和单频条纹方差不能证明高密度设备的连续效果。build 41 改用 [Flutter 原生 Gaussian](https://api.flutter.dev/flutter/dart-ui/ImageFilter/ImageFilter.blur.html)，阅读范围与触控热区分开，依据裁剪可见比例淡出，并统一双线性取样。新增 1×/2×/3× 脉冲剖面和亚像素移动回归，使用实际页面的 3× 连续拖动帧作为补充；该证据仍不等于 Android Impeller 真机观测。
+
 ## 日程参考项目（仅研读）
 
 项目负责人提供 [thu-info-community/thu-info-app](https://github.com/thu-info-community/thu-info-app)。2026-09-14 浅克隆到本机独立目录 `D:/learny-references/thu-info-app`，本次阅读固定于 `e684cf63bb76835fe6f86b6f81a766fedf038a4c`；路径仅用于本机查阅，应用与构建不依赖该目录。

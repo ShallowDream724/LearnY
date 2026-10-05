@@ -73,10 +73,14 @@ void main() {
     return MemoryImage(bytes.buffer.asUint8List());
   }
 
-  Future<ByteData> pixels(WidgetTester tester, GlobalKey key) async {
+  Future<ByteData> pixels(
+    WidgetTester tester,
+    GlobalKey key, {
+    double ratio = 1,
+  }) async {
     final rendered = (await tester.runAsync(
       () => (key.currentContext!.findRenderObject() as RenderRepaintBoundary)
-          .toImage(),
+          .toImage(pixelRatio: ratio),
     ))!;
     final bytes = (await tester.runAsync(
       () => rendered.toByteData(format: ui.ImageByteFormat.rawRgba),
@@ -106,6 +110,7 @@ void main() {
     required bool field,
     bool card = false,
     bool hidden = false,
+    Offset fieldOffset = Offset.zero,
   }) => MaterialApp(
     theme: AppTheme.light,
     home: RepaintBoundary(
@@ -118,14 +123,17 @@ void main() {
           children: [
             if (field)
               Center(
-                child: Offstage(
-                  offstage: hidden,
-                  child: SizedBox(
-                    width: 120,
-                    height: 32,
-                    child: StudyReadingInk(
-                      colors: const [Color(0xFF5966A9)],
-                      builder: (_, _) => const SizedBox.expand(),
+                child: Transform.translate(
+                  offset: fieldOffset,
+                  child: Offstage(
+                    offstage: hidden,
+                    child: SizedBox(
+                      width: 120,
+                      height: 32,
+                      child: StudyReadingInk(
+                        colors: const [Color(0xFF5966A9)],
+                        builder: (_, _) => const SizedBox.expand(),
+                      ),
                     ),
                   ),
                 ),
@@ -205,6 +213,120 @@ void main() {
       }
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'reading protection follows ink without shrinking the touch target',
+    (tester) async {
+      tester.view.physicalSize = const Size(256, 160);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final provider = await image(tester, true);
+      final key = GlobalKey();
+      Widget scene(bool protect) {
+        final button = TextButton(
+          onPressed: () {},
+          style: TextButton.styleFrom(
+            minimumSize: const Size(220, 96),
+            backgroundColor: Colors.transparent,
+          ),
+          child: const Text('退出'),
+        );
+        return MaterialApp(
+          theme: AppTheme.light,
+          home: RepaintBoundary(
+            key: key,
+            child: StudyLightBackdrop(
+              imageProvider: provider,
+              wallpaper: StudyWallpaper.custom,
+              strength: 1,
+              child: Center(
+                child: protect
+                    ? StudyReadingInk(
+                        colors: const [Color(0xFF5966A9)],
+                        builder: (_, _) => button,
+                      )
+                    : button,
+              ),
+            ),
+          ),
+        );
+      }
+
+      await tester.pumpWidget(scene(false));
+      await settle(tester, provider);
+      final before = await pixels(tester, key);
+      await tester.pumpWidget(scene(true));
+      await settle(tester, provider);
+      expect(tester.getSize(find.byType(TextButton)), const Size(220, 96));
+      final after = await pixels(tester, key);
+      for (final x in [30, 220]) {
+        for (var channel = 0; channel < 4; channel++) {
+          final offset = (80 * 256 + x) * 4 + channel;
+          expect(after.getUint8(offset), before.getUint8(offset));
+        }
+      }
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'high density impulse blur has one smooth peak without repeated lobes',
+    (tester) async {
+      addTearDown(tester.view.reset);
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder)..drawColor(Colors.black, BlendMode.src);
+      canvas.drawRect(
+        const Rect.fromLTWH(128, 0, 1, 160),
+        Paint()..color = Colors.white,
+      );
+      final picture = recorder.endRecording();
+      final rendered = (await tester.runAsync(
+        () => picture.toImage(256, 160),
+      ))!;
+      final encoded = (await tester.runAsync(
+        () => rendered.toByteData(format: ui.ImageByteFormat.png),
+      ))!;
+      rendered.dispose();
+      picture.dispose();
+      final provider = MemoryImage(encoded.buffer.asUint8List());
+      for (final ratio in [1.0, 2.0, 3.0]) {
+        tester.view.physicalSize = Size(256 * ratio, 160 * ratio);
+        tester.view.devicePixelRatio = ratio;
+        final key = GlobalKey();
+        await tester.pumpWidget(app(key, provider, field: true));
+        await settle(tester, provider);
+        final first = await pixels(tester, key, ratio: ratio);
+        int channel(ByteData image, int step) => image.getUint8(
+          ((80 * ratio).toInt() * (256 * ratio).toInt() +
+                  (128.5 * ratio).floor() +
+                  step * ratio.toInt()) *
+              4,
+        );
+        final peak = channel(first, 0);
+        expect(peak, inInclusiveRange(8, 50));
+        for (var step = 1; step < 25; step++) {
+          expect(
+            channel(first, step),
+            lessThanOrEqualTo(channel(first, step - 1) + 1),
+          );
+        }
+        await tester.pumpWidget(
+          app(key, provider, field: true, fieldOffset: const Offset(.37, .61)),
+        );
+        await tester.pump();
+        final moved = await pixels(tester, key, ratio: ratio);
+        for (var step = -24; step < 25; step++) {
+          expect(
+            (channel(moved, step) - channel(first, step)).abs(),
+            lessThanOrEqualTo(1),
+          );
+        }
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+      }
     },
   );
 

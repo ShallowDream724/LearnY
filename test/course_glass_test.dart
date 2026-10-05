@@ -74,9 +74,12 @@ void main() {
       // Contrast sampling includes an asynchronous GPU readback. Wait for the
       // scene to finish loading before comparing two navigation methods.
       for (var attempt = 0; attempt < 50; attempt++) {
-        if (StudyLightBackdrop.sceneOf(
+        final ready = StudyLightBackdrop.sceneOf(
           tester.element(find.byType(CourseGlassSurface)),
-        )!.samples.isNotEmpty) {
+        )!;
+        if (ready.samples.isNotEmpty &&
+            ready.contrastGrid != null &&
+            ready.readingBlur != null) {
           break;
         }
         await tester.runAsync(
@@ -89,6 +92,12 @@ void main() {
           tester.element(find.byType(CourseGlassSurface)),
         )!.samples,
         isNotEmpty,
+      );
+      expect(
+        StudyLightBackdrop.sceneOf(
+          tester.element(find.byType(CourseGlassSurface)),
+        )!.contrastGrid,
+        isNotNull,
       );
       Future<List<int>> pixels() async {
         final image =
