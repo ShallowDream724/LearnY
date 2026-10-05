@@ -1,6 +1,6 @@
 # 学校接口与验证记录
 
-本文记录 LearnY 实际依赖的逆向协议、2026-09-12 的有界实测，以及尚未验证的边界。URL 构造集中在 `lib/core/api/urls.dart`，协议适配由 `Learn2018Helper`、`IdentityAuthApi`、`RegistrarCalendarApi` 负责。业务仓储依赖 `LearningReadApi`，不应解析学校 HTML 或自行提交密码。
+本文记录 LearnY 实际依赖的逆向协议、2026-09-12 与 2026-10-05 的有界实测，以及尚未验证的边界。URL 构造集中在 `lib/core/api/urls.dart`，协议适配由 `Learn2018Helper`、`IdentityAuthApi`、`RegistrarCalendarApi` 负责。业务仓储依赖 `LearningReadApi`，不应解析学校 HTML 或自行提交密码。
 
 ## 会话不能互相代替
 
