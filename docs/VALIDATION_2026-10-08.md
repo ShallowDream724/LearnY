@@ -25,4 +25,4 @@ Android 和 Windows 正式入口 release 构建完成，版本均为 `0.1.5+42`�
 
 交付目录：`dist/releases/v0.1.5-build42/`。APK SHA-256：`bdf6328ccc11cd849bd2ef63eee9dbef2874a2ad88b5e72c3c3da425b6b56d86`；Windows ZIP SHA-256：`6ce7da6f13809424b228539169220d1c2d739db3e914402e0f83c1055a8796c5`。
 
-构建与打包日志：`output/navigation42-android-build.log`、`navigation42-windows-build.log`、`navigation42-package.log`、`navigation42-signature.log`。本轮为本地迭代，未替换公开 Release。
+构建与打包日志：`output/navigation42-android-build.log`、`navigation42-windows-build.log`、`navigation42-package.log`、`navigation42-signature.log`。依照用户指令替换公开 0.1.5，沿用 Release ID `403753619`、既有文件名和下载链接；发布日志为 `output/navigation42-release-*.log`。
