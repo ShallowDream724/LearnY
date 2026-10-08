@@ -15,6 +15,7 @@ import '../../../core/files/file_models.dart';
 import '../../../core/providers/providers.dart';
 import '../../../core/providers/sync_models.dart';
 import '../../../core/router/router.dart';
+import '../../../core/shell/shell_layout_metrics.dart';
 import '../../../core/sync/sync_actions.dart';
 import '../../../core/utils/deadline_time.dart';
 import '../../../core/utils/notification_read_state.dart';
@@ -63,7 +64,9 @@ class CourseNotificationsTab extends ConsumerWidget {
               color: context.colors.infoAccent,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: EdgeInsets.zero,
+                padding: EdgeInsets.only(
+                  bottom: shellContentBottomInset(context),
+                ),
                 children: const [
                   _CourseEmptyState(
                     icon: Icons.notifications_none_rounded,
@@ -82,7 +85,12 @@ class CourseNotificationsTab extends ConsumerWidget {
               child: ListView.builder(
                 key: PageStorageKey('course-notifications-$courseId'),
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  12,
+                  16,
+                  shellContentBottomInset(context, extraSpacing: 16),
+                ),
                 itemCount: notifications.length,
                 itemBuilder: (context, index) {
                   final notification = notifications[index];
@@ -328,7 +336,12 @@ class _CourseFilesTabState extends ConsumerState<CourseFilesTab> {
                       ),
                       key: PageStorageKey('course-files-${widget.courseId}'),
                       physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                      padding: EdgeInsets.fromLTRB(
+                        16,
+                        8,
+                        16,
+                        shellContentBottomInset(context, extraSpacing: 16),
+                      ),
                       itemBuilder: (context, file) {
                         final isFavorite = favoriteKeys.contains(file.id);
                         return Padding(
@@ -435,7 +448,9 @@ class CourseHomeworksTab extends ConsumerWidget {
               color: context.colors.infoAccent,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: EdgeInsets.zero,
+                padding: EdgeInsets.only(
+                  bottom: shellContentBottomInset(context),
+                ),
                 children: const [
                   _CourseEmptyState(
                     icon: Icons.assignment_outlined,
@@ -452,7 +467,12 @@ class CourseHomeworksTab extends ConsumerWidget {
             child: ListView.builder(
               key: PageStorageKey('course-homeworks-$courseId'),
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+              padding: EdgeInsets.fromLTRB(
+                16,
+                12,
+                16,
+                shellContentBottomInset(context, extraSpacing: 16),
+              ),
               itemCount: homeworks.length,
               itemBuilder: (context, index) {
                 final homework = homeworks[index];

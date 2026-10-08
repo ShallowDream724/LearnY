@@ -18,6 +18,7 @@ import '../semester/semester_switcher.dart';
 import '../../features/home/providers/home_schedule_provider.dart';
 import 'app_bottom_navigation.dart';
 import 'shell_navigation_progress.dart';
+import 'shell_branch_back_scope.dart';
 
 const _destinations = <ShellNavDestinationData>[
   ShellNavDestinationData(
@@ -382,6 +383,7 @@ class _BranchPagerState extends State<_BranchPager> {
   @override
   Widget build(BuildContext context) {
     final path = GoRouterState.of(context).uri.path;
+    final shellIsCurrent = ModalRoute.isCurrentOf(context) ?? true;
     final topLevel = const [
       Routes.home,
       Routes.assignments,
@@ -402,11 +404,16 @@ class _BranchPagerState extends State<_BranchPager> {
       children: [
         for (var index = 0; index < widget.children.length; index++)
           _KeepBranch(
-            child: TickerMode(
-              enabled: index == widget.navigationShell.currentIndex,
-              child: ExcludeFocus(
-                excluding: index != widget.navigationShell.currentIndex,
-                child: widget.children[index],
+            child: ShellBranchBackScope(
+              enabled:
+                  shellIsCurrent &&
+                  index == widget.navigationShell.currentIndex,
+              child: TickerMode(
+                enabled: index == widget.navigationShell.currentIndex,
+                child: ExcludeFocus(
+                  excluding: index != widget.navigationShell.currentIndex,
+                  child: widget.children[index],
+                ),
               ),
             ),
           ),

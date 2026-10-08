@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 import '../design/responsive.dart';
 
@@ -20,7 +22,12 @@ double shellContentBottomInset(
   BuildContext context, {
   double extraSpacing = 0,
 }) {
-  return MediaQuery.paddingOf(context).bottom +
+  // Nested Scaffolds may consume the padding injected by extendBody. Keep the
+  // shell's actual obstruction as a floor instead of relying on that padding.
+  return math.max(
+        MediaQuery.paddingOf(context).bottom,
+        shellBottomNavBarHeight(context),
+      ) +
       kShellBottomNavContentPeekGap +
       extraSpacing;
 }

@@ -7,6 +7,7 @@ import '../design/interactive_spring.dart';
 import 'shell_layout_metrics.dart';
 import 'shell_navigation_progress.dart';
 import 'navigation_glass_appearance.dart';
+import 'navigation_press_motion.dart';
 
 class ShellNavDestinationData {
   const ShellNavDestinationData({
@@ -38,7 +39,7 @@ class AppBottomNavigation extends StatefulWidget {
 class _AppBottomNavigationState extends State<AppBottomNavigation>
     with TickerProviderStateMixin {
   late final _position = InteractiveSpring(this, widget.progress.value);
-  late final _press = InteractiveSpring(this, 0);
+  late final _press = NavigationPressMotion(this);
   late final _motion = Listenable.merge([_position, _press]);
   int? _pointer;
   VelocityTracker? _velocity;
@@ -81,7 +82,7 @@ class _AppBottomNavigationState extends State<AppBottomNavigation>
         _pointer == null ? widget.progress.value : _position.target,
         immediate: true,
       );
-      _press.moveTo(_pointer == null ? 0 : 1, immediate: true);
+      _press.reset(pressed: _pointer != null);
     }
     _animationsDisabled = disabled;
   }
@@ -117,7 +118,7 @@ class _AppBottomNavigationState extends State<AppBottomNavigation>
       ..addPosition(event.timeStamp, event.localPosition);
     _hovered = _index(_at(event.localPosition));
     _position.moveTo(_hovered!.toDouble(), immediate: _reduceMotion);
-    _press.moveTo(1, immediate: _reduceMotion);
+    _press.begin(immediate: _reduceMotion);
   }
 
   void _move(PointerMoveEvent event) {
@@ -128,14 +129,17 @@ class _AppBottomNavigationState extends State<AppBottomNavigation>
         delta.dy.abs() > kTouchSlop &&
         delta.dy.abs() > delta.dx.abs()) {
       _cancelled = true;
-      _press.moveTo(0, immediate: _reduceMotion);
+      _press.end(cancelled: true, immediate: _reduceMotion);
       _position.moveTo(
         widget.selectedIndex.toDouble(),
         immediate: _reduceMotion,
       );
       return;
     }
-    _dragged |= (event.localPosition.dx - _down!.dx).abs() > kTouchSlop;
+    if (!_dragged && delta.dx.abs() > kTouchSlop) {
+      _dragged = true;
+      _press.track(immediate: _reduceMotion);
+    }
     if (!_dragged) return;
     final position = _at(event.localPosition);
     final next = _index(position);
@@ -180,7 +184,7 @@ class _AppBottomNavigationState extends State<AppBottomNavigation>
     _pointer = null;
     _velocity = null;
     _down = null;
-    _press.moveTo(0, immediate: _reduceMotion);
+    _press.end(cancelled: !commit, immediate: _reduceMotion);
     _position.moveTo(next.toDouble(), immediate: _reduceMotion);
     if (commit) {
       widget.onTap(next);
@@ -333,7 +337,8 @@ class _AppBottomNavigationState extends State<AppBottomNavigation>
                         final stretch = _reduceMotion
                             ? 0.0
                             : (_position.velocity.abs() / 8).clamp(0.0, 1.0) *
-                                  .25;
+                                  .25 *
+                                  lift;
                         final centerX = 4 + _slot * (_position.value + .5);
                         final physicalX =
                             Directionality.of(context) == TextDirection.rtl

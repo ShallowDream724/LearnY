@@ -31,6 +31,7 @@ import '../../features/search/search_screen.dart';
 import '../../features/profile/profile_screen.dart';
 import '../../features/auth/login_screen.dart';
 import '../shell/app_shell.dart';
+import '../shell/shell_branch_back_scope.dart';
 
 /// Route paths.
 abstract final class Routes {
@@ -291,8 +292,10 @@ GoRouter buildRouter({required WidgetRef ref}) {
                 routes: [
                   GoRoute(
                     path: ':courseId',
-                    builder: (context, state) => CourseDetailScreen(
-                      courseId: state.pathParameters['courseId']!,
+                    builder: (context, state) => ShellBranchRoute(
+                      child: CourseDetailScreen(
+                        courseId: state.pathParameters['courseId']!,
+                      ),
                     ),
                   ),
                 ],

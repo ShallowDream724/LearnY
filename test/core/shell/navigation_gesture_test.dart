@@ -49,6 +49,14 @@ void main() {
       await tester.pumpAndSettle();
       final home = tester.getCenter(find.byIcon(Icons.home).first);
       final courses = tester.getCenter(find.byIcon(Icons.school).first);
+      final tap = await tester.startGesture(courses);
+      await tester.pump(const Duration(milliseconds: 16));
+      await tap.up();
+      expect(selections, [
+        2,
+      ], reason: 'Tap feedback must not delay navigation.');
+      await tester.pumpAndSettle();
+      selections.clear();
       final drag = await tester.startGesture(home);
       await tester.pump(const Duration(milliseconds: 100));
       await drag.moveTo(courses);
